@@ -1,0 +1,68 @@
+/* Add this CSS file to your project to enable hover effects for notebook actions */
+
+.notebook-wrapper {
+    position: relative;
+    transition: transform 0.2s ease;
+    cursor: grab;
+  }
+  
+  .notebook-wrapper:hover .notebook-actions {
+    opacity: 1;
+  }
+  
+  .notebook-wrapper:active {
+    cursor: grabbing;
+  }
+  
+  .notebook-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 4px;
+    padding: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    z-index: 5;
+  }
+  
+  .notebook-action {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    font-size: 14px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+  
+  .notebook-action:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+  
+  .edit-button:hover {
+    background-color: rgba(79, 70, 229, 0.1);
+  }
+  
+  .delete-button:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+  }
+  
+  .drag-handle {
+    cursor: grab;
+    padding: 4px;
+    font-size: 14px;
+    user-select: none;
+  }
+  
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
