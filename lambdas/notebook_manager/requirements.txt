@@ -1,0 +1,1 @@
+python-dotenv>=1.0.0   # only for local dev; safe to leave empty in AWS
