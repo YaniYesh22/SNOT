@@ -16,15 +16,9 @@ export default function LoginPage() {
   };
   
   const handleSignupSuccess = async (userData) => {
-    setShowSignup(false);
-    // Store some basic user info for convenience
-    authService.setUserData({
-      email: userData.email,
-      name: userData.name || 'User'
-    });
-    
-    // Show a success message
-    alert('Account created successfully! You can now log in.');
+    // After successful verification and login, navigate to dashboard
+    console.log('Signup successful for:', userData);
+    navigate('/dashboard');
   };
   
   const toggleForm = () => {
@@ -96,6 +90,28 @@ export default function LoginPage() {
           }}>
             Connect your ideas, visualize knowledge, and let AI help you learn more effectively.
           </p>
+          
+          <div style={{
+            marginBottom: '2rem'
+          }}>
+            <h3 style={{
+              fontSize: '1.25rem',
+              fontWeight: '600',
+              marginBottom: '1rem',
+              color: '#1e293b'
+            }}>How it works:</h3>
+            <ol style={{
+              marginLeft: '1.5rem',
+              color: '#475569',
+              lineHeight: '1.8'
+            }}>
+              <li>Sign up with your email and create a password</li>
+              <li>Check your email for a verification code</li>
+              <li>Enter the code to verify your account</li>
+              <li>Start organizing your knowledge!</li>
+            </ol>
+          </div>
+          
           <div style={{
             display: 'flex',
             gap: '1rem',
@@ -107,8 +123,16 @@ export default function LoginPage() {
               alignItems: 'center',
               gap: '0.5rem'
             }}>
-              <span style={{ fontSize: '1.5rem' }}>📝</span>
-              <span style={{ fontWeight: '500' }}>Smart Notes</span>
+              <span style={{ fontSize: '1.5rem' }}>✉️</span>
+              <span style={{ fontWeight: '500' }}>Email Verification</span>
+            </div>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>🔒</span>
+              <span style={{ fontWeight: '500' }}>Secure Access</span>
             </div>
             <div style={{
               display: 'flex',
@@ -116,15 +140,7 @@ export default function LoginPage() {
               gap: '0.5rem'
             }}>
               <span style={{ fontSize: '1.5rem' }}>🧠</span>
-              <span style={{ fontWeight: '500' }}>Topic Maps</span>
-            </div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              <span style={{ fontSize: '1.5rem' }}>🤖</span>
-              <span style={{ fontWeight: '500' }}>AI Assistance</span>
+              <span style={{ fontWeight: '500' }}>AI-Powered Features</span>
             </div>
           </div>
         </div>

@@ -14,11 +14,24 @@ class AuthService {
     try {
       const user = await Auth.signIn(email, password);
       
-      // Store user info in localStorage
-      if (user && user.attributes) {
+      // Fetch user attributes after successful login
+      try {
+        const userInfo = await Auth.currentAuthenticatedUser();
+        const attributes = userInfo.attributes;
+        
+        // Store user info in localStorage
+        if (attributes) {
+          this.setUserData({
+            email: attributes.email,
+            name: attributes.name || 'User'
+          });
+        }
+      } catch (attrError) {
+        console.error('Error fetching user attributes:', attrError);
+        // Fallback - set basic user data
         this.setUserData({
-          email: user.attributes.email,
-          name: user.attributes.name || 'User'
+          email: email,
+          name: 'User'
         });
       }
       
@@ -76,7 +89,7 @@ class AuthService {
     try {
       const user = await Auth.currentAuthenticatedUser();
       
-      // Update stored user data
+      // Update stored user data with attributes
       if (user && user.attributes) {
         this.setUserData({
           email: user.attributes.email,
@@ -87,6 +100,31 @@ class AuthService {
       return user;
     } catch (error) {
       console.error('Get current user error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Refresh user data from Cognito
+   * @returns {Promise<object|null>} - Updated user data or null if not authenticated
+   */
+  async refreshUserData() {
+    try {
+      const user = await Auth.currentAuthenticatedUser({ bypassCache: true });
+      
+      if (user && user.attributes) {
+        const userData = {
+          email: user.attributes.email,
+          name: user.attributes.name || 'User'
+        };
+        
+        this.setUserData(userData);
+        return userData;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Refresh user data error:', error);
       return null;
     }
   }
@@ -150,6 +188,36 @@ class AuthService {
       return result;
     } catch (error) {
       console.error('Update user attributes error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send a password reset code
+   * @param {string} email - User's email
+   * @returns {Promise} - Result
+   */
+  async forgotPassword(email) {
+    try {
+      return await Auth.forgotPassword(email);
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Complete the password reset process
+   * @param {string} email - User's email
+   * @param {string} code - Reset code
+   * @param {string} newPassword - New password
+   * @returns {Promise} - Result
+   */
+  async forgotPasswordSubmit(email, code, newPassword) {
+    try {
+      return await Auth.forgotPasswordSubmit(email, code, newPassword);
+    } catch (error) {
+      console.error('Reset password error:', error);
       throw error;
     }
   }
