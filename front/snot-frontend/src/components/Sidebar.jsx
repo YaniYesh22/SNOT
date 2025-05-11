@@ -10,8 +10,25 @@ export default function Sidebar() {
   
   useEffect(() => {
     // Get user data when the component mounts
-    const userData = authService.getUserData();
-    setUserData(userData);
+    const loadUserData = async () => {
+      try {
+        // First try to get from localStorage
+        let userData = authService.getUserData();
+        
+        // If no data or no name, refresh from Cognito
+        if (!userData || !userData.name || userData.name === 'User') {
+          userData = await authService.refreshUserData();
+        }
+        
+        setUserData(userData);
+      } catch (error) {
+        console.error('Error loading user data:', error);
+        // Fallback to localStorage data
+        setUserData(authService.getUserData());
+      }
+    };
+    
+    loadUserData();
   }, []);
   
   const handleLogout = async () => {

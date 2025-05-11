@@ -33,7 +33,14 @@ export default function DashboardPage() {
         // Get user data
         const currentUser = await authService.getCurrentUser();
         if (currentUser) {
-          const userData = authService.getUserData();
+          // First try to get from localStorage
+          let userData = authService.getUserData();
+          
+          // If no data or no name, refresh from Cognito
+          if (!userData || !userData.name || userData.name === 'User') {
+            userData = await authService.refreshUserData();
+          }
+          
           setUserData(userData);
         } else {
           // If no authenticated user, redirect to login

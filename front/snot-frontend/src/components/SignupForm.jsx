@@ -11,13 +11,18 @@ export default function SignupForm({ onSwitch, onSignupSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [showVerification, setShowVerification] = useState(false);
+  const [signupData, setSignupData] = useState(null);
 
   const validateForm = () => {
     setError('');
     if (!name) return 'Name is required';
     if (!email) return 'Email is required';
+    if (!/\S+@\S+\.\S+/.test(email)) return 'Please enter a valid email address';
     if (!password) return 'Password is required';
     if (password.length < 8) return 'Password must be at least 8 characters';
+    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$%^&*()_+\-=\[\]{};':"\\|,.<>?])/.test(password)) {
+      return 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character';
+    }
     if (password !== confirmPassword) return 'Passwords do not match';
     return null;
   };
@@ -32,19 +37,34 @@ export default function SignupForm({ onSwitch, onSignupSuccess }) {
 
     setIsLoading(true);
     try {
-      await Auth.signUp({
+      const signUpResult = await Auth.signUp({
         username: email,
         password,
         attributes: {
           email,
-          name // Include the user's name in the attributes
+          name
+        },
+        autoSignIn: {
+          enabled: false // Prevent auto sign-in after verification
         }
       });
+
+      // Store signup data for after verification
+      setSignupData({
+        email,
+        name,
+        password
+      });
+
       setShowVerification(true);
       setError('');
     } catch (err) {
       console.error('Signup error:', err);
-      setError(err.message || 'Failed to sign up');
+      if (err.code === 'UsernameExistsException') {
+        setError('An account with this email already exists. Please sign in instead.');
+      } else {
+        setError(err.message || 'Failed to sign up. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -59,17 +79,58 @@ export default function SignupForm({ onSwitch, onSignupSuccess }) {
 
     setIsLoading(true);
     try {
+      // Confirm the signup with the verification code
       await Auth.confirmSignUp(email, verificationCode);
+      
       setError('');
-      if (onSignupSuccess) {
-        onSignupSuccess({ email, name });
+      
+      // Automatically sign in the user after successful verification
+      try {
+        const user = await Auth.signIn(email, signupData.password);
+        
+        // Store user info
+        if (onSignupSuccess) {
+          onSignupSuccess({ email, name: signupData.name });
+        }
+      } catch (signInError) {
+        console.error('Auto sign-in failed:', signInError);
+        // If auto sign-in fails, just notify success
+        if (onSignupSuccess) {
+          onSignupSuccess({ email, name: signupData.name });
+        }
       }
     } catch (err) {
       console.error('Verification error:', err);
-      setError(err.message || 'Failed to verify account');
+      if (err.code === 'CodeMismatchException') {
+        setError('Invalid verification code. Please check and try again.');
+      } else if (err.code === 'ExpiredCodeException') {
+        setError('Verification code has expired. Please request a new one.');
+      } else {
+        setError(err.message || 'Failed to verify account');
+      }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const resendVerificationCode = async () => {
+    setIsLoading(true);
+    try {
+      await Auth.resendSignUp(email);
+      setError('');
+      alert('A new verification code has been sent to your email.');
+    } catch (err) {
+      console.error('Resend code error:', err);
+      setError('Failed to resend verification code. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const backToSignUp = () => {
+    setShowVerification(false);
+    setError('');
+    setVerificationCode('');
   };
 
   if (showVerification) {
@@ -83,7 +144,12 @@ export default function SignupForm({ onSwitch, onSignupSuccess }) {
           />
           <h2 style={styles.title}>Verify Your Account</h2>
           <p style={styles.subtitle}>
-            We've sent a verification code to your email address.
+            We've sent a verification code to:
+            <br />
+            <strong>{email}</strong>
+          </p>
+          <p style={styles.instructions}>
+            Please check your email and enter the code below to complete your registration.
           </p>
         </div>
 
@@ -91,29 +157,44 @@ export default function SignupForm({ onSwitch, onSignupSuccess }) {
 
         <input
           type="text"
-          placeholder="Verification Code"
+          placeholder="Enter 6-digit verification Code"
           value={verificationCode}
           onChange={e => setVerificationCode(e.target.value)}
           required
           style={styles.input}
+          maxLength={6}
+          autoFocus
         />
+        
         <button 
           type="submit" 
           style={styles.button}
           disabled={isLoading}
         >
-          {isLoading ? 'Verifying...' : 'Verify Account'}
+          {isLoading ? 'Verifying...' : 'Verify & Complete Signup'}
         </button>
-        <p style={styles.footerText}>
-          <a href="#" 
-            onClick={(e) => {
-              e.preventDefault();
-              setShowVerification(false);
-            }}
-            style={styles.link}
+        
+        <div style={styles.verificationActions}>
+          <button
+            type="button"
+            onClick={resendVerificationCode}
+            style={styles.linkButton}
+            disabled={isLoading}
+          >
+            Resend verification code
+          </button>
+          
+          <button
+            type="button"
+            onClick={backToSignUp}
+            style={styles.linkButton}
           >
             Back to sign up
-          </a>
+          </button>
+        </div>
+        
+        <p style={styles.footerText}>
+          Code not received? Check your spam folder or try resending.
         </p>
       </form>
     );
@@ -150,7 +231,7 @@ export default function SignupForm({ onSwitch, onSignupSuccess }) {
       />
       <input
         type="password"
-        placeholder="Password"
+        placeholder="Password (8+ characters)"
         value={password}
         onChange={e => setPassword(e.target.value)}
         required
@@ -164,13 +245,26 @@ export default function SignupForm({ onSwitch, onSignupSuccess }) {
         required
         style={styles.input}
       />
+      
+      <div style={styles.passwordHint}>
+        Password must contain:
+        <ul style={styles.hintList}>
+          <li style={password.length >= 8 ? styles.validHint : {}}>At least 8 characters</li>
+          <li style={/[A-Z]/.test(password) ? styles.validHint : {}}>One uppercase letter</li>
+          <li style={/[a-z]/.test(password) ? styles.validHint : {}}>One lowercase letter</li>
+          <li style={/\d/.test(password) ? styles.validHint : {}}>One number</li>
+          <li style={/[@#$%^&*()_+\-=\[\]{};':"\\|,.<>?]/.test(password) ? styles.validHint : {}}>One special character (@#$%^&*...)</li>
+        </ul>
+      </div>
+      
       <button 
         type="submit" 
         style={styles.button}
         disabled={isLoading}
       >
-        {isLoading ? 'Signing up...' : 'Sign Up'}
+        {isLoading ? 'Creating Account...' : 'Sign Up'}
       </button>
+      
       <p style={styles.footerText}>
         Already have an account? <a href="#" onClick={onSwitch} style={styles.link}>Log in</a>
       </p>
@@ -210,6 +304,13 @@ const styles = {
     marginTop: '0.5rem',
     textAlign: 'center'
   },
+  instructions: {
+    fontSize: '0.875rem',
+    color: '#6b7280',
+    marginTop: '0.75rem',
+    textAlign: 'center',
+    lineHeight: '1.4'
+  },
   input: {
     marginBottom: '1rem',
     padding: '0.75rem 1rem',
@@ -234,12 +335,13 @@ const styles = {
     marginBottom: '1rem'
   },
   error: {
-    color: 'red',
-    backgroundColor: '#ffe5e5',
-    padding: '0.5rem',
-    borderRadius: '4px',
+    color: '#dc2626',
+    backgroundColor: '#fee2e2',
+    padding: '0.75rem',
+    borderRadius: '6px',
     marginBottom: '1rem',
-    fontSize: '0.95rem'
+    fontSize: '0.95rem',
+    textAlign: 'center'
   },
   footerText: {
     textAlign: 'center',
@@ -251,5 +353,36 @@ const styles = {
     color: '#1f78ff',
     textDecoration: 'none',
     fontWeight: '500'
+  },
+  passwordHint: {
+    fontSize: '0.875rem',
+    color: '#6b7280',
+    marginBottom: '1rem',
+    padding: '0.75rem',
+    backgroundColor: '#f9fafb',
+    borderRadius: '6px'
+  },
+  hintList: {
+    margin: '0.5rem 0 0 1.5rem',
+    padding: 0,
+    listStyle: 'disc'
+  },
+  validHint: {
+    color: '#16a34a'
+  },
+  verificationActions: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+    marginBottom: '1rem'
+  },
+  linkButton: {
+    background: 'none',
+    border: 'none',
+    color: '#1f78ff',
+    textDecoration: 'underline',
+    cursor: 'pointer',
+    fontSize: '0.95rem',
+    padding: '0.5rem'
   }
 };
