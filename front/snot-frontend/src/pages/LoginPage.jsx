@@ -1,23 +1,64 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import ImprovedLoginForm from '../components/ImprovedLoginForm';
 import SignupForm from '../components/SignupForm';
 import authService from '../services/AuthService';
 import { useNavigate } from 'react-router-dom';
+import usePageRefreshLogout from '../usePageRefreshLogout';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const [showSignup, setShowSignup] = useState(false);
   
+  // Use the custom hook to handle page refresh logout
+  usePageRefreshLogout();
+  
+  // Check for existing sessions and clear them
+  // Check for existing sessions and clear them
+  useEffect(() => {
+    const clearExistingSession = async () => {
+      try {
+        // Check if there's an active session
+        try {
+          const currentUser = await authService.getCurrentUser();
+          
+          if (currentUser) {
+            // If user is already logged in, force logout
+            await authService.logout();
+            console.log('Previous session cleared');
+          }
+        } catch (error) {
+          // Ignore "user not authenticated" errors as they're expected on the login page
+          if (!error.message || !error.message.includes('not authenticated')) {
+            console.error('Error checking session:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error in session handling:', error);
+      }
+    };
+    
+    clearExistingSession();
+  }, []);
+  
   const handleLogin = async (user) => {
     console.log('Logged in user:', user);
-    // Login already saves user data in AuthService
+    
+    // Set a flag to prevent immediate logout
+    sessionStorage.setItem('justLoggedIn', 'true');
+    
+    // Navigate to dashboard
     navigate('/dashboard');
   };
   
   const handleSignupSuccess = async (userData) => {
     // After successful verification and login, navigate to dashboard
     console.log('Signup successful for:', userData);
+    
+    // Set a flag to prevent immediate logout
+    sessionStorage.setItem('justLoggedIn', 'true');
+    
+    // Navigate to dashboard
     navigate('/dashboard');
   };
   

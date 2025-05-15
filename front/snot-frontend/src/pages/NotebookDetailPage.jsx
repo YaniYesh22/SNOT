@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import Sidebar from '../components/Sidebar';
+import notebookService from '../services/NotebookService';
 
 export default function NotebookDetailPage() {
   const { id } = useParams();
@@ -17,45 +18,88 @@ export default function NotebookDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Load notebook data from localStorage on component mount
+  // Load notebook data from API on component mount
   useEffect(() => {
-    const loadNotebookData = () => {
+    const loadNotebookData = async () => {
       try {
-        const savedNotebooks = localStorage.getItem('notebooks');
+        setIsLoading(true);
         
-        if (savedNotebooks) {
-          const notebooksArray = JSON.parse(savedNotebooks);
-          const currentNotebook = notebooksArray.find(nb => nb.id === id);
+        // Try to get the notebook from the API
+        try {
+          const notebookData = await notebookService.getNotebook(id);
           
-          if (currentNotebook) {
-            // If this notebook exists in localStorage
-            const fullNotebook = {
-              ...currentNotebook,
-              content: currentNotebook.content || '',
-              lastUpdated: currentNotebook.lastUpdated || new Date().toISOString()
+          if (notebookData) {
+            // Format the notebook data
+            const formattedNotebook = {
+              id: notebookData.NotebookId || notebookData.notebookId || id,
+              title: notebookData.Title || notebookData.title || 'Untitled Notebook',
+              content: notebookData.Content || notebookData.content || '',
+              createdAt: notebookData.CreatedAt || notebookData.createdAt || new Date().toISOString(),
+              lastUpdated: notebookData.UpdatedAt || notebookData.updatedAt || new Date().toISOString()
             };
             
-            setNotebook(fullNotebook);
-            setContent(fullNotebook.content || '');
+            setNotebook(formattedNotebook);
+            setContent(formattedNotebook.content);
+            console.log("Loaded notebook from API:", formattedNotebook);
           } else {
-            // If not found, use the ID to create a title (for newly created notebooks)
+            // If no data returned, create a new notebook with this ID
+            const title = id.replace(/-/g, ' ');
+            const newNotebook = {
+              id,
+              title: title,
+              content: '',
+              createdAt: new Date().toISOString(),
+              lastUpdated: new Date().toISOString()
+            };
+            setNotebook(newNotebook);
+            console.log("Created new notebook:", newNotebook);
+          }
+        } catch (apiError) {
+          console.error("Error loading notebook from API:", apiError);
+          
+          // Fallback to localStorage
+          const savedNotebooks = localStorage.getItem('notebooks');
+          
+          if (savedNotebooks) {
+            const notebooksArray = JSON.parse(savedNotebooks);
+            const currentNotebook = notebooksArray.find(nb => nb.id === id);
+            
+            if (currentNotebook) {
+              // If this notebook exists in localStorage
+              const fullNotebook = {
+                ...currentNotebook,
+                content: currentNotebook.content || '',
+                lastUpdated: currentNotebook.updatedAt || currentNotebook.lastUpdated || new Date().toISOString()
+              };
+              
+              setNotebook(fullNotebook);
+              setContent(fullNotebook.content || '');
+              console.log("Loaded notebook from localStorage:", fullNotebook);
+            } else {
+              // If not found, use the ID to create a title
+              const title = id.replace(/-/g, ' ');
+              const newNotebook = {
+                id,
+                title: title,
+                content: '',
+                createdAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString()
+              };
+              setNotebook(newNotebook);
+              console.log("Created new notebook (localStorage fallback):", newNotebook);
+            }
+          } else {
+            // If no notebooks in localStorage, use defaults
             const title = id.replace(/-/g, ' ');
             setNotebook({
               id,
               title: title,
               content: '',
+              createdAt: new Date().toISOString(),
               lastUpdated: new Date().toISOString()
             });
+            console.log("Created new notebook (no localStorage):", { id, title });
           }
-        } else {
-          // If no notebooks in localStorage, use defaults
-          const title = id.replace(/-/g, ' ');
-          setNotebook({
-            id,
-            title: title,
-            content: '',
-            lastUpdated: new Date().toISOString()
-          });
         }
         
         setIsLoading(false);
@@ -66,28 +110,47 @@ export default function NotebookDetailPage() {
           id,
           title: id ? id.replace(/-/g, ' ') : 'Untitled Notebook',
           content: '',
+          createdAt: new Date().toISOString(),
           lastUpdated: new Date().toISOString()
         });
         setIsLoading(false);
       }
     };
     
-    // Simulate loading delay for better UX
-    setTimeout(loadNotebookData, 300);
+    // Load the notebook data
+    loadNotebookData();
   }, [id]);
   
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true);
     
     try {
       // Update the current notebook
       const updatedNotebook = {
         ...notebook,
+        title: notebook.title,
         content: content,
         lastUpdated: new Date().toISOString()
       };
       
       setNotebook(updatedNotebook);
+      
+      // Prepare data for API update
+      const updateData = {
+        NotebookId: updatedNotebook.id,
+        userId: updatedNotebook.userId,
+        title: updatedNotebook.title,
+        Content: content
+      };
+      
+      // Call the API to update the notebook
+      try {
+        await notebookService.updateNotebook(updatedNotebook.id, updateData);
+        console.log("Notebook saved to API successfully");
+      } catch (apiError) {
+        console.error("Error saving to API:", apiError);
+        // Fallback to localStorage even if API fails
+      }
       
       // Get all notebooks from localStorage
       const savedNotebooks = localStorage.getItem('notebooks');
