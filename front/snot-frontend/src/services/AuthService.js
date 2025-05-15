@@ -221,6 +221,20 @@ class AuthService {
       throw error;
     }
   }
+
+  /**
+   * Get the current user's session
+   * @returns {Promise<object>} - The session object
+   */
+  async getCurrentSession() {
+    try {
+      const session = await Auth.currentSession();
+      return session;
+    } catch (error) {
+      console.error('Get current session error:', error);
+      throw error;
+    }
+  }
 }
 
 // Create a singleton instance
