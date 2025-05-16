@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { changePassword, confirmSignUp, currentAuthenticatedUser, forgotPassword, forgotPasswordSubmit, signIn, signOut, signUp, updateUserAttributes } from 'aws-amplify/auth';
 
 import { Auth } from 'aws-amplify';
 
