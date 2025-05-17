@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { changePassword, confirmSignUp, currentAuthenticatedUser, forgotPassword, forgotPasswordSubmit, signIn, signOut, signUp, updateUserAttributes } from 'aws-amplify/auth';
-
-import { Auth } from 'aws-amplify';
+import { signIn, signOut, signUp, confirmSignUp, getCurrentUser, fetchUserAttributes, updateUserAttributes, resetPassword, confirmResetPassword, fetchAuthSession } from 'aws-amplify/auth';
 import axios from 'axios';
 
 function AuthDebugger() {
@@ -18,7 +16,7 @@ function AuthDebugger() {
         
         // Test 1: Check if we can get a session
         try {
-          const session = await Auth.currentSession();
+          const session = await fetchAuthSession();
           const idToken = session.getIdToken();
           const accessToken = session.getAccessToken();
           

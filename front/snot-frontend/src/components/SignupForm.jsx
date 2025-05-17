@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { changePassword, confirmSignUp, currentAuthenticatedUser, forgotPassword, forgotPasswordSubmit, signIn, signOut, signUp, updateUserAttributes } from 'aws-amplify/auth';
+import { signIn, signOut, signUp, confirmSignUp, getCurrentUser, fetchUserAttributes, updateUserAttributes, resetPassword, confirmResetPassword, fetchAuthSession, resendSignUpCode } from 'aws-amplify/auth';
 
-import { Auth } from 'aws-amplify';
 
 export default function SignupForm({ onSwitch, onSignupSuccess }) {
   const [email, setEmail] = useState('');
@@ -36,27 +35,28 @@ export default function SignupForm({ onSwitch, onSignupSuccess }) {
       return;
     }
 
+
     setIsLoading(true);
     try {
-      const signUpResult = await Auth.signUp({
+      const signUpResult = await signUp({
         username: email,
         password,
-        attributes: {
-          email,
-          name
-        },
-        autoSignIn: {
-          enabled: false // Prevent auto sign-in after verification
+        options: {
+          userAttributes: {
+            email,
+            name
+          },
+          autoSignIn: {
+            enabled: false // Prevent auto sign-in after verification
+          }
         }
       });
-
       // Store signup data for after verification
       setSignupData({
         email,
         name,
         password
       });
-
       setShowVerification(true);
       setError('');
     } catch (err) {
@@ -72,61 +72,69 @@ export default function SignupForm({ onSwitch, onSignupSuccess }) {
   };
 
   const handleVerification = async (e) => {
-    e.preventDefault();
-    if (!verificationCode) {
-      setError('Verification code is required');
-      return;
-    }
+  e.preventDefault();
+  if (!verificationCode) {
+    setError('Verification code is required');
+    return;
+  }
 
-    setIsLoading(true);
+  setIsLoading(true);
+  try {
+    // Confirm the signup with the verification code
+    await confirmSignUp({ 
+      username: email, 
+      confirmationCode: verificationCode 
+    });
+    
+    setError('');
+    
+    // Automatically sign in the user after successful verification
     try {
-      // Confirm the signup with the verification code
-      await Auth.confirmSignUp(email, verificationCode);
+      const user = await signIn({ 
+        username: email, 
+        password: signupData.password 
+      });
       
-      setError('');
-      
-      // Automatically sign in the user after successful verification
-      try {
-        const user = await Auth.signIn(email, signupData.password);
-        
-        // Store user info
-        if (onSignupSuccess) {
-          onSignupSuccess({ email, name: signupData.name });
-        }
-      } catch (signInError) {
-        console.error('Auto sign-in failed:', signInError);
-        // If auto sign-in fails, just notify success
-        if (onSignupSuccess) {
-          onSignupSuccess({ email, name: signupData.name });
-        }
+      // Store user info
+      if (onSignupSuccess) {
+        onSignupSuccess({ email, name: signupData.name });
       }
-    } catch (err) {
-      console.error('Verification error:', err);
-      if (err.code === 'CodeMismatchException') {
-        setError('Invalid verification code. Please check and try again.');
-      } else if (err.code === 'ExpiredCodeException') {
-        setError('Verification code has expired. Please request a new one.');
-      } else {
-        setError(err.message || 'Failed to verify account');
+    } catch (signInError) {
+      console.error('Auto sign-in failed:', signInError);
+      // If auto sign-in fails, just notify success
+      if (onSignupSuccess) {
+        onSignupSuccess({ email, name: signupData.name });
       }
-    } finally {
-      setIsLoading(false);
     }
-  };
+  } catch (err) {
+    console.error('Verification error:', err);
+    if (err.code === 'CodeMismatchException') {
+      setError('Invalid verification code. Please check and try again.');
+    } else if (err.code === 'ExpiredCodeException') {
+      setError('Verification code has expired. Please request a new one.');
+    } else {
+      setError(err.message || 'Failed to verify account');
+    }
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-  const resendVerificationCode = async () => {
-    setIsLoading(true);
-    try {
-      await Auth.resendSignUp(email);
-      setError('');
-      alert('A new verification code has been sent to your email.');
-    } catch (err) {
-      console.error('Resend code error:', err);
-      setError('Failed to resend verification code. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+const resendVerificationCode = async () => {
+  setIsLoading(true);
+  try {
+    await resendSignUpCode({ 
+      username: email 
+    });
+    setError('');
+    alert('A new verification code has been sent to your email.');
+  } catch (err) {
+    console.error('Resend code error:', err);
+    setError('Failed to resend verification code. Please try again.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const backToSignUp = () => {
     setShowVerification(false);

@@ -1,6 +1,4 @@
-import { changePassword, confirmSignUp, currentAuthenticatedUser, forgotPassword, forgotPasswordSubmit, signIn, signOut, signUp, updateUserAttributes } from 'aws-amplify/auth';
-
-import { Auth } from 'aws-amplify';
+import { changePassword, confirmSignUp, signIn, signOut, signUp, updateUserAttributes, getCurrentUser, fetchUserAttributes, resetPassword, confirmResetPassword, fetchAuthSession } from 'aws-amplify/auth';
 import { useEffect } from 'react';
 
 /**
@@ -16,7 +14,7 @@ export function usePageRefreshLogout() {
     const handleStorageChange = (event) => {
       if (event.key === 'pageLoadTimestamp' && event.newValue !== pageLoadTimestamp) {
         // Page was refreshed in another tab, trigger logout
-        Auth.signOut().catch(error => {
+        signOut().catch(error => {
           console.error('Error signing out:', error);
         });
       }

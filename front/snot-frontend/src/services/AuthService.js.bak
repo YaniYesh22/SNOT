@@ -1,17 +1,9 @@
-import { 
-  signIn, 
-  signUp, 
-  signOut, 
-  getCurrentUser, 
-  fetchUserAttributes, 
-  updateUserAttributes, 
-  resetPassword, 
-  confirmResetPassword,
-  fetchAuthSession
-} from 'aws-amplify/auth';
+// import { changePassword, confirmSignUp, currentAuthenticatedUser, forgotPassword, forgotPasswordSubmit, signIn, signOut, signUp, updateUserAttributes } from 'aws-amplify/auth';
+
+import { signIn, signUp, confirmSignUp, signOut, getCurrentUser, fetchUserAttributes, updateUserAttributes, resetPassword, confirmResetPassword, fetchAuthSession } from 'aws-amplify/auth';
 
 /**
- * Service class for authentication with AWS Amplify v6
+ * Service class to handle authentication operations and user data
  */
 class AuthService {
   /**
@@ -22,11 +14,14 @@ class AuthService {
    */
   async login(email, password) {
     try {
-      const signInOutput = await signIn({ username: email, password });
+      const user = await signIn({ username: email, password: password });
       
       // Fetch user attributes after successful login
       try {
-        const attributes = await fetchUserAttributes();
+        const userInfo = await getCurrentUser();
+  const attributes = await fetchUserAttributes();
+  const user = { attributes };
+        const attributes = userInfo.attributes;
         
         // Store user info in localStorage
         if (attributes) {
@@ -44,13 +39,13 @@ class AuthService {
         });
       }
       
-      return signInOutput;
+      return user;
     } catch (error) {
       console.error('Login error:', error);
       throw error;
     }
   }
-  
+
   /**
    * Sign up a new user
    * @param {object} userData - User data for registration
@@ -60,14 +55,12 @@ class AuthService {
     try {
       const { username, password, email, name } = userData;
       
-      const result = await signUp({
+      const result = await Auth.signUp({
         username,
         password,
-        options: {
-          userAttributes: {
-            email,
-            name
-          }
+        attributes: {
+          email,
+          name
         }
       });
       
@@ -77,7 +70,7 @@ class AuthService {
       throw error;
     }
   }
-  
+
   /**
    * Logout current user
    * @returns {Promise<void>}
@@ -91,7 +84,7 @@ class AuthService {
       throw error;
     }
   }
-  
+
   /**
    * Get current authenticated user
    * @returns {Promise<object|null>} - User data or null if not authenticated
@@ -99,23 +92,24 @@ class AuthService {
   async getCurrentUser() {
     try {
       const user = await getCurrentUser();
-      const attributes = await fetchUserAttributes();
+  const attributes = await fetchUserAttributes();
+  const user = { attributes };
       
       // Update stored user data with attributes
-      if (attributes) {
+      if (user && user.attributes) {
         this.setUserData({
-          email: attributes.email,
-          name: attributes.name || 'User'
+          email: user.attributes.email,
+          name: user.attributes.name || 'User'
         });
       }
       
-      return { ...user, attributes };
+      return user;
     } catch (error) {
       console.error('Get current user error:', error);
       return null;
     }
   }
-  
+
   /**
    * Refresh user data from Cognito
    * @returns {Promise<object|null>} - Updated user data or null if not authenticated
@@ -123,12 +117,13 @@ class AuthService {
   async refreshUserData() {
     try {
       const user = await getCurrentUser();
-      const attributes = await fetchUserAttributes();
+  const attributes = await fetchUserAttributes();
+  const user = { attributes };
       
-      if (attributes) {
+      if (user && user.attributes) {
         const userData = {
-          email: attributes.email,
-          name: attributes.name || 'User'
+          email: user.attributes.email,
+          name: user.attributes.name || 'User'
         };
         
         this.setUserData(userData);
@@ -141,7 +136,7 @@ class AuthService {
       return null;
     }
   }
-  
+
   /**
    * Get user data from localStorage
    * @returns {object|null} - User data or null if not found
@@ -155,7 +150,7 @@ class AuthService {
       return null;
     }
   }
-  
+
   /**
    * Set user data in localStorage
    * @param {object} userData - User data to store
@@ -167,7 +162,7 @@ class AuthService {
       console.error('Set user data error:', error);
     }
   }
-  
+
   /**
    * Clear user data from localStorage
    */
@@ -178,7 +173,7 @@ class AuthService {
       console.error('Clear user data error:', error);
     }
   }
-  
+
   /**
    * Update user attributes
    * @param {object} attributes - User attributes to update
@@ -186,6 +181,9 @@ class AuthService {
    */
   async updateUserAttributes(attributes) {
     try {
+      const user = await getCurrentUser();
+  const attributes = await fetchUserAttributes();
+  const user = { attributes };
       const result = await updateUserAttributes({ userAttributes: attributes });
       
       // Update stored user data
@@ -203,7 +201,7 @@ class AuthService {
       throw error;
     }
   }
-  
+
   /**
    * Send a password reset code
    * @param {string} email - User's email
@@ -217,7 +215,7 @@ class AuthService {
       throw error;
     }
   }
-  
+
   /**
    * Complete the password reset process
    * @param {string} email - User's email
@@ -227,17 +225,13 @@ class AuthService {
    */
   async forgotPasswordSubmit(email, code, newPassword) {
     try {
-      return await confirmResetPassword({ 
-        username: email, 
-        confirmationCode: code, 
-        newPassword 
-      });
+      return await confirmResetPassword({ username: email, confirmationCode: code, newPassword: newPassword });
     } catch (error) {
       console.error('Reset password error:', error);
       throw error;
     }
   }
-  
+
   /**
    * Get the current user's session
    * @returns {Promise<object>} - The session object
@@ -255,4 +249,5 @@ class AuthService {
 
 // Create a singleton instance
 const authService = new AuthService();
+
 export default authService;

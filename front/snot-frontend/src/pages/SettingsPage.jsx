@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-
-import { Auth } from 'aws-amplify';
+import { signIn, signUp, confirmSignUp, signOut, getCurrentUser, fetchUserAttributes, updateUserAttributes, resetPassword, confirmResetPassword, fetchAuthSession, updatePassword } from 'aws-amplify/auth';
 import Sidebar from '../components/Sidebar';
 
 export default function SettingsPage() {
@@ -18,7 +17,9 @@ export default function SettingsPage() {
   React.useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const user = await Auth.currentAuthenticatedUser();
+        const userData = await getCurrentUser();
+        const attributes = await fetchUserAttributes();
+        const user = { ...userData, attributes };
         setEmail(user.attributes.email || '');
         setName(user.attributes.name || '');
       } catch (error) {
@@ -31,25 +32,37 @@ export default function SettingsPage() {
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    
+
     if (newPassword !== confirmPassword) {
       setMessage({ type: 'error', text: 'New passwords do not match' });
       return;
     }
-    
+
     setLoading(true);
     setMessage({ type: '', text: '' });
-    
+
     try {
-      const user = await Auth.currentAuthenticatedUser();
-      await Auth.changePassword(user, currentPassword, newPassword);
+      // In AWS Amplify v6, the function is called updatePassword instead of changePassword
+      await updatePassword({
+        oldPassword: currentPassword,
+        newPassword: newPassword
+      });
+
       setMessage({ type: 'success', text: 'Password changed successfully' });
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (error) {
       console.error('Error changing password:', error);
-      setMessage({ type: 'error', text: error.message || 'Failed to change password' });
+
+      // Improved error handling with specific messages
+      if (error.name === 'NotAuthorizedException' && error.message.includes('Incorrect username or password')) {
+        setMessage({ type: 'error', text: 'Current password is incorrect' });
+      } else if (error.name === 'LimitExceededException') {
+        setMessage({ type: 'error', text: 'Too many attempts. Please try again later' });
+      } else {
+        setMessage({ type: 'error', text: error.message || 'Failed to change password' });
+      }
     } finally {
       setLoading(false);
     }
@@ -62,10 +75,12 @@ export default function SettingsPage() {
     setMessage({ type: '', text: '' });
     
     try {
-      const user = await Auth.currentAuthenticatedUser();
-      const result = await Auth.updateUserAttributes(user, {
+      const userData = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
+      const user = { ...userData, attributes };
+      const result = await updateUserAttributes({ userAttributes: {
         name,
-      });
+      } });
       setMessage({ type: 'success', text: 'Profile updated successfully' });
     } catch (error) {
       console.error('Error updating profile:', error);

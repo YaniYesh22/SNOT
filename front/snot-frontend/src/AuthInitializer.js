@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { Auth } from 'aws-amplify';
+import { signIn, signUp, confirmSignUp, signOut, getCurrentUser, fetchUserAttributes, updateUserAttributes, resetPassword, confirmResetPassword, fetchAuthSession } from 'aws-amplify/auth';
 import authService from './services/AuthService';
 
 /**
@@ -64,7 +64,7 @@ export default function AuthInitializer({ children }) {
         }
         
         // Sign out the current user
-        await Auth.signOut();
+        await signOut();
         
         // Clear localStorage data
         authService.clearUserData();
