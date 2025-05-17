@@ -1,5 +1,17 @@
 import authService from './AuthService';
 import axios from 'axios';
+import {
+  signIn,
+  signUp,
+  signOut,
+  getCurrentUser,
+  fetchUserAttributes,
+  updateUserAttributes,
+  resetPassword,
+  confirmResetPassword,
+  fetchAuthSession,
+  getAuthHeaders
+} from 'aws-amplify/auth';
 
 /**
  * Service class to handle notebook API operations
@@ -8,31 +20,21 @@ class NotebookService {
   constructor() {
     // The base URL for API Gateway
     this.baseUrl = 'https://ch2l8cp5l3.execute-api.eu-central-1.amazonaws.com/dev';
-    
+
     // The specific route for notebook operations
     this.notebookRoute = '/createNotbook';
-    this.getAllNotebooksRoute = '/getAllNotebook';
+    this.getAllNotebooksRoute = '/getAllNotebooks';
   }
 
   /**
    * Get authorization headers with Cognito token
    * @returns {Object} - Headers object
    */
-  async getAuthHeaders() {
-    try {
-      const session = await authService.getCurrentSession();
-      return {
-        'Authorization': `Bearer ${session.getIdToken().getJwtToken()}`,
-        'Content-Type': 'application/json'
-      };
-    } catch (error) {
-      console.error('Error getting auth headers:', error);
-      return {
-        'Content-Type': 'application/json'
-      };
-    }
-  }
-
+  /**
+   * Get authentication headers with JWT token
+   * @returns {Promise<Object>} - Headers object with Authorization
+   */
+  
   /**
    * Create a new notebook in the database
    * @param {object} notebookData - Data for the new notebook
@@ -42,10 +44,10 @@ class NotebookService {
     try {
       // Get the current user info for the UserId
       const userData = authService.getUserData();
-      
+
       // Generate a unique ID for the notebook
       const notebookId = `notebook_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-      
+
       // Prepare the notebook data
       const payload = {
         NotebookId: notebookId,
@@ -65,13 +67,13 @@ class NotebookService {
 
       // Make the API call to create the notebook
       const response = await axios.post(
-        `${this.baseUrl}${this.notebookRoute}`, 
+        `${this.baseUrl}${this.notebookRoute}`,
         payload,
         { headers }
       );
-      
+
       console.log("API response:", response);
-      
+
       // Return the response data
       return {
         ...payload,
@@ -83,70 +85,58 @@ class NotebookService {
       throw error;
     }
   }
-
-  /**
-   * Get all notebooks for the current user
-   * @returns {Promise<Array>} - List of notebooks
-   */
   async getNotebooks() {
-    try {
-      // Get the current user info for the UserId
-      const userData = authService.getUserData();
-      const userId = userData?.email || 'guest';
-      
-      // Get auth headers
-      const headers = await this.getAuthHeaders();
-      
-      console.log("Fetching notebooks for user:", userId);
-      console.log("API URL:", `${this.baseUrl}${this.getAllNotebooksRoute}?userId=${encodeURIComponent(userId)}`);
-      console.log("Headers:", headers);
-      
-      // Format the query parameters exactly as the API expects
-      const params = {
-        userId
-      };
-      
-      // Make the API call to get the notebooks with the correct query parameters
-      const response = await axios.get(
-        `${this.baseUrl}${this.getAllNotebooksRoute}`, 
-        { 
-          headers,
-          params
-        }
-      );
-      
-      console.log("Get notebooks response:", response.data);
-      
-      // Handle different response formats
-      if (Array.isArray(response.data)) {
-        return response.data;
-      } else if (response.data && typeof response.data === 'object') {
-        // Check if it's a DynamoDB response with Items
-        if (Array.isArray(response.data.Items)) {
-          return response.data.Items;
-        }
-        
-        // Check if it's a custom response with notebooks array
-        if (Array.isArray(response.data.notebooks)) {
-          return response.data.notebooks;
-        }
-        
-        // If the response itself is the notebook data
-        if (Object.keys(response.data).length > 0) {
-          return [response.data];
+  try {
+    // Get auth headers from auth service
+    const headers = await authService.getAuthHeaders();
+    
+    // Get user data to extract email
+    const userData = authService.getUserData();
+    const userEmail = userData?.email || 'guest';
+    
+    console.log("Using headers:", headers);
+    console.log("Fetching notebooks with auth for user:", userEmail);
+    console.log(`API URL: ${this.baseUrl}${this.getAllNotebooksRoute}`);
+
+    // Make API call with auth headers and userId in query string
+    const response = await axios.get(
+      `${this.baseUrl}${this.getAllNotebooksRoute}`,
+      { 
+        headers,
+        params: {
+          userId: userEmail  // Add email as userId in query string
         }
       }
-      
-      // Default to empty array if no valid data format is found
-      return [];
-    } catch (error) {
-      console.error('Error fetching notebooks:', error);
-      console.error('Error details:', error.response ? error.response.data : 'No response data');
-      console.error('Error status:', error.response ? error.response.status : 'No status code');
-      throw error;
-    }
-  }
+    );
 
+    console.log("Notebooks response:", response.data);
+
+    // Process response data
+    if (response.data && response.data.notebooks) {
+      return response.data.notebooks;
+    } else if (Array.isArray(response.data)) {
+      return response.data;
+    }
+
+    return [];
+  } catch (error) {
+    // Enhanced error logging
+    console.error('Error fetching notebooks:', error);
+
+    // Log detailed error info
+    if (error.response) {
+      console.error(`Status: ${error.response.status}`);
+      console.error(`Data:`, error.response.data);
+      console.error(`Headers:`, error.response.headers);
+    } else if (error.request) {
+      console.error('No response received:', error.request);
+    } else {
+      console.error('Error creating request:', error.message);
+    }
+
+    throw error;
+  }
+}
   /**
    * Update an existing notebook
    * @param {string} notebookId - ID of the notebook to update
@@ -161,27 +151,27 @@ class NotebookService {
         ...notebookData,
         UpdatedAt: new Date().toISOString()
       };
-      
+
       // Ensure content is properly encoded if it's HTML
       if (payload.Content && typeof payload.Content === 'string') {
         // No explicit encoding needed as axios handles this,
         // but make sure the Content-Type is correct
       }
-      
+
       // Get auth headers
       const headers = await this.getAuthHeaders();
-      
+
       console.log("Updating notebook:", notebookId);
-      
+
       // Make the API call to update the notebook
       const response = await axios.put(
-        `${this.baseUrl}/updateNotebook`, 
+        `${this.baseUrl}/updateNotebook`,
         payload,
         { headers }
       );
-      
+
       console.log("Update response:", response.data);
-      
+
       // Return the response data
       return response.data;
     } catch (error) {
@@ -200,17 +190,17 @@ class NotebookService {
     try {
       // Get auth headers
       const headers = await this.getAuthHeaders();
-      
+
       console.log("Deleting notebook:", notebookId);
-      
+
       // Get current user data
       const userData = authService.getUserData();
       const userId = userData?.email || 'guest';
-      
+
       // This is the correct structure based on your Lambda input
       const response = await axios.delete(
-        `${this.baseUrl}/deleteNotbook`, 
-        { 
+        `${this.baseUrl}/deleteNotbook`,
+        {
           headers,
           data: {
             user_id: userId,  // This matches what your Lambda receives
@@ -218,13 +208,13 @@ class NotebookService {
           }
         }
       );
-      
+
       console.log("Delete response:", response.data);
       return response.data;
     } catch (error) {
       console.error('Error deleting notebook:', error);
       console.error('Error details:', error.response ? error.response.data : 'No response data');
-      
+
       // Client-side fallback
       try {
         const savedNotebooks = localStorage.getItem('notebooks');
@@ -237,7 +227,7 @@ class NotebookService {
       } catch (localError) {
         console.error("Error in localStorage fallback:", localError);
       }
-      
+
       throw error;
     }
   }
@@ -247,21 +237,35 @@ class NotebookService {
    * @param {string} notebookId - ID of the notebook to retrieve
    * @returns {Promise<object>} - The notebook
    */
+  /**
+ * Get a single notebook by ID
+ * @param {string} notebookId - ID of the notebook to retrieve
+ * @returns {Promise<object>} - The notebook
+ */
   async getNotebook(notebookId) {
     try {
       // Get auth headers
       const headers = await this.getAuthHeaders();
-      
-      console.log("Fetching notebook:", notebookId);
-      
-      // Make the API call to get the notebook
+
+      // Get user data to extract email
+      const userData = authService.getUserData();
+      const userEmail = userData?.email || 'guest';
+
+      console.log("Fetching notebook:", notebookId, "for user:", userEmail);
+
+      // Make the API call to get the notebook with userId in query string
       const response = await axios.get(
         `${this.baseUrl}/getNotebook/${notebookId}`,
-        { headers }
+        {
+          headers,
+          params: {
+            userId: userEmail  // Add email as userId in query string
+          }
+        }
       );
-      
+
       console.log("Get notebook response:", response.data);
-      
+
       // Return the response data
       return response.data;
     } catch (error) {

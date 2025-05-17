@@ -251,6 +251,36 @@ class AuthService {
       throw error;
     }
   }
+  /**
+ * Get authentication headers with JWT token for API requests
+ * @returns {Promise<Object>} - Headers with Authorization token
+ */
+  async getAuthHeaders() {
+    try {
+      // Get current session with tokens
+      const session = await fetchAuthSession();
+
+      // Check if we have tokens
+      if (!session || !session.tokens || !session.tokens.idToken) {
+        console.error('No valid auth session found');
+        throw new Error('Not authenticated');
+      }
+
+      // Get the ID token as string
+      const idToken = session.tokens.idToken.toString();
+
+      // Log token format for debugging (only first few chars)
+      console.log(`Token obtained (first 15 chars): ${idToken.substring(0, 15)}...`);
+
+      return {
+        'Authorization': `Bearer ${idToken}`,
+        'Content-Type': 'application/json'
+      };
+    } catch (error) {
+      console.error('Error getting auth headers:', error);
+      throw error;
+    }
+  }
 }
 
 // Create a singleton instance
