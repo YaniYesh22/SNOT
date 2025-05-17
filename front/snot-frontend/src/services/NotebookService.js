@@ -22,69 +22,72 @@ class NotebookService {
     this.baseUrl = 'https://ch2l8cp5l3.execute-api.eu-central-1.amazonaws.com/dev';
 
     // The specific route for notebook operations
-    this.notebookRoute = '/createNotbook';
+    this.notebookRoute = '/createNoteBook';
     this.getAllNotebooksRoute = '/getAllNotebooks';
   }
 
-  /**
-   * Get authorization headers with Cognito token
-   * @returns {Object} - Headers object
-   */
-  /**
-   * Get authentication headers with JWT token
-   * @returns {Promise<Object>} - Headers object with Authorization
-   */
   
-  /**
-   * Create a new notebook in the database
-   * @param {object} notebookData - Data for the new notebook
-   * @returns {Promise<object>} - The created notebook
-   */
-  async createNotebook(notebookData) {
-    try {
-      // Get the current user info for the UserId
-      const userData = authService.getUserData();
+ /**
+ * Create a new notebook with tags and content chunking support
+ * @param {object} notebookData - Data for the new notebook
+ * @param {string} notebookData.title - Title of the notebook
+ * @param {string} notebookData.content - Content of the notebook
+ * @param {string[]} notebookData.tags - Array of tags for categorization
+ * @param {string[]} notebookData.connections - Array of connected notebook IDs
+ * @returns {Promise<object>} - The created notebook
+ */
+async createNotebook(notebookData) {
+  try {
+    // Get the current user info for the UserId
+    const userData = authService.getUserData();
+    const userId = userData?.email || 'guest';
 
-      // Generate a unique ID for the notebook
-      const notebookId = `notebook_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    // Prepare the request payload according to Lambda expectations
+    const payload = {
+      title: notebookData.title || 'Untitled',
+      content: notebookData.content || '',
+      tags: Array.isArray(notebookData.tags) ? notebookData.tags : 
+           (notebookData.tags ? [notebookData.tags] : ['Uncategorized']),
+      connections: notebookData.connections || [],
+      userId: userId // Include userId in payload for fallback
+    };
 
-      // Prepare the notebook data
-      const payload = {
-        NotebookId: notebookId,
-        userId: userData?.email || 'guest', // Use email as user ID
-        title: notebookData.title,
-        Content: notebookData.content || '',
-        CreatedAt: new Date().toISOString(),
-        UpdatedAt: new Date().toISOString(),
-        Order: notebookData.order || 0
-      };
+    console.log("Creating notebook with payload:", payload);
 
-      console.log("Creating notebook with payload:", payload);
+    // Get auth headers
+    const headers = await authService.getAuthHeaders();
 
-      // Get auth headers
-      const headers = await this.getAuthHeaders();
-      console.log("Using headers:", headers);
+    // Make the API call
+    const response = await axios.post(
+      `${this.baseUrl}/createNotebook`,
+      payload,
+      { headers }
+    );
 
-      // Make the API call to create the notebook
-      const response = await axios.post(
-        `${this.baseUrl}${this.notebookRoute}`,
-        payload,
-        { headers }
-      );
+    console.log("API response:", response);
 
-      console.log("API response:", response);
+    // Format the notebook from the response
+    const createdNotebook = {
+      id: response.data.notebookId,
+      title: response.data.title,
+      content: notebookData.content || '',
+      tags: response.data.tags || [],
+      connections: response.data.connections || [],
+      createdAt: response.data.createdAt,
+      updatedAt: response.data.createdAt
+    };
 
-      // Return the response data
-      return {
-        ...payload,
-        ...response.data
-      };
-    } catch (error) {
-      console.error('Error creating notebook:', error);
-      console.error('Error details:', error.response ? error.response.data : 'No response data');
-      throw error;
+    return createdNotebook;
+  } catch (error) {
+    console.error('Error creating notebook:', error);
+    if (error.response) {
+      console.error('Error status:', error.response.status);
+      console.error('Error details:', error.response.data);
     }
+    throw error;
   }
+}
+
   async getNotebooks() {
   try {
     // Get auth headers from auth service

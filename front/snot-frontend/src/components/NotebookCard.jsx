@@ -1,86 +1,87 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-export default function NotebookCard({ id, title = 'Untitled Notebook' }) {
-  const [isHovered, setIsHovered] = useState(false);
+const NotebookCard = ({ id, title, tags = [] }) => {
+  // Limit displayed tags to 3
+  const displayTags = tags.slice(0, 3);
+  const hasMoreTags = tags.length > 3;
   
   return (
-    <div 
-      style={{
-        ...styles.card,
-        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
-        boxShadow: isHovered 
-          ? '0 4px 12px rgba(0,0,0,0.1)' 
-          : '0 1px 4px rgba(0,0,0,0.05)'
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <div style={styles.icon}>📓</div>
-      <div style={styles.title}>{title}</div>
-      <div style={{
-        ...styles.openIndicator,
-        transform: isHovered ? 'translateY(0)' : 'translateY(100%)'
-      }}>
-        <span style={styles.openText}>Open</span>
-        <span style={styles.arrow}>→</span>
+    <div style={styles.card}>
+      <div style={styles.cardContent}>
+        <h3 style={styles.title}>{title}</h3>
+        
+        {/* Tags section */}
+        {tags && tags.length > 0 && (
+          <div style={styles.tagContainer}>
+            {displayTags.map((tag, index) => (
+              <span key={`${id}-tag-${index}`} style={styles.tag}>
+                {tag}
+              </span>
+            ))}
+            {hasMoreTags && (
+              <span style={styles.tagMore}>+{tags.length - 3}</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
-}
+};
 
 const styles = {
   card: {
-    background: '#fff',
+    background: '#ffffff',
     borderRadius: '8px',
-    padding: '1.5rem',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+    border: '1px solid #e5e7eb',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    textAlign: 'center',
-    transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-    position: 'relative',
     overflow: 'hidden',
-    height: '160px',
-    width: '100%'
+    '&:hover': {
+      transform: 'translateY(-2px)',
+      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+    },
   },
-  icon: {
-    fontSize: '2.5rem',
-    marginBottom: '1rem'
+  cardContent: {
+    padding: '1rem',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
   },
   title: {
-    fontWeight: '500',
-    fontSize: '1.1rem',
+    fontSize: '1rem',
+    fontWeight: '600',
+    margin: '0 0 0.75rem 0',
     color: '#111827',
-    // Ensure long titles don't overflow
-    width: '100%',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     display: '-webkit-box',
     WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical'
+    WebkitBoxOrient: 'vertical',
   },
-  openIndicator: {
-    position: 'absolute',
-    bottom: '0',
-    left: '0',
-    right: '0',
-    backgroundColor: '#f9fafb',
-    padding: '0.5rem',
+  tagContainer: {
     display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTop: '1px solid #f3f4f6',
-    transition: 'transform 0.2s ease-in-out',
-    transform: 'translateY(100%)'
+    flexWrap: 'wrap',
+    gap: '0.375rem',
+    marginTop: 'auto',
   },
-  openText: {
-    fontSize: '0.875rem',
-    fontWeight: '500',
-    color: '#4b5563'
+  tag: {
+    fontSize: '0.75rem',
+    padding: '0.25rem 0.5rem',
+    borderRadius: '0.25rem',
+    backgroundColor: '#f3f4f6',
+    color: '#4b5563',
+    whiteSpace: 'nowrap',
   },
-  arrow: {
-    marginLeft: '0.25rem',
-    fontWeight: 'bold'
-  }
+  tagMore: {
+    fontSize: '0.75rem',
+    padding: '0.25rem 0.5rem',
+    borderRadius: '0.25rem',
+    backgroundColor: '#e5e7eb',
+    color: '#6b7280',
+  },
 };
+
+export default NotebookCard;

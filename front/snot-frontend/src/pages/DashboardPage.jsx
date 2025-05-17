@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import NotebookCard from "../components/NotebookCard";
 import Sidebar from "../components/Sidebar";
+import CreateNotebookModal from "../components/CreateNotebookModal"; // Import the new modal
 import authService from "../services/AuthService";
 import notebookService from "../services/NotebookService";
-import { useNavigate } from "react-router-dom";
 
 export default function DashboardPage() {
   const [notebooks, setNotebooks] = useState([]);
@@ -37,6 +38,7 @@ export default function DashboardPage() {
           content: notebook.Content || notebook.content || '',
           createdAt: notebook.CreatedAt || notebook.createdAt || new Date().toISOString(),
           updatedAt: notebook.UpdatedAt || notebook.updatedAt || new Date().toISOString(),
+          tags: notebook.tags || ['Uncategorized'],
           order: notebook.Order !== undefined ? notebook.Order : 
                  notebook.order !== undefined ? notebook.order : index
         }));
@@ -58,6 +60,7 @@ export default function DashboardPage() {
           content: notebook.Content || notebook.content || '',
           createdAt: notebook.CreatedAt || notebook.createdAt || new Date().toISOString(),
           updatedAt: notebook.UpdatedAt || notebook.updatedAt || new Date().toISOString(),
+          tags: notebook.tags || ['Uncategorized'],
           order: notebook.Order !== undefined ? notebook.Order : 
                  notebook.order !== undefined ? notebook.order : index
         }));
@@ -111,6 +114,7 @@ export default function DashboardPage() {
                 content: notebook.Content || notebook.content || '',
                 createdAt: notebook.CreatedAt || notebook.createdAt || new Date().toISOString(),
                 updatedAt: notebook.UpdatedAt || notebook.updatedAt || new Date().toISOString(),
+                tags: notebook.tags || ['Uncategorized'],
                 order: notebook.Order !== undefined ? notebook.Order : 
                        notebook.order !== undefined ? notebook.order : index
               }));
@@ -160,53 +164,30 @@ export default function DashboardPage() {
     }
   }, [notebooks, isLoading]);
 
-  const addNotebook = async () => {
-    if (newTitle.trim() !== "") {
-      setIsLoading(true);
-      setApiError(null);
-      
-      try {
-        // Create the new notebook via API
-        const notebookData = {
-          title: newTitle.trim(),
-          content: ''
-        };
-        
-        // Call the API to create the notebook
-        const createdNotebook = await notebookService.createNotebook(notebookData);
-        
-        // Format the response to match our state format
-        const newNotebook = {
-          id: createdNotebook.NotebookId || createdNotebook.notebookId,
-          title: createdNotebook.Title || createdNotebook.title,
-          content: createdNotebook.Content || createdNotebook.content || '',
-          createdAt: createdNotebook.CreatedAt || createdNotebook.createdAt,
-          updatedAt: createdNotebook.UpdatedAt || createdNotebook.updatedAt,
-          order: notebooks.length // Set order to be at the end
-        };
-        
-        // Update the state with the new notebook
-        const updatedNotebooks = [...notebooks, newNotebook];
-        setNotebooks(updatedNotebooks);
-        
-        // Also update localStorage as backup
-        localStorage.setItem('notebooks', JSON.stringify(updatedNotebooks));
-        
-        // Reset form and close modal
-        setNewTitle("");
-        setShowModal(false);
-        
-        // Refresh notebooks from server after a short delay to ensure data consistency
-        setTimeout(() => {
-          refreshNotebooks();
-        }, 1000);
-      } catch (error) {
-        console.error("Error creating notebook:", error);
-        setApiError("Failed to create notebook. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    }
+  // Handle notebook creation from the CreateNotebookModal
+  const handleNotebookCreated = (newNotebook) => {
+    // Format the notebook to match our state format
+    const formattedNotebook = {
+      id: newNotebook.id,
+      title: newNotebook.title,
+      content: newNotebook.content || '',
+      createdAt: newNotebook.createdAt,
+      updatedAt: newNotebook.updatedAt,
+      tags: newNotebook.tags || ['Uncategorized'],
+      order: notebooks.length // Set order to be at the end
+    };
+    
+    // Update the state with the new notebook
+    const updatedNotebooks = [...notebooks, formattedNotebook];
+    setNotebooks(updatedNotebooks);
+    
+    // Also update localStorage as backup
+    localStorage.setItem('notebooks', JSON.stringify(updatedNotebooks));
+    
+    // Refresh notebooks from server after a short delay to ensure data consistency
+    setTimeout(() => {
+      refreshNotebooks();
+    }, 1000);
   };
 
   const updateNotebook = async () => {
@@ -292,8 +273,6 @@ export default function DashboardPage() {
 
   const openCreateModal = () => {
     setModalMode('create');
-    setNewTitle("");
-    setSelectedNotebook(null);
     setShowModal(true);
   };
 
@@ -447,7 +426,8 @@ export default function DashboardPage() {
                       >
                         <NotebookCard 
                           id={notebook.id} 
-                          title={notebook.title} 
+                          title={notebook.title}
+                          tags={notebook.tags}
                         />
                       </div>
                       
@@ -513,7 +493,16 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {showModal && (
+      {/* Create Notebook Modal */}
+      {showModal && modalMode === 'create' && (
+        <CreateNotebookModal 
+          onClose={() => setShowModal(false)}
+          onNotebookCreated={handleNotebookCreated}
+        />
+      )}
+
+      {/* Edit Modal */}
+      {showModal && modalMode === 'edit' && selectedNotebook && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
             {apiError && (
@@ -522,98 +511,69 @@ export default function DashboardPage() {
               </div>
             )}
             
-            {modalMode === 'create' && (
-              <>
-                <h3 style={styles.modalTitle}>Create New Notebook</h3>
-                <input
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Notebook name"
-                  style={styles.input}
-                  autoFocus
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      addNotebook();
-                    }
-                  }}
-                />
-                <div style={styles.modalButtons}>
-                  <button 
-                    onClick={addNotebook} 
-                    style={styles.modalCreate}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Creating...' : 'Create'}
-                  </button>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    style={styles.modalCancel}
-                    disabled={isLoading}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
+            <h3 style={styles.modalTitle}>Edit Notebook</h3>
+            <input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="Notebook name"
+              style={styles.input}
+              autoFocus
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && !isLoading) {
+                  updateNotebook();
+                }
+              }}
+            />
+            <div style={styles.modalButtons}>
+              <button 
+                onClick={updateNotebook} 
+                style={styles.modalCreate}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Updating...' : 'Update'}
+              </button>
+              <button
+                onClick={() => setShowModal(false)}
+                style={styles.modalCancel}
+                disabled={isLoading}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Delete Modal */}
+      {showModal && modalMode === 'delete' && selectedNotebook && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modal}>
+            {apiError && (
+              <div style={styles.apiError}>
+                {apiError}
+              </div>
             )}
             
-            {modalMode === 'edit' && (
-              <>
-                <h3 style={styles.modalTitle}>Edit Notebook</h3>
-                <input
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Notebook name"
-                  style={styles.input}
-                  autoFocus
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !isLoading) {
-                      updateNotebook();
-                    }
-                  }}
-                />
-                <div style={styles.modalButtons}>
-                  <button 
-                    onClick={updateNotebook} 
-                    style={styles.modalCreate}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Updating...' : 'Update'}
-                  </button>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    style={styles.modalCancel}
-                    disabled={isLoading}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            )}
-            
-            {modalMode === 'delete' && selectedNotebook && (
-              <>
-                <h3 style={styles.modalTitle}>Delete Notebook</h3>
-                <p style={styles.deleteConfirmText}>
-                  Are you sure you want to delete "{selectedNotebook.title}"? This action cannot be undone.
-                </p>
-                <div style={styles.modalButtons}>
-                  <button 
-                    onClick={deleteNotebook} 
-                    style={styles.modalDelete}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Deleting...' : 'Delete'}
-                  </button>
-                  <button
-                    onClick={() => setShowModal(false)}
-                    style={styles.modalCancel}
-                    disabled={isLoading}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            )}
+            <h3 style={styles.modalTitle}>Delete Notebook</h3>
+            <p style={styles.deleteConfirmText}>
+              Are you sure you want to delete "{selectedNotebook.title}"? This action cannot be undone.
+            </p>
+            <div style={styles.modalButtons}>
+              <button 
+                onClick={deleteNotebook} 
+                style={styles.modalDelete}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Deleting...' : 'Delete'}
+              </button>
+              <button
+                onClick={() => setShowModal(false)}
+                style={styles.modalCancel}
+                disabled={isLoading}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
