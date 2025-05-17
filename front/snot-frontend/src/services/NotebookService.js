@@ -11,7 +11,7 @@ class NotebookService {
     
     // The specific route for notebook operations
     this.notebookRoute = '/createNotbook';
-    this.getAllNotebooksRoute = '/getNotebook';
+    this.getAllNotebooksRoute = '/getAllNotebook';
   }
 
   /**
