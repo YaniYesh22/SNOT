@@ -21,7 +21,6 @@ const CreateNotebookModal = ({ onClose, onNotebookCreated }) => {
   // UI state
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [showAdvanced, setShowAdvanced] = useState(false);
   
   // Fetch existing notebooks for connections
   useEffect(() => {
@@ -50,6 +49,11 @@ const CreateNotebookModal = ({ onClose, onNotebookCreated }) => {
   
   // Handle notebook connection toggle
   const handleConnectionToggle = (notebookId) => {
+    // Make sure notebookId is valid
+    if (!notebookId) {
+      console.error("Attempted to toggle invalid notebookId:", notebookId);
+      return;
+    }
     if (connections.includes(notebookId)) {
       setConnections(connections.filter(id => id !== notebookId));
     } else {
@@ -90,6 +94,7 @@ const CreateNotebookModal = ({ onClose, onNotebookCreated }) => {
         tags: selectedTags,
         connections: connections
       };
+      console.log("About to create notebook with connections:", connections);
       
       const createdNotebook = await notebookService.createNotebook(notebookData);
       
@@ -104,6 +109,16 @@ const CreateNotebookModal = ({ onClose, onNotebookCreated }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  // Dynamic styling for the tags container based on validation state
+  const getTagsContainerStyle = () => {
+    return {
+      ...styles.tagsContainer,
+      border: selectedTags.length === 0 && errors.tags 
+        ? '1px solid #ef4444' 
+        : '1px solid transparent',
+    };
   };
   
   return (
@@ -144,7 +159,7 @@ const CreateNotebookModal = ({ onClose, onNotebookCreated }) => {
             <label style={styles.label}>
               Tags <span style={styles.required}>*</span>
             </label>
-            <div style={styles.tagsContainer}>
+            <div style={getTagsContainerStyle()}>
               {AVAILABLE_TAGS.map(tag => (
                 <div 
                   key={tag}
@@ -163,61 +178,50 @@ const CreateNotebookModal = ({ onClose, onNotebookCreated }) => {
             )}
           </div>
           
-          {/* Advanced Options Toggle */}
-          <div style={styles.advancedToggle}>
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              style={styles.advancedButton}
+          {/* Preview Field */}
+          <div style={styles.formGroup}>
+            <div style={styles.labelContainer}>
+              <label style={styles.label} htmlFor="notebook-content">
+                Preview
+              </label>
+              <span style={styles.infoText}>Start writing your first note</span>
+            </div>
+            <textarea
+              id="notebook-content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Enter initial content for your notebook..."
+              style={styles.textarea}
+              rows={5}
               disabled={isLoading}
-            >
-              {showAdvanced ? "Hide Advanced Options ▲" : "Show Advanced Options ▼"}
-            </button>
+            />
           </div>
           
-          {/* Advanced Section */}
-          {showAdvanced && (
-            <>
-              {/* Initial Content Field */}
-              <div style={styles.formGroup}>
-                <label style={styles.label} htmlFor="notebook-content">
-                  Initial Content
-                </label>
-                <textarea
-                  id="notebook-content"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Enter initial content (optional)"
-                  style={styles.textarea}
-                  rows={5}
-                  disabled={isLoading}
-                />
-              </div>
-              
-              {/* Connections Field */}
-              {availableNotebooks.length > 0 && (
-                <div style={styles.formGroup}>
-                  <label style={styles.label}>
-                    Connect to Other Notebooks
-                  </label>
-                  <div style={styles.connectionsContainer}>
-                    {availableNotebooks.map(notebook => (
-                      <div 
-                        key={notebook.id}
-                        style={{
-                          ...styles.connectionItem,
-                          ...(connections.includes(notebook.id) ? styles.selectedConnection : {})
-                        }}
-                        onClick={() => !isLoading && handleConnectionToggle(notebook.id)}
-                      >
-                        {notebook.title}
-                      </div>
-                    ))}
+          {/* Connections Field */}
+          <div style={styles.formGroup}>
+            <div style={styles.labelContainer}>
+              <label style={styles.label}>Connections</label>
+              <span style={styles.infoText}>Link to relevant notebooks</span>
+            </div>
+            <div style={styles.connectionsContainer}>
+              {availableNotebooks.length > 0 ? (
+                availableNotebooks.map(notebook => (
+                  <div 
+                    key={notebook.notebookId}
+                    style={{
+                      ...styles.connectionItem,
+                      ...(connections.includes(notebook.notebookId) ? styles.selectedConnection : {})
+                    }}
+                    onClick={() => !isLoading && handleConnectionToggle(notebook.notebookId)}
+                  >
+                    {notebook.title}
                   </div>
-                </div>
+                ))
+              ) : (
+                <div style={styles.noConnections}>No other notebooks available to connect with.</div>
               )}
-            </>
-          )}
+            </div>
+          </div>
           
           {/* Form Actions */}
           <div style={styles.formActions}>
@@ -262,7 +266,7 @@ const styles = {
     borderRadius: "8px",
     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
     padding: "24px",
-    width: "500px",
+    width: "550px",
     maxWidth: "90%",
     maxHeight: "90vh",
     overflow: "auto"
@@ -283,10 +287,21 @@ const styles = {
     flexDirection: "column",
     gap: "8px"
   },
+  labelContainer: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
   label: {
     fontSize: "0.875rem",
     fontWeight: "500",
     color: "#374151"
+  },
+  infoText: {
+    color: "#6b7280",
+    fontSize: "0.75rem",
+    fontWeight: "normal",
+    fontStyle: "italic"
   },
   required: {
     color: "#ef4444"
@@ -308,7 +323,8 @@ const styles = {
     border: "1px solid #d1d5db",
     transition: "border-color 0.2s ease",
     resize: "vertical",
-    fontFamily: "inherit"
+    fontFamily: "inherit",
+    minHeight: "100px"
   },
   fieldError: {
     color: "#ef4444",
@@ -326,7 +342,9 @@ const styles = {
   tagsContainer: {
     display: "flex",
     flexWrap: "wrap",
-    gap: "8px"
+    gap: "8px",
+    padding: '8px',
+    borderRadius: '6px',
   },
   tagItem: {
     padding: "6px 12px",
@@ -349,9 +367,9 @@ const styles = {
     gap: "6px",
     maxHeight: "150px",
     overflowY: "auto",
-    padding: "4px",
+    padding: "8px",
     borderRadius: "6px",
-    border: "1px solid #e5e7eb"
+    border: "1px solid #d1d5db"
   },
   connectionItem: {
     padding: "8px 12px",
@@ -367,23 +385,18 @@ const styles = {
     color: "#0369a1",
     fontWeight: "500"
   },
-  advancedToggle: {
-    display: "flex",
-    justifyContent: "center"
-  },
-  advancedButton: {
-    background: "none",
-    border: "none",
-    color: "#4b5563",
+  noConnections: {
+    padding: "10px",
+    color: "#6b7280",
     fontSize: "0.875rem",
-    cursor: "pointer",
-    padding: "4px 8px"
+    fontStyle: "italic",
+    textAlign: "center"
   },
   formActions: {
     display: "flex",
     justifyContent: "flex-end",
     gap: "12px",
-    marginTop: "8px"
+    marginTop: "16px"
   },
   cancelButton: {
     padding: "8px 16px",
@@ -403,9 +416,7 @@ const styles = {
     border: "none",
     fontSize: "0.875rem",
     fontWeight: "500",
-    cursor: "pointer",
-    transition: "background-color 0.2s ease",
-    opacity: (props) => (props.disabled ? 0.5 : 1)
+    cursor: "pointer"
   }
 };
 

@@ -7,6 +7,22 @@ import CreateNotebookModal from "../components/CreateNotebookModal"; // Import t
 import authService from "../services/AuthService";
 import notebookService from "../services/NotebookService";
 
+// In DashboardPage.jsx
+const getNotebookTags = (notebook) => {
+  // First check if notebook.tags exists
+  if (notebook.tags && Array.isArray(notebook.tags) && notebook.tags.length > 0) {
+    return notebook.tags;
+  }
+  
+  // Then check if notebook.Tags exists (capital T)
+  if (notebook.Tags) {
+    return Array.isArray(notebook.Tags) ? notebook.Tags : [notebook.Tags];
+  }
+  
+  // Default fallback
+  return ['Uncategorized'];
+};
+
 export default function DashboardPage() {
   const [notebooks, setNotebooks] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -26,10 +42,10 @@ export default function DashboardPage() {
   const refreshNotebooks = async () => {
     setIsLoading(true);
     setApiError(null);
-    
+
     try {
       const notebookData = await notebookService.getNotebooks();
-      
+
       if (Array.isArray(notebookData)) {
         // Make sure each notebook has an order property and required fields
         const notebooksWithOrder = notebookData.map((notebook, index) => ({
@@ -38,21 +54,22 @@ export default function DashboardPage() {
           content: notebook.Content || notebook.content || '',
           createdAt: notebook.CreatedAt || notebook.createdAt || new Date().toISOString(),
           updatedAt: notebook.UpdatedAt || notebook.updatedAt || new Date().toISOString(),
-          tags: notebook.tags || ['Uncategorized'],
-          order: notebook.Order !== undefined ? notebook.Order : 
-                 notebook.order !== undefined ? notebook.order : index
+          // Using the helper function for consistent tag handling
+          tags: getNotebookTags(notebook),
+          order: notebook.Order !== undefined ? notebook.Order :
+            notebook.order !== undefined ? notebook.order : index
         }));
-        
+
         // Sort by order
         const sortedNotebooks = notebooksWithOrder.sort((a, b) => (a.order || 0) - (b.order || 0));
         setNotebooks(sortedNotebooks);
-        
+
         // Also update localStorage as backup
         localStorage.setItem('notebooks', JSON.stringify(sortedNotebooks));
       } else if (notebookData && typeof notebookData === 'object') {
         // Handle case where API returns object with Items array
         const notebooks = notebookData.Items || notebookData.notebooks || [];
-        
+
         // Process the notebooks as above
         const notebooksWithOrder = notebooks.map((notebook, index) => ({
           id: notebook.NotebookId || notebook.notebookId || `notebook-${index}`,
@@ -60,14 +77,15 @@ export default function DashboardPage() {
           content: notebook.Content || notebook.content || '',
           createdAt: notebook.CreatedAt || notebook.createdAt || new Date().toISOString(),
           updatedAt: notebook.UpdatedAt || notebook.updatedAt || new Date().toISOString(),
-          tags: notebook.tags || ['Uncategorized'],
-          order: notebook.Order !== undefined ? notebook.Order : 
-                 notebook.order !== undefined ? notebook.order : index
+          // Using the helper function for consistent tag handling
+          tags: getNotebookTags(notebook),
+          order: notebook.Order !== undefined ? notebook.Order :
+            notebook.order !== undefined ? notebook.order : index
         }));
-        
+
         const sortedNotebooks = notebooksWithOrder.sort((a, b) => (a.order || 0) - (b.order || 0));
         setNotebooks(sortedNotebooks);
-        
+
         // Update localStorage
         localStorage.setItem('notebooks', JSON.stringify(sortedNotebooks));
       } else {
@@ -77,6 +95,7 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("Error refreshing notebooks:", error);
       setApiError("Failed to refresh notebooks. Please try again.");
+      console.log("After refresh, notebooks:", notebooks);
     } finally {
       setIsLoading(false);
     }
@@ -87,25 +106,25 @@ export default function DashboardPage() {
     const loadData = async () => {
       setIsLoading(true);
       setApiError(null);
-      
+
       try {
         // Get user data
         const currentUser = await authService.getCurrentUser();
         if (currentUser) {
           // First try to get from localStorage
           let userData = authService.getUserData();
-          
+
           // If no data or no name, refresh from Cognito
           if (!userData || !userData.name || userData.name === 'User') {
             userData = await authService.refreshUserData();
           }
-          
+
           setUserData(userData);
-          
+
           // Fetch notebooks from the DynamoDB via API Gateway
           try {
             const notebookData = await notebookService.getNotebooks();
-            
+
             if (Array.isArray(notebookData)) {
               // Make sure each notebook has an order property and required fields
               const notebooksWithOrder = notebookData.map((notebook, index) => ({
@@ -114,11 +133,12 @@ export default function DashboardPage() {
                 content: notebook.Content || notebook.content || '',
                 createdAt: notebook.CreatedAt || notebook.createdAt || new Date().toISOString(),
                 updatedAt: notebook.UpdatedAt || notebook.updatedAt || new Date().toISOString(),
-                tags: notebook.tags || ['Uncategorized'],
-                order: notebook.Order !== undefined ? notebook.Order : 
-                       notebook.order !== undefined ? notebook.order : index
+                // Using the helper function for consistent tag handling
+                tags: getNotebookTags(notebook),
+                order: notebook.Order !== undefined ? notebook.Order :
+                  notebook.order !== undefined ? notebook.order : index
               }));
-              
+
               // Sort by order
               const sortedNotebooks = notebooksWithOrder.sort((a, b) => (a.order || 0) - (b.order || 0));
               setNotebooks(sortedNotebooks);
@@ -130,7 +150,7 @@ export default function DashboardPage() {
           } catch (apiError) {
             console.error("Error fetching notebooks from API:", apiError);
             setApiError("Failed to load notebooks. Please try again later.");
-            
+
             // Fallback to localStorage if API fails
             const savedNotebooks = localStorage.getItem('notebooks');
             if (savedNotebooks) {
@@ -166,44 +186,48 @@ export default function DashboardPage() {
 
   // Handle notebook creation from the CreateNotebookModal
   const handleNotebookCreated = (newNotebook) => {
-    // Format the notebook to match our state format
-    const formattedNotebook = {
-      id: newNotebook.id,
-      title: newNotebook.title,
-      content: newNotebook.content || '',
-      createdAt: newNotebook.createdAt,
-      updatedAt: newNotebook.updatedAt,
-      tags: newNotebook.tags || ['Uncategorized'],
-      order: notebooks.length // Set order to be at the end
-    };
-    
-    // Update the state with the new notebook
-    const updatedNotebooks = [...notebooks, formattedNotebook];
-    setNotebooks(updatedNotebooks);
-    
-    // Also update localStorage as backup
-    localStorage.setItem('notebooks', JSON.stringify(updatedNotebooks));
-    
-    // Refresh notebooks from server after a short delay to ensure data consistency
-    setTimeout(() => {
-      refreshNotebooks();
-    }, 1000);
+  console.log("Notebook created with data:", newNotebook);
+  console.log("Created notebook with tags:", newNotebook.tags); // Add this for debugging
+  
+  // Format the notebook to match our state format
+  const formattedNotebook = {
+    id: newNotebook.id,
+    title: newNotebook.title,
+    content: newNotebook.content || '',
+    createdAt: newNotebook.createdAt,
+    updatedAt: newNotebook.updatedAt,
+    tags: newNotebook.tags && newNotebook.tags.length > 0 ? newNotebook.tags : ['Uncategorized'],
+    order: notebooks.length // Set order to be at the end
   };
+  
+  // Update the state with the new notebook
+  const updatedNotebooks = [...notebooks, formattedNotebook];
+  setNotebooks(updatedNotebooks);
+  
+  // Also update localStorage as backup
+  localStorage.setItem('notebooks', JSON.stringify(updatedNotebooks));
+  
+  // Refresh notebooks from server after a short delay to ensure data consistency
+  setTimeout(() => {
+    refreshNotebooks();
+  }, 1000);
+};
+
 
   const updateNotebook = async () => {
     if (newTitle.trim() !== "" && selectedNotebook) {
       setIsLoading(true);
       setApiError(null);
-      
+
       try {
         // Prepare update data
         const updateData = {
           Title: newTitle.trim()
         };
-        
+
         // Call API to update the notebook
         await notebookService.updateNotebook(selectedNotebook.id, updateData);
-        
+
         // Update local state
         const updatedNotebooks = notebooks.map(notebook => {
           if (notebook.id === selectedNotebook.id) {
@@ -215,12 +239,12 @@ export default function DashboardPage() {
           }
           return notebook;
         });
-        
+
         setNotebooks(updatedNotebooks);
-        
+
         // Update localStorage as backup
         localStorage.setItem('notebooks', JSON.stringify(updatedNotebooks));
-        
+
         // Reset and close modal
         setNewTitle("");
         setSelectedNotebook(null);
@@ -238,27 +262,27 @@ export default function DashboardPage() {
     if (selectedNotebook) {
       setIsLoading(true);
       setApiError(null);
-      
+
       try {
         // Call API to delete the notebook
         await notebookService.deleteNotebook(selectedNotebook.id);
-        
+
         // Update local state
         const updatedNotebooks = notebooks.filter(
           notebook => notebook.id !== selectedNotebook.id
         );
-        
+
         // Update the order of remaining notebooks
         const reorderedNotebooks = updatedNotebooks.map((notebook, index) => ({
           ...notebook,
           order: index
         }));
-        
+
         setNotebooks(reorderedNotebooks);
-        
+
         // Update localStorage as backup
         localStorage.setItem('notebooks', JSON.stringify(reorderedNotebooks));
-        
+
         // Reset and close modal
         setSelectedNotebook(null);
         setShowModal(false);
@@ -313,7 +337,7 @@ export default function DashboardPage() {
 
     // Remove the dragged notebook
     const [movedNotebook] = updatedNotebooks.splice(draggedIndex, 1);
-    
+
     // Insert it at the new position
     updatedNotebooks.splice(overIndex, 0, movedNotebook);
 
@@ -330,14 +354,14 @@ export default function DashboardPage() {
     if (isDragging) {
       setIsDragging(false);
       setDraggedNotebook(null);
-      
+
       // Save the new order to localStorage
       localStorage.setItem('notebooks', JSON.stringify(notebooks));
     }
   };
 
-  const filteredNotebooks = notebooks.filter(notebook => 
-    notebook && notebook.title && typeof notebook.title === 'string' && 
+  const filteredNotebooks = notebooks.filter(notebook =>
+    notebook && notebook.title && typeof notebook.title === 'string' &&
     notebook.title.toLowerCase().includes(searchQuery.toLowerCase())
   ).sort((a, b) => (a.order || 0) - (b.order || 0));
 
@@ -406,7 +430,7 @@ export default function DashboardPage() {
               {filteredNotebooks.length > 0 ? (
                 <div style={styles.notebooks}>
                   {filteredNotebooks.map((notebook) => (
-                    <div 
+                    <div
                       key={notebook.id}
                       style={{
                         ...styles.notebookWrapper,
@@ -420,35 +444,35 @@ export default function DashboardPage() {
                       onDragEnd={handleDragEnd}
                     >
                       {/* This div wraps the card to allow clicking */}
-                      <div 
+                      <div
                         onClick={() => handleCardClick(notebook)}
                         style={styles.cardContainer}
                       >
-                        <NotebookCard 
-                          id={notebook.id} 
+                        <NotebookCard
+                          id={notebook.id}
                           title={notebook.title}
                           tags={notebook.tags}
                         />
                       </div>
-                      
+
                       {/* Action buttons displayed on hover */}
                       {hoveredCardId === notebook.id && (
                         <div style={styles.notebookActions}>
-                          <button 
+                          <button
                             style={styles.editButton}
                             onClick={(e) => openEditModal(e, notebook)}
                             title="Edit notebook"
                           >
                             ✏️
                           </button>
-                          <button 
+                          <button
                             style={styles.deleteButton}
                             onClick={(e) => openDeleteModal(e, notebook)}
                             title="Delete notebook"
                           >
                             🗑️
                           </button>
-                          <div 
+                          <div
                             style={styles.dragHandle}
                             title="Drag to reorder"
                           >
@@ -495,7 +519,7 @@ export default function DashboardPage() {
 
       {/* Create Notebook Modal */}
       {showModal && modalMode === 'create' && (
-        <CreateNotebookModal 
+        <CreateNotebookModal
           onClose={() => setShowModal(false)}
           onNotebookCreated={handleNotebookCreated}
         />
@@ -510,7 +534,7 @@ export default function DashboardPage() {
                 {apiError}
               </div>
             )}
-            
+
             <h3 style={styles.modalTitle}>Edit Notebook</h3>
             <input
               value={newTitle}
@@ -525,8 +549,8 @@ export default function DashboardPage() {
               }}
             />
             <div style={styles.modalButtons}>
-              <button 
-                onClick={updateNotebook} 
+              <button
+                onClick={updateNotebook}
                 style={styles.modalCreate}
                 disabled={isLoading}
               >
@@ -543,7 +567,7 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-      
+
       {/* Delete Modal */}
       {showModal && modalMode === 'delete' && selectedNotebook && (
         <div style={styles.modalOverlay}>
@@ -553,14 +577,14 @@ export default function DashboardPage() {
                 {apiError}
               </div>
             )}
-            
+
             <h3 style={styles.modalTitle}>Delete Notebook</h3>
             <p style={styles.deleteConfirmText}>
               Are you sure you want to delete "{selectedNotebook.title}"? This action cannot be undone.
             </p>
             <div style={styles.modalButtons}>
-              <button 
-                onClick={deleteNotebook} 
+              <button
+                onClick={deleteNotebook}
                 style={styles.modalDelete}
                 disabled={isLoading}
               >

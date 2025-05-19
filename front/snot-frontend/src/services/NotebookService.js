@@ -1,17 +1,5 @@
 import authService from './AuthService';
 import axios from 'axios';
-import {
-  signIn,
-  signUp,
-  signOut,
-  getCurrentUser,
-  fetchUserAttributes,
-  updateUserAttributes,
-  resetPassword,
-  confirmResetPassword,
-  fetchAuthSession,
-  getAuthHeaders
-} from 'aws-amplify/auth';
 
 /**
  * Service class to handle notebook API operations
@@ -26,7 +14,6 @@ class NotebookService {
     this.getAllNotebooksRoute = '/getAllNotebooks';
   }
 
-  
  /**
  * Create a new notebook with tags and content chunking support
  * @param {object} notebookData - Data for the new notebook
@@ -43,19 +30,23 @@ async createNotebook(notebookData) {
     const userId = userData?.email || 'guest';
 
     // Prepare the request payload according to Lambda expectations
-    const payload = {
-      title: notebookData.title || 'Untitled',
-      content: notebookData.content || '',
-      tags: Array.isArray(notebookData.tags) ? notebookData.tags : 
-           (notebookData.tags ? [notebookData.tags] : ['Uncategorized']),
-      connections: notebookData.connections || [],
-      userId: userId // Include userId in payload for fallback
-    };
-
-    console.log("Creating notebook with payload:", payload);
+      const payload = {
+        title: notebookData.title || 'Untitled',
+        content: notebookData.content || '',
+        tags: Array.isArray(notebookData.tags) ? notebookData.tags : 
+            (notebookData.tags ? [notebookData.tags] : ['Uncategorized']),
+        // Filter out undefined/null values from connections
+        connections: Array.isArray(notebookData.connections) 
+          ? notebookData.connections.filter(id => id !== undefined && id !== null) 
+          : [],
+        userId: userId // Include userId in payload for fallback
+      };
 
     // Get auth headers
     const headers = await authService.getAuthHeaders();
+    
+    // Keeping this log as requested
+    console.log("Creating notebook with payload:", payload);
 
     // Make the API call
     const response = await axios.post(
@@ -64,18 +55,26 @@ async createNotebook(notebookData) {
       { headers }
     );
 
-    console.log("API response:", response);
-
     // Format the notebook from the response
     const createdNotebook = {
       id: response.data.notebookId,
       title: response.data.title,
       content: notebookData.content || '',
-      tags: response.data.tags || [],
+      tags: response.data.tags || notebookData.tags || [],
       connections: response.data.connections || [],
       createdAt: response.data.createdAt,
       updatedAt: response.data.createdAt
     };
+
+    // Store tags in localStorage for the frontend to use
+    try {
+      const localNotebooks = localStorage.getItem('notebookTags') || '{}';
+      const notebookTags = JSON.parse(localNotebooks);
+      notebookTags[response.data.notebookId] = notebookData.tags || ['Uncategorized'];
+      localStorage.setItem('notebookTags', JSON.stringify(notebookTags));
+    } catch (e) {
+      console.error("Failed to store tags in localStorage:", e);
+    }
 
     return createdNotebook;
   } catch (error) {
@@ -88,7 +87,7 @@ async createNotebook(notebookData) {
   }
 }
 
-  async getNotebooks() {
+async getNotebooks() {
   try {
     // Get auth headers from auth service
     const headers = await authService.getAuthHeaders();
@@ -97,6 +96,7 @@ async createNotebook(notebookData) {
     const userData = authService.getUserData();
     const userEmail = userData?.email || 'guest';
     
+    // Keeping these logs as requested
     console.log("Using headers:", headers);
     console.log("Fetching notebooks with auth for user:", userEmail);
     console.log(`API URL: ${this.baseUrl}${this.getAllNotebooksRoute}`);
@@ -111,17 +111,54 @@ async createNotebook(notebookData) {
         }
       }
     );
-
+    
+    // Keeping this log as requested
     console.log("Notebooks response:", response.data);
-
-    // Process response data
+    
+    // Get response data
+    let notebooks = [];
     if (response.data && response.data.notebooks) {
-      return response.data.notebooks;
+      notebooks = response.data.notebooks;
     } else if (Array.isArray(response.data)) {
-      return response.data;
+      notebooks = response.data;
     }
-
-    return [];
+    
+    // Add tags from localStorage when API doesn't provide them
+    try {
+      const localTags = localStorage.getItem('notebookTags');
+      if (localTags) {
+        const notebookTags = JSON.parse(localTags);
+        notebooks = notebooks.map(notebook => {
+          const id = notebook.notebookId || notebook.NotebookId;
+          
+          // If notebook already has tags property, keep it
+          if (notebook.tags && Array.isArray(notebook.tags) && notebook.tags.length > 0) {
+            return notebook;
+          }
+          
+          // Otherwise, check if we have tags stored locally
+          if (id && notebookTags[id]) {
+            return {
+              ...notebook,
+              tags: notebookTags[id]
+            };
+          }
+          
+          // Default fallback
+          return {
+            ...notebook,
+            tags: ['Uncategorized']
+          };
+        });
+      }
+    } catch (e) {
+      console.error("Failed to retrieve tags from localStorage:", e);
+    }
+    
+    // Keeping this log as requested
+    console.log("Notebooks with added tags:", notebooks);
+    
+    return notebooks;
   } catch (error) {
     // Enhanced error logging
     console.error('Error fetching notebooks:', error);
@@ -130,7 +167,6 @@ async createNotebook(notebookData) {
     if (error.response) {
       console.error(`Status: ${error.response.status}`);
       console.error(`Data:`, error.response.data);
-      console.error(`Headers:`, error.response.headers);
     } else if (error.request) {
       console.error('No response received:', error.request);
     } else {
@@ -140,6 +176,7 @@ async createNotebook(notebookData) {
     throw error;
   }
 }
+
   /**
    * Update an existing notebook
    * @param {string} notebookId - ID of the notebook to update
@@ -162,9 +199,7 @@ async createNotebook(notebookData) {
       }
 
       // Get auth headers
-      const headers = await this.getAuthHeaders();
-
-      console.log("Updating notebook:", notebookId);
+      const headers = await authService.getAuthHeaders();
 
       // Make the API call to update the notebook
       const response = await axios.put(
@@ -172,8 +207,6 @@ async createNotebook(notebookData) {
         payload,
         { headers }
       );
-
-      console.log("Update response:", response.data);
 
       // Return the response data
       return response.data;
@@ -190,71 +223,154 @@ async createNotebook(notebookData) {
    * @returns {Promise<void>}
    */
   async deleteNotebook(notebookId) {
+  try {
+    // Get auth headers
+    const headers = await authService.getAuthHeaders();
+
+    // Get user data for userId
+    const userData = authService.getUserData();
+    const userId = userData?.email || 'guest';
+
+    console.log("Deleting notebook with ID:", notebookId);
+    
+    // Try to fetch the notebook details before deletion for logging
     try {
-      // Get auth headers
-      const headers = await this.getAuthHeaders();
-
-      console.log("Deleting notebook:", notebookId);
-
-      // Get current user data
-      const userData = authService.getUserData();
-      const userId = userData?.email || 'guest';
-
-      // This is the correct structure based on your Lambda input
-      const response = await axios.delete(
-        `${this.baseUrl}/deleteNotbook`,
-        {
-          headers,
-          data: {
-            user_id: userId,  // This matches what your Lambda receives
-            id: notebookId    // This matches what your Lambda receives
-          }
-        }
-      );
-
-      console.log("Delete response:", response.data);
-      return response.data;
-    } catch (error) {
-      console.error('Error deleting notebook:', error);
-      console.error('Error details:', error.response ? error.response.data : 'No response data');
-
-      // Client-side fallback
-      try {
-        const savedNotebooks = localStorage.getItem('notebooks');
-        if (savedNotebooks) {
-          const notebooksArray = JSON.parse(savedNotebooks);
-          const updatedNotebooks = notebooksArray.filter(notebook => notebook.id !== notebookId);
-          localStorage.setItem('notebooks', JSON.stringify(updatedNotebooks));
-          console.log("Notebook removed from localStorage successfully");
-        }
-      } catch (localError) {
-        console.error("Error in localStorage fallback:", localError);
-      }
-
-      throw error;
+      const notebookData = await this.getNotebookData(notebookId);
+      console.log("Notebook data before deletion:", notebookData);
+    } catch (fetchError) {
+      console.log("Could not fetch notebook data before deletion:", fetchError.message);
     }
+
+    // Create the request payload
+    const deletePayload = {
+      userId: userId,
+      notebookId: notebookId,
+      pathParameters: {
+        notebookId: notebookId,
+        userId: userId
+      }
+    };
+    
+    // Log the full request details
+    console.log("DELETE request:", {
+      url: `${this.baseUrl}/deleteNotebook`,
+      headers: headers,
+      payload: deletePayload
+    });
+
+    // Send the delete request
+    const response = await axios.post(
+  `${this.baseUrl}/deleteNotebook`,
+  {
+    userId: userId,
+    notebookId: notebookId
+  },
+  {
+    headers
   }
+)
+    
+    // Log the full response
+    console.log("Delete response:", {
+      status: response.status,
+      headers: response.headers,
+      data: response.data
+    });
+    
+    // Clean up localStorage tags
+    this._cleanupDeletedNotebookTags(notebookId);
+    
+    // Verify the notebook is deleted by attempting to fetch it again
+    try {
+      const deletedNotebookCheck = await this.getNotebookData(notebookId);
+      console.log("WARNING: Notebook still exists after deletion attempt:", deletedNotebookCheck);
+    } catch (fetchError) {
+      console.log("Confirmed notebook deletion - notebook no longer accessible");
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting notebook:', error);
+    
+    // Detailed error logging
+    if (error.response) {
+      console.error('Error response status:', error.response.status);
+      console.error('Error response headers:', error.response.headers);
+      console.error('Error response data:', error.response.data);
+    } else if (error.request) {
+      console.error('Error request sent but no response received:', error.request);
+    } else {
+      console.error('Error setting up request:', error.message);
+    }
+    console.error('Error config:', error.config);
+    
+    // Fall back to local deletion with more error info
+    return this._handleLocalNotebookDeletion(notebookId, { 
+      error: error.message, 
+      status: error.response?.status,
+      data: error.response?.data
+    });
+  }
+}
+
+// Helper method to handle local deletion
+_handleLocalNotebookDeletion(notebookId, debugInfo = {}) {
+  try {
+    // 1. Remove from localStorage notebooks
+    const savedNotebooks = localStorage.getItem('notebooks');
+    if (savedNotebooks) {
+      const notebooksArray = JSON.parse(savedNotebooks);
+      const updatedNotebooks = notebooksArray.filter(notebook => notebook.id !== notebookId);
+      localStorage.setItem('notebooks', JSON.stringify(updatedNotebooks));
+    }
+    
+    // 2. Clean up tags
+    this._cleanupDeletedNotebookTags(notebookId);
+    
+    console.log("Notebook removed from localStorage successfully");
+    
+    // Return a success response that includes debug info
+    return {
+      message: "Notebook deleted locally",
+      notebookId: notebookId,
+      localDeletion: true,
+      apiDebugInfo: debugInfo
+    };
+  } catch (localError) {
+    console.error("Error in localStorage deletion:", localError);
+    throw new Error("Failed to delete notebook locally: " + localError.message);
+  }
+}
+
+// Helper to clean up tags
+_cleanupDeletedNotebookTags(notebookId) {
+  try {
+    const localTags = localStorage.getItem('notebookTags');
+    if (localTags) {
+      const notebookTags = JSON.parse(localTags);
+      if (notebookTags[notebookId]) {
+        delete notebookTags[notebookId];
+        localStorage.setItem('notebookTags', JSON.stringify(notebookTags));
+      }
+    }
+  } catch (e) {
+    console.error("Failed to clean up tags:", e);
+  }
+}
 
   /**
    * Get a single notebook by ID
    * @param {string} notebookId - ID of the notebook to retrieve
    * @returns {Promise<object>} - The notebook
    */
-  /**
- * Get a single notebook by ID
- * @param {string} notebookId - ID of the notebook to retrieve
- * @returns {Promise<object>} - The notebook
- */
   async getNotebook(notebookId) {
     try {
       // Get auth headers
-      const headers = await this.getAuthHeaders();
+      const headers = await authService.getAuthHeaders();
 
       // Get user data to extract email
       const userData = authService.getUserData();
       const userEmail = userData?.email || 'guest';
-
-      console.log("Fetching notebook:", notebookId, "for user:", userEmail);
 
       // Make the API call to get the notebook with userId in query string
       const response = await axios.get(
@@ -267,7 +383,18 @@ async createNotebook(notebookData) {
         }
       );
 
-      console.log("Get notebook response:", response.data);
+      // Add tags from localStorage if needed
+      try {
+        const localTags = localStorage.getItem('notebookTags');
+        if (localTags) {
+          const notebookTags = JSON.parse(localTags);
+          if (notebookId && notebookTags[notebookId] && (!response.data.tags || !response.data.tags.length)) {
+            response.data.tags = notebookTags[notebookId];
+          }
+        }
+      } catch (e) {
+        console.error("Failed to retrieve tags from localStorage:", e);
+      }
 
       // Return the response data
       return response.data;

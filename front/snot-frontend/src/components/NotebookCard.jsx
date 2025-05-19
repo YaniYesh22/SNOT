@@ -1,9 +1,13 @@
 import React from 'react';
 
 const NotebookCard = ({ id, title, tags = [] }) => {
+
+  // Ensure tags is an array and has elements
+  const tagArray = Array.isArray(tags) ? tags : ['Uncategorized'];
+  
   // Limit displayed tags to 3
-  const displayTags = tags.slice(0, 3);
-  const hasMoreTags = tags.length > 3;
+  const displayTags = tagArray.slice(0, 3);
+  const hasMoreTags = tagArray.length > 3;
   
   return (
     <div style={styles.card}>
@@ -11,18 +15,16 @@ const NotebookCard = ({ id, title, tags = [] }) => {
         <h3 style={styles.title}>{title}</h3>
         
         {/* Tags section */}
-        {tags && tags.length > 0 && (
-          <div style={styles.tagContainer}>
-            {displayTags.map((tag, index) => (
-              <span key={`${id}-tag-${index}`} style={styles.tag}>
-                {tag}
-              </span>
-            ))}
-            {hasMoreTags && (
-              <span style={styles.tagMore}>+{tags.length - 3}</span>
-            )}
-          </div>
-        )}
+        <div style={styles.tagContainer}>
+          {displayTags.map((tag, index) => (
+            <span key={`${id}-tag-${index}`} style={styles.tag}>
+              {tag}
+            </span>
+          ))}
+          {hasMoreTags && (
+            <span style={styles.tagMore}>+{tagArray.length - 3}</span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -39,10 +41,6 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    '&:hover': {
-      transform: 'translateY(-2px)',
-      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-    },
   },
   cardContent: {
     padding: '1rem',
