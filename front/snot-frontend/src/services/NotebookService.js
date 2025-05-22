@@ -58,6 +58,7 @@ async createNotebook(notebookData) {
     // Format the notebook from the response
     const createdNotebook = {
       id: response.data.notebookId,
+      notebookId: response.data.notebookId, // Ensure both properties exist
       title: response.data.title,
       content: notebookData.content || '',
       tags: response.data.tags || notebookData.tags || [],
@@ -122,38 +123,6 @@ async getNotebooks() {
     } else if (Array.isArray(response.data)) {
       notebooks = response.data;
     }
-    
-    // // Add tags from localStorage when API doesn't provide them
-    // try {
-    //   const localTags = localStorage.getItem('notebookTags');
-    //   if (localTags) {
-    //     const notebookTags = JSON.parse(localTags);
-    //     notebooks = notebooks.map(notebook => {
-    //       const id = notebook.notebookId || notebook.NotebookId;
-          
-    //       // If notebook already has tags property, keep it
-    //       if (notebook.tags && Array.isArray(notebook.tags) && notebook.tags.length > 0) {
-    //         return notebook;
-    //       }
-          
-    //       // Otherwise, check if we have tags stored locally
-    //       if (id && notebookTags[id]) {
-    //         return {
-    //           ...notebook,
-    //           tags: notebookTags[id]
-    //         };
-    //       }
-          
-    //       // Default fallback
-    //       return {
-    //         ...notebook,
-    //         tags: ['Uncategorized']
-    //       };
-    //     });
-    //   }
-    // } catch (e) {
-    //   console.error("Failed to retrieve tags from localStorage:", e);
-    // }
     
     // Keeping this log as requested
     console.log("Notebooks with added tags:", notebooks);
@@ -283,13 +252,6 @@ async updateNotebook(notebookId, notebookData) {
       console.error('Error creating request:', error.message);
     }
     
-    // // Log request details for debugging
-    // console.error('Request details:', {
-    //   url: `${this.baseUrl}/updateNotebook/${notebookId}/update`,
-    //   payload: payload,
-    //   headers: headers
-    // });
-    
     // Use localStorage as fallback
     const result = this._updateNotebookInLocalStorage(notebookId, {
       chunkContent: notebookData.Content || notebookData.content,
@@ -408,7 +370,7 @@ _updateNotebookInLocalStorage(notebookId, updateData) {
     
     // Try to fetch the notebook details before deletion for logging
     try {
-      const notebookData = await this.getNotebookData(notebookId);
+      const notebookData = await this.getNotebook(notebookId);
       console.log("Notebook data before deletion:", notebookData);
     } catch (fetchError) {
       console.log("Could not fetch notebook data before deletion:", fetchError.message);
@@ -433,15 +395,15 @@ _updateNotebookInLocalStorage(notebookId, updateData) {
 
     // Send the delete request
     const response = await axios.post(
-  `${this.baseUrl}/deleteNotebook`,
-  {
-    userId: userId,
-    notebookId: notebookId
-  },
-  {
-    headers
-  }
-)
+      `${this.baseUrl}/deleteNotebook`,
+      {
+        userId: userId,
+        notebookId: notebookId
+      },
+      {
+        headers
+      }
+    );
     
     // Log the full response
     console.log("Delete response:", {
@@ -455,7 +417,7 @@ _updateNotebookInLocalStorage(notebookId, updateData) {
     
     // Verify the notebook is deleted by attempting to fetch it again
     try {
-      const deletedNotebookCheck = await this.getNotebookData(notebookId);
+      const deletedNotebookCheck = await this.getNotebook(notebookId);
       console.log("WARNING: Notebook still exists after deletion attempt:", deletedNotebookCheck);
     } catch (fetchError) {
       console.log("Confirmed notebook deletion - notebook no longer accessible");
@@ -531,8 +493,8 @@ _cleanupDeletedNotebookTags(notebookId) {
   }
 }
 
-  /**
- * Get a single notebook by ID
+/**
+ * Get a single notebook by ID - Updated to handle your actual API response format
  * @param {string} notebookId - ID of the notebook to retrieve
  * @param {Object} options - Optional parameters
  * @param {number} options.chunk - Specific chunk to retrieve (0-based index)
@@ -570,7 +532,7 @@ async getNotebook(notebookId, options = {}) {
         }
 
         console.log("Request params:", params);
-
+        
         // Make the API call - Lambda will extract email from JWT token
         const response = await axios.get(
             `${this.baseUrl}/getNotebook/${notebookId}`,
@@ -584,12 +546,23 @@ async getNotebook(notebookId, options = {}) {
         );
 
         console.log("✅ Response received successfully");
+        console.log("Raw API Response:", response.data);
 
-        // Process the response
-        const notebookData = response.data;
+        // Parse the response - Your Lambda returns a JSON string in the body
+        let parsedData;
+        if (typeof response.data === 'string') {
+            parsedData = JSON.parse(response.data);
+        } else if (response.data.body && typeof response.data.body === 'string') {
+            // Handle Lambda response format with statusCode, headers, body
+            parsedData = JSON.parse(response.data.body);
+        } else {
+            parsedData = response.data;
+        }
 
-        // Validate response structure
-        if (!notebookData.metadata) {
+        console.log("Parsed notebook data:", parsedData);
+
+        // Validate response structure - Updated for your format
+        if (!parsedData.metadata) {
             throw new Error("Invalid response format - missing metadata");
         }
 
@@ -599,8 +572,8 @@ async getNotebook(notebookId, options = {}) {
             if (localTags) {
                 const notebookTags = JSON.parse(localTags);
                 if (notebookId && notebookTags[notebookId] && 
-                    (!notebookData.metadata?.tags || !notebookData.metadata.tags.length)) {
-                    notebookData.metadata.tags = notebookTags[notebookId];
+                    (!parsedData.metadata?.tags || !parsedData.metadata.tags.length)) {
+                    parsedData.metadata.tags = notebookTags[notebookId];
                 }
             }
         } catch (e) {
@@ -609,24 +582,55 @@ async getNotebook(notebookId, options = {}) {
 
         // Get the content from first chunk by default
         let content = '';
-        if (notebookData.chunks && notebookData.chunks['0']) {
-            content = notebookData.chunks['0'];
+        if (parsedData.chunks && parsedData.chunks['0']) {
+            content = parsedData.chunks['0'];
+        }
+
+        // Format files from the response - Use the detailed files array
+        let formattedFiles = [];
+        if (parsedData.files && Array.isArray(parsedData.files)) {
+            formattedFiles = parsedData.files.map(file => ({
+                id: file.fileId,
+                name: file.fileName,
+                size: file.fileSize,
+                sizeFormatted: file.fileSizeFormatted,
+                type: file.type,
+                extension: file.fileExtension,
+                mimeType: file.mimeType,
+                lastModified: file.uploadedAt,
+                uploadedAt: file.uploadedAt,
+                isValid: file.isValidFile,
+                downloadUrl: file.downloadUrl,
+                s3Key: file.s3Key,
+                s3Url: file.s3Url
+            }));
         }
 
         // Format the notebook into a standard structure
         const formattedNotebook = {
-            notebookId: notebookId,
-            title: notebookData.metadata?.title || 'Untitled Notebook',
+            notebookId: parsedData.metadata.notebookId || notebookId,
+            title: parsedData.metadata?.title || 'Untitled Notebook',
             content: content,
-            tags: notebookData.metadata?.tags || [],
-            connections: notebookData.metadata?.connections || [],
-            preview: notebookData.metadata?.preview || '',
-            createdAt: notebookData.metadata?.createdAt || new Date().toISOString(),
-            updatedAt: notebookData.metadata?.updatedAt || new Date().toISOString(),
-            allChunks: notebookData.chunks || {}
+            tags: parsedData.metadata?.tags || [],
+            connections: parsedData.metadata?.connections || [],
+            preview: parsedData.metadata?.preview || '',
+            createdAt: parsedData.metadata?.createdAt || new Date().toISOString(),
+            updatedAt: parsedData.metadata?.updatedAt || new Date().toISOString(),
+            createdBy: parsedData.metadata?.createdBy,
+            wordCount: parsedData.metadata?.wordCount || 0,
+            byteSize: parsedData.metadata?.byteSize || 0,
+            chunkCount: parsedData.metadata?.chunkCount || 1,
+            allChunks: parsedData.chunks || {},
+            // Add files information from your API response
+            files: formattedFiles,
+            filesCount: parsedData.filesCount || 0,
+            filesSummary: parsedData.filesSummary || null
         };
 
         console.log("✅ Notebook formatted successfully");
+        console.log("Files found:", formattedNotebook.files.length);
+        console.log("Files summary:", formattedNotebook.filesSummary);
+        
         return formattedNotebook;
 
     } catch (error) {
@@ -653,8 +657,6 @@ async getNotebook(notebookId, options = {}) {
         throw error;
     }
 }
-
-// Add this method to your NotebookService class
 
 /**
  * Upload files to a notebook
@@ -769,6 +771,7 @@ async uploadSingleFile(notebookId, file, headers) {
     );
 
     console.log(`✅ File uploaded successfully: ${file.name}`);
+    console.log("Upload response:", response.data);
     
     return {
       ...response.data.file,
@@ -789,7 +792,8 @@ async uploadSingleFile(notebookId, file, headers) {
       
       // Handle specific error cases
       if (error.response.status === 400) {
-        throw new Error(`File validation failed: ${error.response.data.error || 'Invalid file'}`);
+        const errorDetails = error.response.data.details || [error.response.data.error];
+        throw new Error(`File validation failed: ${errorDetails.join(', ')}`);
       } else if (error.response.status === 401) {
         throw new Error('Authentication required - please login');
       } else if (error.response.status === 403) {
@@ -847,7 +851,7 @@ getContentTypeFromExtension(extension) {
 }
 
 /**
- * Get uploaded files for a notebook
+ * Get uploaded files for a notebook (Not needed since files come with getNotebook)
  * @param {string} notebookId - Notebook ID
  * @returns {Promise<object[]>} - Array of file metadata
  */
@@ -859,29 +863,18 @@ async getNotebookFiles(notebookId) {
 
     console.log(`📁 Fetching files for notebook: ${notebookId}`);
 
-    // Get auth headers
-    const headers = await authService.getAuthHeaders();
+    // Since files are included in getNotebook response, we can use that
+    const notebook = await this.getNotebook(notebookId);
     
-    // Make the request to get files (you'll need to implement this endpoint)
-    const response = await axios.get(
-      `${this.baseUrl}/notebooks/${notebookId}/files`,
-      {
-        headers: {
-          'Authorization': headers.Authorization,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    console.log(`✅ Retrieved ${response.data.files?.length || 0} files`);
+    console.log(`✅ Retrieved ${notebook.files?.length || 0} files`);
     
-    return response.data.files || [];
+    return notebook.files || [];
 
   } catch (error) {
     console.error('❌ Error fetching notebook files:', error);
     
-    if (error.response?.status === 404) {
-      // No files found, return empty array
+    if (error.message.includes('Notebook not found')) {
+      // No notebook found, return empty array
       return [];
     }
     
@@ -906,9 +899,9 @@ async deleteFile(notebookId, fileId) {
     // Get auth headers
     const headers = await authService.getAuthHeaders();
     
-    // Make the delete request
+    // Make the delete request - You'll need to implement this endpoint in your Lambda
     const response = await axios.delete(
-      `${this.baseUrl}/notebooks/${notebookId}/files/${fileId}`,
+      `${this.baseUrl}/uploadFiles/${notebookId}/${fileId}`,
       {
         headers: {
           'Authorization': headers.Authorization,
@@ -923,6 +916,19 @@ async deleteFile(notebookId, fileId) {
 
   } catch (error) {
     console.error('❌ Error deleting file:', error);
+    
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+      
+      // Handle specific error cases
+      if (error.response.status === 404) {
+        throw new Error('File not found');
+      } else if (error.response.status === 403) {
+        throw new Error('You don\'t have permission to delete this file');
+      }
+    }
+    
     throw error;
   }
 }

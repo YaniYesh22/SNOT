@@ -11,17 +11,28 @@ export default function NotebookDetailPage() {
   const location = useLocation();
   const navigate = useNavigate();
   
-  // Get notebookId from location state instead of URL params
-  const notebookId = location.state?.notebookId;
+  // Get notebookId from location state or URL params
+  const locationNotebookId = location.state?.notebookId;
   const notebookData = location.state?.notebookData;
   
-  // Fallback ID in case state is lost (e.g., on page refresh)
-  const fallbackId = `notebook-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  // Try to get from URL params if not in location state
+  const urlParams = new URLSearchParams(location.search);
+  const urlNotebookId = urlParams.get('id');
   
-  // Initialize with the notebookId from state or use fallback
+  // Use the notebook ID from location state, URL params, or generate fallback
+  const initialNotebookId = locationNotebookId || urlNotebookId;
+  
+  console.log("NotebookDetailPage - IDs:", {
+    locationNotebookId,
+    urlNotebookId,
+    initialNotebookId,
+    hasNotebookData: !!notebookData
+  });
+  
+  // Initialize with the notebookId - DON'T use fallback ID if we don't have a real ID
   const [notebook, setNotebook] = useState(notebookData || {
-    notebookId: notebookId || fallbackId,
-    title: 'Loading...',
+    notebookId: initialNotebookId || 'temp-loading',
+    title: initialNotebookId ? 'Loading...' : 'New Notebook',
     content: '',
     lastUpdated: new Date().toISOString()
   });
@@ -103,43 +114,68 @@ export default function NotebookDetailPage() {
   // Load notebook data from API on component mount
   useEffect(() => {
     const loadNotebookData = async () => {
+      // Don't load if we don't have a real notebook ID
+      if (!initialNotebookId || initialNotebookId === 'temp-loading') {
+        console.log("No valid notebook ID found - staying in create mode");
+        setNotebook({
+          notebookId: null, // Set to null to indicate this is a new notebook
+          title: 'New Notebook',
+          content: '',
+          createdAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+          files: [],
+          links: []
+        });
+        setIsLoading(false);
+        return;
+      }
+
       try {
-        console.log("Loading notebook with ID from URL:", notebookId);
+        console.log("Loading notebook with ID:", initialNotebookId);
         
         setIsLoading(true);
         
         // Try to get the notebook from the API
         try {
-          const notebookData = await notebookService.getNotebook(notebookId);
+          const notebookData = await notebookService.getNotebook(initialNotebookId);
           
           if (notebookData) {
-            // Format the notebook data - ENSURE notebookId is set from URL if not in API response
+            // Format the notebook data - ENSURE notebookId is set
             const formattedNotebook = {
-              notebookId: notebookData.NotebookId || notebookData.notebookId || notebookId, // Fallback to URL param
-              title: notebookData.Title || notebookData.title || 'Untitled Notebook',
-              content: notebookData.Content || notebookData.content || '',
-              createdAt: notebookData.CreatedAt || notebookData.createdAt || new Date().toISOString(),
-              lastUpdated: notebookData.UpdatedAt || notebookData.updatedAt || new Date().toISOString(),
-              files: notebookData.files || [],
-              links: notebookData.links || []
+              notebookId: notebookData.notebookId || initialNotebookId, // Always use the ID we're loading
+              title: notebookData.title || 'Untitled Notebook',
+              content: notebookData.content || '',
+              createdAt: notebookData.createdAt || new Date().toISOString(),
+              lastUpdated: notebookData.updatedAt || new Date().toISOString(),
+              files: notebookData.files || [], // Files are already formatted by the service
+              links: notebookData.links || [],
+              // Additional metadata from your API
+              createdBy: notebookData.createdBy,
+              wordCount: notebookData.wordCount || 0,
+              tags: notebookData.tags || [],
+              connections: notebookData.connections || [],
+              filesCount: notebookData.filesCount || 0,
+              filesSummary: notebookData.filesSummary
             };
-            
-            // Verify notebookId is set
-            if (!formattedNotebook.notebookId) {
-              formattedNotebook.notebookId = notebookId; // Force set from URL
-            }
-            
+
             setNotebook(formattedNotebook);
             setContent(formattedNotebook.content);
-            if (formattedNotebook.files) setFiles(formattedNotebook.files);
+            
+            // Set files - they're already properly formatted from the service
+            if (formattedNotebook.files && formattedNotebook.files.length > 0) {
+              setFiles(formattedNotebook.files);
+              console.log("Loaded files:", formattedNotebook.files);
+            }
+            
             if (formattedNotebook.links) setLinks(formattedNotebook.links);
             
             console.log("Loaded notebook from API:", formattedNotebook);
+            console.log("Files summary:", formattedNotebook.filesSummary);
           } else {
             // If no data returned, create a new notebook with this ID
-            const title = notebookId.replace(/-/g, ' ');
+            const title = initialNotebookId.replace(/-/g, ' ');
             const newNotebook = {
-              notebookId, // Use URL param directly
+              notebookId: initialNotebookId,
               title: title,
               content: '',
               createdAt: new Date().toISOString(),
@@ -159,14 +195,14 @@ export default function NotebookDetailPage() {
           if (savedNotebooks) {
             const notebooksArray = JSON.parse(savedNotebooks);
             const currentNotebook = notebooksArray.find(nb => 
-              (nb.notebookId === notebookId) || (nb.id === notebookId)
+              (nb.notebookId === initialNotebookId) || (nb.id === initialNotebookId)
             );
             
             if (currentNotebook) {
               // If this notebook exists in localStorage
               const fullNotebook = {
                 ...currentNotebook,
-                notebookId: notebookId, // Force set from URL
+                notebookId: initialNotebookId, // Force set the correct ID
                 content: currentNotebook.content || '',
                 lastUpdated: currentNotebook.updatedAt || currentNotebook.lastUpdated || new Date().toISOString(),
                 files: currentNotebook.files || [],
@@ -181,9 +217,9 @@ export default function NotebookDetailPage() {
               console.log("Loaded notebook from localStorage:", fullNotebook);
             } else {
               // If not found, use the ID to create a title
-              const title = notebookId.replace(/-/g, ' ');
+              const title = initialNotebookId.replace(/-/g, ' ');
               const newNotebook = {
-                notebookId, // Use URL param directly
+                notebookId: initialNotebookId,
                 title: title,
                 content: '',
                 createdAt: new Date().toISOString(),
@@ -196,9 +232,9 @@ export default function NotebookDetailPage() {
             }
           } else {
             // If no notebooks in localStorage, use defaults
-            const title = notebookId.replace(/-/g, ' ');
+            const title = initialNotebookId.replace(/-/g, ' ');
             setNotebook({
-              notebookId, // Use URL param directly
+              notebookId: initialNotebookId,
               title: title,
               content: '',
               createdAt: new Date().toISOString(),
@@ -206,7 +242,7 @@ export default function NotebookDetailPage() {
               files: [],
               links: []
             });
-            console.log("Created new notebook (no localStorage):", { notebookId, title });
+            console.log("Created new notebook (no localStorage):", { notebookId: initialNotebookId, title });
           }
         }
         
@@ -215,8 +251,8 @@ export default function NotebookDetailPage() {
         console.error("Error loading notebook data:", error);
         // Set default values on error
         setNotebook({
-          notebookId, // Use URL param directly
-          title: notebookId ? notebookId.replace(/-/g, ' ') : 'Untitled Notebook',
+          notebookId: initialNotebookId,
+          title: initialNotebookId ? initialNotebookId.replace(/-/g, ' ') : 'Untitled Notebook',
           content: '',
           createdAt: new Date().toISOString(),
           lastUpdated: new Date().toISOString(),
@@ -229,49 +265,27 @@ export default function NotebookDetailPage() {
     
     // Load the notebook data
     loadNotebookData();
-  }, [notebookId]);
+  }, [initialNotebookId]);
 
-  // Load files when component mounts or notebook changes
+  // Files are now loaded with the notebook data, so we don't need a separate effect
+  // This effect is kept for any additional file operations if needed
   useEffect(() => {
-    const loadNotebookFiles = async () => {
-      if (notebook.notebookId && !notebook.notebookId.startsWith('notebook-')) {
-        try {
-          const existingFiles = await notebookService.getNotebookFiles(notebook.notebookId);
-          if (existingFiles && existingFiles.length > 0) {
-            const formattedFiles = existingFiles.map(file => ({
-              id: file.fileId,
-              name: file.fileName,
-              size: file.fileSize,
-              type: file.fileType,
-              lastModified: file.uploadedAt,
-              s3Url: file.s3Url,
-              uploadedAt: file.uploadedAt
-            }));
-            setFiles(formattedFiles);
-          }
-        } catch (error) {
-          console.error('Error loading notebook files:', error);
-          // Don't show error to user as files might just not exist yet
-        }
-      }
-    };
-    
-    if (!isLoading && notebook.notebookId) {
-      loadNotebookFiles();
-    }
-  }, [notebook.notebookId, isLoading]);
+    // Since files are loaded with notebook data, we can add any additional file processing here
+    console.log("Current files loaded:", files.length);
+  }, [files]);
   
   const handleSave = async () => {
     setIsSaving(true);
     
     try {
-      // IMPORTANT: Always use the URL parameter as the source of truth
-      // If notebookId is lost in the state, recover it from useParams()
-      const currentNotebookId = notebookId;
+      // Get the current notebook ID - use the one from state
+      const currentNotebookId = notebook.notebookId;
       
-      if (!currentNotebookId) {
-        console.error("Missing notebook ID for save operation");
-        throw new Error("Notebook ID is required for saving");
+      // Don't save if we don't have a valid notebook ID
+      if (!currentNotebookId || currentNotebookId === 'temp-loading') {
+        console.log("Cannot save - no valid notebook ID");
+        setIsSaving(false);
+        return;
       }
       
       console.log("Saving notebook with ID:", currentNotebookId);
@@ -279,7 +293,7 @@ export default function NotebookDetailPage() {
       // Update the current notebook
       const updatedNotebook = {
         ...notebook,
-        notebookId: currentNotebookId, // Force set from URL param
+        notebookId: currentNotebookId,
         title: notebook.title,
         content: content,
         lastUpdated: new Date().toISOString(),
@@ -435,6 +449,12 @@ export default function NotebookDetailPage() {
 
   // New function to handle file uploads
   const handleFileUpload = async (filesToUpload) => {
+    // Check if we have a valid notebook ID before uploading
+    if (!notebook.notebookId || notebook.notebookId === 'temp-loading') {
+      setFileErrors(prev => [...prev, 'Please save the notebook before uploading files']);
+      return;
+    }
+
     setUploadingFiles(true);
     setUploadProgress({});
     
@@ -493,8 +513,8 @@ export default function NotebookDetailPage() {
         ]);
       }
       
-      // Auto-save the notebook to include file references
-      if (autoSave && newFiles.length > 0) {
+      // Auto-save the notebook to include file references (only if we have a valid ID)
+      if (autoSave && newFiles.length > 0 && notebook.notebookId && notebook.notebookId !== 'temp-loading') {
         setTimeout(() => {
           handleSave();
         }, 1000);
@@ -602,6 +622,53 @@ export default function NotebookDetailPage() {
     // In a real app, this would call AWS Bedrock
     console.log(`Asking AI for a ${summaryType} summary of the content`);
     // You would implement the API call to AWS Bedrock here
+  };
+
+  // Helper functions for file display
+  const getFileTypeColor = (extension) => {
+    const colors = {
+      'PDF': '#dc2626',
+      'DOC': '#2563eb',
+      'DOCX': '#2563eb', 
+      'CSV': '#059669',
+      'XLSX': '#059669',
+      'XLS': '#059669',
+      '.pdf': '#dc2626',
+      '.doc': '#2563eb',
+      '.docx': '#2563eb',
+      '.csv': '#059669',
+      '.xlsx': '#059669',
+      '.xls': '#059669'
+    };
+    return colors[extension] || '#6b7280';
+  };
+
+  const getFileTypeIcon = (extension) => {
+    const ext = extension?.toUpperCase();
+    if (ext === 'PDF' || ext === '.PDF') {
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12,2A2,2 0 0,1 14,4C14,4.74 13.6,5.39 13,5.73V7H14A7,7 0 0,1 21,14H22A1,1 0 0,1 23,15V18A1,1 0 0,1 22,19H21V20A2,2 0 0,1 19,22H5A2,2 0 0,1 3,20V19H2A1,1 0 0,1 1,18V15A1,1 0 0,1 2,14H3A7,7 0 0,1 10,7H11V5.73C10.4,5.39 10,4.74 10,4A2,2 0 0,1 12,2Z"/>
+        </svg>
+      );
+    } else if (ext === 'DOC' || ext === 'DOCX' || ext === '.DOC' || ext === '.DOCX') {
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M6,2H14L20,8V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V4A2,2 0 0,1 6,2M18,20V9H13V4H6V20H18Z"/>
+        </svg>
+      );
+    } else if (ext === 'CSV' || ext === 'XLSX' || ext === 'XLS' || ext === '.CSV' || ext === '.XLSX' || ext === '.XLS') {
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M21.17 3.25Q21.5 3.25 21.76 3.5 22 3.74 22 4.08V19.92Q22 20.26 21.76 20.5 21.5 20.75 21.17 20.75H7.83Q7.5 20.75 7.24 20.5 7 20.26 7 19.92V17H2.83Q2.5 17 2.24 16.76 2 16.5 2 16.17V7.83Q2 7.5 2.24 7.24 2.5 7 2.83 7H7V4.08Q7 3.74 7.24 3.5 7.5 3.25 7.83 3.25M7 13.06L8.18 15.28H9.97L8 12.06L9.93 8.89H8.22L7.13 10.9L7.09 10.96L7.06 11.03Q6.8 10.5 6.5 9.96 6.25 9.43 6.07 8.89H4.25L6.2 12.1L4.32 15.28H6.04"/>
+        </svg>
+      );
+    }
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z"/>
+      </svg>
+    );
   };
 
   if (isLoading) {
@@ -845,34 +912,87 @@ export default function NotebookDetailPage() {
               {/* Files list */}
               {files.length > 0 && (
                 <div style={styles.resourcesContainer}>
-                  <h4 style={styles.resourcesHeading}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.resourcesHeadingIcon}>
-                      <path d="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z"/>
-                    </svg>
-                    Files
-                  </h4>
-                  <ul style={styles.resourcesList}>
+                  <div style={styles.filesHeader}>
+                    <h4 style={styles.resourcesHeading}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={styles.resourcesHeadingIcon}>
+                        <path d="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z"/>
+                      </svg>
+                      Files
+                    </h4>
+                    <span style={styles.filesCount}>{files.length} file{files.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div style={styles.filesGrid}>
                     {files.map(file => (
-                      <li key={file.id} style={styles.resourceItem}>
-                        <div style={styles.resourceItemContent}>
-                          <span style={styles.resourceIcon}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z"/>
+                      <div key={file.id} style={{
+                        ...styles.fileCard,
+                        ...(file.isValid === false ? styles.fileCardCorrupted : {})
+                      }}>
+                        {/* File status indicator */}
+                        {file.isValid === false && (
+                          <div style={styles.fileStatusBadge}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={styles.warningIcon}>
+                              <path d="M1 21H23L12 2L1 21ZM13 18H11V16H13V18ZM13 14H11V10H13V14Z"/>
                             </svg>
-                          </span>
-                          <span style={styles.resourceName}>{file.name}</span>
+                            Corrupted
+                          </div>
+                        )}
+                        
+                        {/* File icon and type */}
+                        <div style={styles.fileIconContainer}>
+                          <div style={{
+                            ...styles.fileIcon,
+                            backgroundColor: getFileTypeColor(file.extension || file.type)
+                          }}>
+                            {getFileTypeIcon(file.extension || file.type)}
+                          </div>
+                          {file.extension && (
+                            <span style={styles.fileExtension}>{file.extension}</span>
+                          )}
                         </div>
-                        <button 
-                          onClick={() => removeFile(file.id)}
-                          style={styles.removeButton}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
-                          </svg>
-                        </button>
-                      </li>
+                        
+                        {/* File details */}
+                        <div style={styles.fileCardContent}>
+                          <div style={styles.fileName} title={file.name}>
+                            {file.name}
+                          </div>
+                          <div style={styles.fileMetadata}>
+                            <span style={styles.fileSize}>
+                              {file.sizeFormatted || `${(file.size / 1024 / 1024).toFixed(2)} MB`}
+                            </span>
+                            {file.uploadedAt && (
+                              <span style={styles.fileDate}>
+                                {new Date(file.uploadedAt).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* File actions */}
+                        <div style={styles.fileCardActions}>
+                          {file.downloadUrl && file.isValid !== false && (
+                            <button 
+                              onClick={() => window.open(file.downloadUrl, '_blank')}
+                              style={styles.actionButton}
+                              title="Download file"
+                            >
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z"/>
+                              </svg>
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => removeFile(file.id)}
+                            style={styles.actionButtonDanger}
+                            title="Remove file"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               )}
 
@@ -1425,13 +1545,19 @@ const styles = {
   resourcesContainer: {
     marginBottom: '2rem'
   },
+  filesHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '1rem',
+    paddingBottom: '0.75rem',
+    borderBottom: '2px solid #f1f5f9'
+  },
   resourcesHeading: {
     fontSize: '1rem',
     fontWeight: '700',
-    margin: '0 0 1rem 0',
+    margin: 0,
     color: '#1e293b',
-    padding: '0.75rem 0',
-    borderBottom: '2px solid #f1f5f9',
     display: 'flex',
     alignItems: 'center',
     gap: '0.5rem'
@@ -1439,24 +1565,138 @@ const styles = {
   resourcesHeadingIcon: {
     color: '#3b82f6'
   },
+  filesCount: {
+    fontSize: '0.875rem',
+    color: '#64748b',
+    backgroundColor: '#f1f5f9',
+    padding: '0.25rem 0.75rem',
+    borderRadius: '12px',
+    fontWeight: '500'
+  },
+  filesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+    gap: '1rem'
+  },
+  fileCard: {
+    background: 'white',
+    border: '1px solid #e2e8f0',
+    borderRadius: '12px',
+    padding: '1rem',
+    transition: 'all 0.2s ease',
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+    cursor: 'default'
+  },
+  fileCardCorrupted: {
+    borderColor: '#fca5a5',
+    backgroundColor: '#fef2f2'
+  },
+  fileStatusBadge: {
+    position: 'absolute',
+    top: '0.75rem',
+    right: '0.75rem',
+    backgroundColor: '#dc2626',
+    color: 'white',
+    padding: '0.25rem 0.5rem',
+    borderRadius: '6px',
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.25rem'
+  },
+  warningIcon: {
+    color: 'white'
+  },
+  fileIconContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem'
+  },
+  fileIcon: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'white',
+    flexShrink: 0
+  },
+  fileExtension: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#374151',
+    backgroundColor: '#f3f4f6',
+    padding: '0.25rem 0.5rem',
+    borderRadius: '4px'
+  },
+  fileCardContent: {
+    flexGrow: 1,
+    minWidth: 0
+  },
+  fileName: {
+    fontSize: '0.95rem',
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: '0.5rem',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    lineHeight: '1.4'
+  },
+  fileMetadata: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    fontSize: '0.8rem',
+    color: '#64748b'
+  },
+  fileSize: {
+    fontWeight: '500'
+  },
+  fileDate: {
+    fontWeight: '400'
+  },
+  fileCardActions: {
+    display: 'flex',
+    gap: '0.5rem',
+    marginTop: 'auto'
+  },
+  actionButton: {
+    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+    border: 'none',
+    color: 'white',
+    padding: '0.5rem',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  actionButtonDanger: {
+    background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+    border: 'none',
+    color: 'white',
+    padding: '0.5rem',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
   resourcesList: {
     listStyle: 'none',
     padding: 0,
     margin: 0
-  },
-  resourceItem: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '0.875rem 0',
-    borderBottom: '1px solid #f1f5f9',
-    transition: 'all 0.2s ease'
-  },
-  resourceItemContent: {
-    display: 'flex',
-    alignItems: 'center',
-    flexGrow: 1,
-    minWidth: 0
   },
   resourceIcon: {
     marginRight: '0.75rem',
@@ -1632,7 +1872,7 @@ const styles = {
     border: "4px solid #f1f5f9",
     borderRadius: "50%",
     borderTop: "4px solid #3b82f6",
-    animation: "spin 1s linear infinite",
+    animation: "spin 0.1s linear infinite",
     marginBottom: "1.5rem",
   },
   loadingText: {
