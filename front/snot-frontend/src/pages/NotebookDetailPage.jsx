@@ -647,25 +647,25 @@ export default function NotebookDetailPage() {
     const ext = extension?.toUpperCase();
     if (ext === 'PDF' || ext === '.PDF') {
       return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12,2A2,2 0 0,1 14,4C14,4.74 13.6,5.39 13,5.73V7H14A7,7 0 0,1 21,14H22A1,1 0 0,1 23,15V18A1,1 0 0,1 22,19H21V20A2,2 0 0,1 19,22H5A2,2 0 0,1 3,20V19H2A1,1 0 0,1 1,18V15A1,1 0 0,1 2,14H3A7,7 0 0,1 10,7H11V5.73C10.4,5.39 10,4.74 10,4A2,2 0 0,1 12,2Z"/>
         </svg>
       );
     } else if (ext === 'DOC' || ext === 'DOCX' || ext === '.DOC' || ext === '.DOCX') {
       return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M6,2H14L20,8V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V4A2,2 0 0,1 6,2M18,20V9H13V4H6V20H18Z"/>
         </svg>
       );
     } else if (ext === 'CSV' || ext === 'XLSX' || ext === 'XLS' || ext === '.CSV' || ext === '.XLSX' || ext === '.XLS') {
       return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M21.17 3.25Q21.5 3.25 21.76 3.5 22 3.74 22 4.08V19.92Q22 20.26 21.76 20.5 21.5 20.75 21.17 20.75H7.83Q7.5 20.75 7.24 20.5 7 20.26 7 19.92V17H2.83Q2.5 17 2.24 16.76 2 16.5 2 16.17V7.83Q2 7.5 2.24 7.24 2.5 7 2.83 7H7V4.08Q7 3.74 7.24 3.5 7.5 3.25 7.83 3.25M7 13.06L8.18 15.28H9.97L8 12.06L9.93 8.89H8.22L7.13 10.9L7.09 10.96L7.06 11.03Q6.8 10.5 6.5 9.96 6.25 9.43 6.07 8.89H4.25L6.2 12.1L4.32 15.28H6.04"/>
         </svg>
       );
     }
     return (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
         <path d="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z"/>
       </svg>
     );
@@ -789,7 +789,7 @@ export default function NotebookDetailPage() {
               </div>
             </div>
             
-            {/* Resources section */}
+            {/* Resources section - UPDATED WITH COMPACT DESIGN */}
             <div style={styles.resourcesSection}>
               <div style={styles.sectionHeader}>
                 <h3 style={styles.sectionTitle}>
@@ -800,10 +800,10 @@ export default function NotebookDetailPage() {
                 </h3>
               </div>
               
-              {/* Drop zone for files and links - Updated with file input */}
+              {/* Compact Drop zone */}
               <div 
                 style={{
-                  ...styles.dropZone,
+                  ...styles.compactDropZone,
                   ...(isDraggingOver ? styles.dropZoneActive : {})
                 }}
                 onDragOver={handleDragOver}
@@ -819,173 +819,111 @@ export default function NotebookDetailPage() {
                   onChange={handleFileInputChange}
                   style={{ display: 'none' }}
                 />
-                <div style={styles.dropZoneContent}>
-                  <div style={styles.dropIcon}>
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"/>
-                    </svg>
-                  </div>
-                  <p style={styles.dropText}>
-                    {uploadingFiles ? 'Uploading files...' : 'Drag and drop files or links here'}
-                  </p>
-                  <p style={styles.dropSubtext}>
-                    {uploadingFiles ? 'Please wait...' : 'or click to browse (PDF, Word, CSV, Excel)'}
-                  </p>
+                <div style={styles.compactDropContent}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={styles.compactDropIcon}>
+                    <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"/>
+                  </svg>
+                  <span style={styles.compactDropText}>
+                    {uploadingFiles ? 'Uploading...' : 'Drop files or click to browse'}
+                  </span>
                 </div>
               </div>
 
-              {/* File upload progress */}
+              {/* Compact File upload progress */}
               {(uploadingFiles || Object.keys(uploadProgress).length > 0) && (
-                <div style={styles.uploadProgress}>
-                  <h4 style={styles.uploadProgressTitle}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.uploadIcon}>
-                      <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"/>
-                    </svg>
-                    File Upload Progress
-                  </h4>
+                <div style={styles.compactProgress}>
                   {Object.entries(uploadProgress).map(([fileName, progress]) => (
-                    <div key={fileName} style={styles.progressItem}>
-                      <div style={styles.progressHeader}>
-                        <span style={styles.progressFileName}>{fileName}</span>
-                        <span style={styles.progressStatus}>
-                          {progress.status === 'uploading' && '⏳ Uploading...'}
-                          {progress.status === 'completed' && '✅ Complete'}
-                          {progress.status === 'error' && '❌ Failed'}
-                        </span>
-                      </div>
-                      {progress.status === 'uploading' && (
-                        <div style={styles.progressBar}>
-                          <div style={{...styles.progressFill, width: `${progress.progress}%`}}></div>
-                        </div>
-                      )}
-                      {progress.error && (
-                        <div style={styles.progressError}>{progress.error}</div>
-                      )}
+                    <div key={fileName} style={styles.compactProgressItem}>
+                      <span style={styles.compactProgressName}>{fileName}</span>
+                      <span style={styles.compactProgressStatus}>
+                        {progress.status === 'uploading' && '⏳'}
+                        {progress.status === 'completed' && '✅'}
+                        {progress.status === 'error' && '❌'}
+                      </span>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* File upload errors */}
+              {/* Compact error display */}
               {fileErrors.length > 0 && (
-                <div style={styles.errorContainer}>
-                  <h4 style={styles.errorTitle}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.errorIcon}>
-                      <path d="M12,2L13.09,8.26L22,9L13.09,9.74L12,16L10.91,9.74L2,9L10.91,8.26L12,2Z"/>
-                    </svg>
-                    Upload Errors
-                  </h4>
-                  {fileErrors.map((error, index) => (
-                    <div key={index} style={styles.errorItem}>{error}</div>
+                <div style={styles.compactErrors}>
+                  <div style={styles.compactErrorHeader}>
+                    <span>Upload Errors</span>
+                    <button onClick={() => setFileErrors([])} style={styles.compactClearButton}>Clear</button>
+                  </div>
+                  {fileErrors.slice(0, 2).map((error, index) => (
+                    <div key={index} style={styles.compactErrorItem}>{error}</div>
                   ))}
-                  <button 
-                    onClick={() => setFileErrors([])} 
-                    style={styles.clearErrorsButton}
-                  >
-                    Clear Errors
-                  </button>
+                  {fileErrors.length > 2 && (
+                    <div style={styles.compactErrorMore}>+{fileErrors.length - 2} more errors</div>
+                  )}
                 </div>
               )}
               
-              {/* Link input form */}
-              <form onSubmit={handleAddLink} style={styles.linkForm}>
-                <div style={styles.linkInputWrapper}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.linkInputIcon}>
-                    <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z"/>
-                  </svg>
-                  <input
-                    type="text"
-                    value={newLink}
-                    onChange={(e) => setNewLink(e.target.value)}
-                    placeholder="Add a link (https://...)"
-                    style={styles.linkInput}
-                  />
-                </div>
-                <button type="submit" style={styles.addLinkButton}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              {/* Compact Link input form */}
+              <div style={styles.compactLinkForm}>
+                <input
+                  type="text"
+                  value={newLink}
+                  onChange={(e) => setNewLink(e.target.value)}
+                  placeholder="Add link (https://...)"
+                  style={styles.compactLinkInput}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddLink(e)}
+                />
+                <button onClick={handleAddLink} style={styles.compactAddButton}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/>
                   </svg>
-                  Add
                 </button>
-              </form>
+              </div>
               
-              {/* Files list */}
+              {/* Compact Files list */}
               {files.length > 0 && (
-                <div style={styles.resourcesContainer}>
-                  <div style={styles.filesHeader}>
-                    <h4 style={styles.resourcesHeading}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={styles.resourcesHeadingIcon}>
-                        <path d="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z"/>
-                      </svg>
-                      Files
-                    </h4>
-                    <span style={styles.filesCount}>{files.length} file{files.length !== 1 ? 's' : ''}</span>
+                <div style={styles.compactFilesContainer}>
+                  <div style={styles.compactFilesHeader}>
+                    <span style={styles.compactFilesTitle}>Files ({files.length})</span>
                   </div>
-                  <div style={styles.filesGrid}>
+                  <div style={styles.compactFilesList}>
                     {files.map(file => (
-                      <div key={file.id} style={{
-                        ...styles.fileCard,
-                        ...(file.isValid === false ? styles.fileCardCorrupted : {})
-                      }}>
-                        {/* File status indicator */}
-                        {file.isValid === false && (
-                          <div style={styles.fileStatusBadge}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={styles.warningIcon}>
-                              <path d="M1 21H23L12 2L1 21ZM13 18H11V16H13V18ZM13 14H11V10H13V14Z"/>
-                            </svg>
-                            Corrupted
-                          </div>
-                        )}
-                        
-                        {/* File icon and type */}
-                        <div style={styles.fileIconContainer}>
+                      <div key={file.id} style={styles.compactFileItem}>
+                        <div style={styles.compactFileIcon}>
                           <div style={{
-                            ...styles.fileIcon,
+                            ...styles.compactFileIconBg,
                             backgroundColor: getFileTypeColor(file.extension || file.type)
                           }}>
                             {getFileTypeIcon(file.extension || file.type)}
                           </div>
-                          {file.extension && (
-                            <span style={styles.fileExtension}>{file.extension}</span>
-                          )}
                         </div>
-                        
-                        {/* File details */}
-                        <div style={styles.fileCardContent}>
-                          <div style={styles.fileName} title={file.name}>
+                        <div style={styles.compactFileInfo}>
+                          <div style={styles.compactFileName} title={file.name}>
                             {file.name}
                           </div>
-                          <div style={styles.fileMetadata}>
-                            <span style={styles.fileSize}>
-                              {file.sizeFormatted || `${(file.size / 1024 / 1024).toFixed(2)} MB`}
-                            </span>
+                          <div style={styles.compactFileDetails}>
+                            {file.sizeFormatted || `${(file.size / 1024 / 1024).toFixed(1)} MB`}
                             {file.uploadedAt && (
-                              <span style={styles.fileDate}>
-                                {new Date(file.uploadedAt).toLocaleDateString()}
-                              </span>
+                              <span> • {new Date(file.uploadedAt).toLocaleDateString()}</span>
                             )}
                           </div>
                         </div>
-                        
-                        {/* File actions */}
-                        <div style={styles.fileCardActions}>
+                        <div style={styles.compactFileActions}>
                           {file.downloadUrl && file.isValid !== false && (
                             <button 
                               onClick={() => window.open(file.downloadUrl, '_blank')}
-                              style={styles.actionButton}
-                              title="Download file"
+                              style={styles.compactActionButton}
+                              title="Download"
                             >
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z"/>
                               </svg>
                             </button>
                           )}
                           <button 
                             onClick={() => removeFile(file.id)}
-                            style={styles.actionButtonDanger}
-                            title="Remove file"
+                            style={styles.compactRemoveButton}
+                            title="Remove"
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                               <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
                             </svg>
                           </button>
@@ -996,44 +934,39 @@ export default function NotebookDetailPage() {
                 </div>
               )}
 
-              {/* Links list */}
+              {/* Compact Links list */}
               {links.length > 0 && (
-                <div style={styles.resourcesContainer}>
-                  <h4 style={styles.resourcesHeading}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.resourcesHeadingIcon}>
-                      <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z"/>
-                    </svg>
-                    Links
-                  </h4>
-                  <ul style={styles.resourcesList}>
+                <div style={styles.compactLinksContainer}>
+                  <div style={styles.compactLinksHeader}>
+                    <span style={styles.compactLinksTitle}>Links ({links.length})</span>
+                  </div>
+                  <div style={styles.compactLinksList}>
                     {links.map(link => (
-                      <li key={link.id} style={styles.resourceItem}>
-                        <div style={styles.resourceItemContent}>
-                          <span style={styles.resourceIcon}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z"/>
-                            </svg>
-                          </span>
-                          <a 
-                            href={link.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            style={styles.resourceLink}
-                          >
-                            {link.title}
-                          </a>
-                        </div>
+                      <div key={link.id} style={styles.compactLinkItem}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={styles.compactLinkIcon}>
+                          <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z"/>
+                        </svg>
+                        <a 
+                          href={link.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={styles.compactLinkText}
+                          title={link.url}
+                        >
+                          {link.title}
+                        </a>
                         <button 
                           onClick={() => removeLink(link.id)}
-                          style={styles.removeButton}
+                          style={styles.compactRemoveButton}
+                          title="Remove"
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
                           </svg>
                         </button>
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               )}
             </div>
@@ -1297,10 +1230,12 @@ const styles = {
     borderLeft: '2px solid #f1f5f9',
     paddingLeft: '2rem',
     height: '100%',
+    minHeight: 0,
     overflowY: 'auto'
   },
   sectionHeader: {
-    marginBottom: '1.5rem'
+    marginBottom: '1rem',
+    flexShrink: 0
   },
   sectionTitle: {
     fontSize: '1.25rem',
@@ -1347,392 +1282,264 @@ const styles = {
   wordCountIcon: {
     color: '#94a3b8'
   },
-  dropZone: {
+
+  // NEW COMPACT STYLES FOR RESOURCES SECTION
+  compactDropZone: {
     border: '2px dashed #cbd5e1',
-    borderRadius: '16px',
-    padding: '2rem',
-    marginBottom: '1.5rem',
-    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-    transition: 'all 0.3s ease',
+    borderRadius: '8px',
+    padding: '0.75rem',
+    marginBottom: '1rem',
+    background: '#f8fafc',
+    transition: 'all 0.2s ease',
     cursor: 'pointer',
-    position: 'relative',
-    overflow: 'hidden'
+    flexShrink: 0
   },
   dropZoneActive: {
     borderColor: '#3b82f6',
-    background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(29, 78, 216, 0.05) 100%)',
-    transform: 'scale(1.02)'
+    background: 'rgba(59, 130, 246, 0.05)'
   },
-  dropZoneContent: {
+  compactDropContent: {
     display: 'flex',
-    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    textAlign: 'center',
-    position: 'relative',
-    zIndex: 1
+    gap: '0.5rem',
+    textAlign: 'center'
   },
-  dropIcon: {
-    fontSize: '2rem',
-    marginBottom: '1rem',
-    color: '#3b82f6',
-    background: 'rgba(59, 130, 246, 0.1)',
-    padding: '1rem',
-    borderRadius: '16px'
-  },
-  dropText: {
-    margin: '0 0 0.5rem 0',
-    fontSize: '1rem',
-    color: '#374151',
-    fontWeight: '600'
-  },
-  dropSubtext: {
-    margin: 0,
-    fontSize: '0.875rem',
-    color: '#64748b'
-  },
-  // New styles for file upload functionality
-  uploadProgress: {
-    background: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    borderRadius: '12px',
-    padding: '1.5rem',
-    marginBottom: '1.5rem'
-  },
-  uploadProgressTitle: {
-    fontSize: '1rem',
-    fontWeight: '700',
-    margin: '0 0 1rem 0',
-    color: '#1e293b',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem'
-  },
-  uploadIcon: {
+  compactDropIcon: {
     color: '#3b82f6'
   },
-  progressItem: {
-    marginBottom: '1rem',
-    padding: '0.75rem',
-    background: 'white',
-    borderRadius: '8px',
-    border: '1px solid #e2e8f0'
+  compactDropText: {
+    fontSize: '0.875rem',
+    color: '#374151',
+    fontWeight: '500'
   },
-  progressHeader: {
+
+  // Compact progress styles
+  compactProgress: {
+    background: '#f1f5f9',
+    borderRadius: '6px',
+    padding: '0.5rem',
+    marginBottom: '1rem',
+    flexShrink: 0
+  },
+  compactProgressItem: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '0.5rem'
+    fontSize: '0.75rem',
+    padding: '0.25rem 0'
   },
-  progressFileName: {
-    fontSize: '0.95rem',
-    fontWeight: '600',
-    color: '#374151',
+  compactProgressName: {
+    flex: 1,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    flex: 1,
-    marginRight: '1rem'
+    marginRight: '0.5rem'
   },
-  progressStatus: {
-    fontSize: '0.875rem',
-    fontWeight: '500',
-    color: '#64748b'
+  compactProgressStatus: {
+    fontSize: '0.875rem'
   },
-  progressBar: {
-    width: '100%',
-    height: '4px',
-    background: '#e2e8f0',
-    borderRadius: '2px',
-    overflow: 'hidden'
-  },
-  progressFill: {
-    height: '100%',
-    background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
-    borderRadius: '2px',
-    transition: 'width 0.3s ease'
-  },
-  progressError: {
-    fontSize: '0.875rem',
-    color: '#dc2626',
-    marginTop: '0.5rem',
-    padding: '0.5rem',
-    background: '#fef2f2',
-    borderRadius: '4px',
-    border: '1px solid #fecaca'
-  },
-  errorContainer: {
+
+  // Compact error styles
+  compactErrors: {
     background: '#fef2f2',
     border: '1px solid #fecaca',
-    borderRadius: '12px',
-    padding: '1.5rem',
-    marginBottom: '1.5rem'
-  },
-  errorTitle: {
-    fontSize: '1rem',
-    fontWeight: '700',
-    margin: '0 0 1rem 0',
-    color: '#dc2626',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem'
-  },
-  errorIcon: {
-    color: '#dc2626'
-  },
-  errorItem: {
-    fontSize: '0.875rem',
-    color: '#dc2626',
-    marginBottom: '0.5rem',
+    borderRadius: '6px',
     padding: '0.5rem',
-    background: 'white',
-    borderRadius: '6px',
-    border: '1px solid #fecaca'
-  },
-  clearErrorsButton: {
-    marginTop: '1rem',
-    padding: '0.5rem 1rem',
-    background: '#dc2626',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
-  },
-  linkForm: {
-    display: 'flex',
-    marginBottom: '2rem',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    border: '1px solid #e2e8f0',
-    background: 'white'
-  },
-  linkInputWrapper: {
-    flexGrow: 1,
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center'
-  },
-  linkInputIcon: {
-    position: 'absolute',
-    left: '1rem',
-    color: '#94a3b8',
-    zIndex: 1
-  },
-  linkInput: {
-    flexGrow: 1,
-    padding: '0.875rem 1rem 0.875rem 2.75rem',
-    border: 'none',
-    fontSize: '0.95rem',
-    outline: 'none',
-    background: 'transparent',
-    color: '#374151'
-  },
-  addLinkButton: {
-    padding: '0.875rem 1.25rem',
-    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-    color: 'white',
-    border: 'none',
-    cursor: 'pointer',
-    fontWeight: '600',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    transition: 'all 0.2s ease'
-  },
-  resourcesContainer: {
-    marginBottom: '2rem'
-  },
-  filesHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: '1rem',
-    paddingBottom: '0.75rem',
-    borderBottom: '2px solid #f1f5f9'
+    flexShrink: 0
   },
-  resourcesHeading: {
-    fontSize: '1rem',
-    fontWeight: '700',
-    margin: 0,
-    color: '#1e293b',
+  compactErrorHeader: {
     display: 'flex',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: '0.5rem'
-  },
-  resourcesHeadingIcon: {
-    color: '#3b82f6'
-  },
-  filesCount: {
-    fontSize: '0.875rem',
-    color: '#64748b',
-    backgroundColor: '#f1f5f9',
-    padding: '0.25rem 0.75rem',
-    borderRadius: '12px',
-    fontWeight: '500'
-  },
-  filesGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: '1rem'
-  },
-  fileCard: {
-    background: 'white',
-    border: '1px solid #e2e8f0',
-    borderRadius: '12px',
-    padding: '1rem',
-    transition: 'all 0.2s ease',
-    position: 'relative',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.75rem',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-    cursor: 'default'
-  },
-  fileCardCorrupted: {
-    borderColor: '#fca5a5',
-    backgroundColor: '#fef2f2'
-  },
-  fileStatusBadge: {
-    position: 'absolute',
-    top: '0.75rem',
-    right: '0.75rem',
-    backgroundColor: '#dc2626',
-    color: 'white',
-    padding: '0.25rem 0.5rem',
-    borderRadius: '6px',
     fontSize: '0.75rem',
     fontWeight: '600',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.25rem'
+    color: '#dc2626',
+    marginBottom: '0.25rem'
   },
-  warningIcon: {
-    color: 'white'
-  },
-  fileIconContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem'
-  },
-  fileIcon: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '8px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: 'white',
-    flexShrink: 0
-  },
-  fileExtension: {
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    color: '#374151',
-    backgroundColor: '#f3f4f6',
-    padding: '0.25rem 0.5rem',
-    borderRadius: '4px'
-  },
-  fileCardContent: {
-    flexGrow: 1,
-    minWidth: 0
-  },
-  fileName: {
-    fontSize: '0.95rem',
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: '0.5rem',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    lineHeight: '1.4'
-  },
-  fileMetadata: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    fontSize: '0.8rem',
-    color: '#64748b'
-  },
-  fileSize: {
-    fontWeight: '500'
-  },
-  fileDate: {
-    fontWeight: '400'
-  },
-  fileCardActions: {
-    display: 'flex',
-    gap: '0.5rem',
-    marginTop: 'auto'
-  },
-  actionButton: {
-    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-    border: 'none',
-    color: 'white',
-    padding: '0.5rem',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0
-  },
-  actionButtonDanger: {
-    background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-    border: 'none',
-    color: 'white',
-    padding: '0.5rem',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0
-  },
-  resourcesList: {
-    listStyle: 'none',
-    padding: 0,
-    margin: 0
-  },
-  resourceIcon: {
-    marginRight: '0.75rem',
-    color: '#64748b',
-    flexShrink: 0
-  },
-  resourceName: {
-    fontSize: '0.95rem',
-    color: '#374151',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    fontWeight: '500'
-  },
-  resourceLink: {
-    fontSize: '0.95rem',
-    color: '#3b82f6',
-    textDecoration: 'none',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    fontWeight: '500',
-    transition: 'color 0.2s ease'
-  },
-  removeButton: {
+  compactClearButton: {
     background: 'none',
     border: 'none',
-    color: '#94a3b8',
+    color: '#dc2626',
+    fontSize: '0.75rem',
     cursor: 'pointer',
-    padding: '0.25rem',
+    textDecoration: 'underline'
+  },
+  compactErrorItem: {
+    fontSize: '0.75rem',
+    color: '#dc2626',
+    marginBottom: '0.25rem'
+  },
+  compactErrorMore: {
+    fontSize: '0.75rem',
+    color: '#6b7280',
+    fontStyle: 'italic'
+  },
+
+  // Compact link form
+  compactLinkForm: {
+    display: 'flex',
+    gap: '0.5rem',
+    marginBottom: '1rem',
+    flexShrink: 0
+  },
+  compactLinkInput: {
+    flex: 1,
+    padding: '0.5rem',
+    border: '1px solid #d1d5db',
     borderRadius: '6px',
-    transition: 'all 0.2s ease',
+    fontSize: '0.875rem',
+    outline: 'none'
+  },
+  compactAddButton: {
+    padding: '0.5rem',
+    background: '#3b82f6',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center'
   },
+
+  // Compact files container
+  compactFilesContainer: {
+    marginBottom: '1rem',
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  compactFilesHeader: {
+    borderBottom: '1px solid #e5e7eb',
+    paddingBottom: '0.5rem',
+    marginBottom: '0.5rem',
+    flexShrink: 0
+  },
+  compactFilesTitle: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#374151'
+  },
+  compactFilesList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+    flex: 1,
+    overflowY: 'auto'
+  },
+  compactFileItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    padding: '0.5rem',
+    background: '#f9fafb',
+    borderRadius: '6px',
+    border: '1px solid #e5e7eb',
+    flexShrink: 0
+  },
+  compactFileIcon: {
+    flexShrink: 0
+  },
+  compactFileIconBg: {
+    width: '24px',
+    height: '24px',
+    borderRadius: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'white'
+  },
+  compactFileInfo: {
+    flex: 1,
+    minWidth: 0
+  },
+  compactFileName: {
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    color: '#1f2937',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  compactFileDetails: {
+    fontSize: '0.75rem',
+    color: '#6b7280',
+    marginTop: '0.125rem'
+  },
+  compactFileActions: {
+    display: 'flex',
+    gap: '0.25rem',
+    flexShrink: 0
+  },
+  compactActionButton: {
+    background: '#3b82f6',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '0.25rem',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  compactRemoveButton: {
+    background: '#ef4444',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '0.25rem',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+
+  // Compact links container
+  compactLinksContainer: {
+    marginBottom: '1rem',
+    flexShrink: 0
+  },
+  compactLinksHeader: {
+    borderBottom: '1px solid #e5e7eb',
+    paddingBottom: '0.5rem',
+    marginBottom: '0.5rem'
+  },
+  compactLinksTitle: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#374151'
+  },
+  compactLinksList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem'
+  },
+  compactLinkItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    padding: '0.5rem',
+    background: '#f9fafb',
+    borderRadius: '6px',
+    border: '1px solid #e5e7eb'
+  },
+  compactLinkIcon: {
+    color: '#6b7280',
+    flexShrink: 0
+  },
+  compactLinkText: {
+    fontSize: '0.875rem',
+    color: '#3b82f6',
+    textDecoration: 'none',
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+
   featuresGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
@@ -1872,7 +1679,7 @@ const styles = {
     border: "4px solid #f1f5f9",
     borderRadius: "50%",
     borderTop: "4px solid #3b82f6",
-    animation: "spin 0.1s linear infinite",
+    animation: "spin 1s linear infinite",
     marginBottom: "1.5rem",
   },
   loadingText: {
