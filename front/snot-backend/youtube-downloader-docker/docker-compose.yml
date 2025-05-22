@@ -1,0 +1,80 @@
+# docker-compose.yml
+services:
+  youtube-downloader:
+    build: .
+    container_name: youtube-downloader-api
+    ports:
+      - "8000:8000"
+    environment:
+      # AWS Configuration
+      - AWS_REGION=${AWS_REGION:-eu-central-1}
+      - S3_BUCKET=${S3_BUCKET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      
+      # Application Settings
+      - MAX_DURATION_MINUTES=${MAX_DURATION_MINUTES:-60}
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-500}
+      - TEMP_DIR=/tmp/youtube_downloads
+      
+    volumes:
+      # Mount temp directory for downloads (optional)
+      - youtube_temp:/tmp/youtube_downloads
+      
+      # Mount logs directory (optional)
+      - ./logs:/app/logs
+      
+    restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: youtube-downloader-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./ssl:/etc/ssl/certs  # For SSL certificates
+    depends_on:
+      - youtube-downloader
+    restart: unless-stopped
+
+  # Optional: Redis for caching download status (production)
+  redis:
+    image: redis:7-alpine
+    container_name: youtube-downloader-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+volumes:
+  youtube_temp:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: youtube-downloader-network

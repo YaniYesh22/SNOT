@@ -1,0 +1,17 @@
+# docker-compose.override.yml (for development)
+version: '3.8'
+
+services:
+  youtube-downloader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount source code for development (hot reload)
+      - .:/app
+      # Override CMD for development with reload
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    environment:
+      - PYTHONPATH=/app
+    # Remove resource limits for development
+    deploy: {}

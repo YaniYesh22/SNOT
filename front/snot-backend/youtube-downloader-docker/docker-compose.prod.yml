@@ -1,0 +1,19 @@
+# docker-compose.prod.yml (for production)
+version: '3.8'
+
+services:
+  youtube-downloader:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    # Production-specific configurations
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+  nginx:
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf
+      - /etc/letsencrypt:/etc/letsencrypt:ro  # SSL certificates
