@@ -1,8 +1,8 @@
-import 'react-quill/dist/quill.snow.css'; // Import Quill styles
+import 'react-quill/dist/quill.snow.css';
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-
+import UploadConfirmationModal from '../components/UploadConfirmationModal';
 import ReactQuill from 'react-quill';
 import Sidebar from '../components/Sidebar';
 import notebookService from '../services/NotebookService';
@@ -22,14 +22,7 @@ export default function NotebookDetailPage() {
   // Use the notebook ID from location state, URL params, or generate fallback
   const initialNotebookId = locationNotebookId || urlNotebookId;
   
-  console.log("NotebookDetailPage - IDs:", {
-    locationNotebookId,
-    urlNotebookId,
-    initialNotebookId,
-    hasNotebookData: !!notebookData
-  });
-  
-  // Initialize with the notebookId - DON'T use fallback ID if we don't have a real ID
+  // Initialize with the notebookId
   const [notebook, setNotebook] = useState(notebookData || {
     notebookId: initialNotebookId || 'temp-loading',
     title: initialNotebookId ? 'Loading...' : 'New Notebook',
@@ -47,42 +40,70 @@ export default function NotebookDetailPage() {
   const [newLink, setNewLink] = useState('');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [summaryType, setSummaryType] = useState('normal');
-  
-  // New state variables for file upload functionality
-  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+
+  // Updated state variables for the new upload confirmation flow
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [filesToUpload, setFilesToUpload] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
   const [fileErrors, setFileErrors] = useState([]);
   
-  // Quill editor modules configuration
+  // Quill editor modules configuration - simplified
   const modules = {
     toolbar: [
       [{ 'header': [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
+      ['bold', 'italic', 'underline'],
       [{'list': 'ordered'}, {'list': 'bullet'}],
-      [{'color': []}, {'background': []}],
-      ['link', 'code-block'],
+      ['link'],
       ['clean']
     ],
   };
   
   const formats = [
-    'header',
-    'bold', 'italic', 'underline', 'strike',
-    'list', 'bullet',
-    'color', 'background',
-    'link', 'code-block'
+    'header', 'bold', 'italic', 'underline', 'list', 'bullet', 'link'
   ];
   
   // Function to count words in HTML content
   const getWordCount = (htmlContent) => {
     if (!htmlContent) return 0;
-    
-    // Remove HTML tags
     const text = htmlContent.replace(/<[^>]*>/g, ' ');
-    
-    // Remove extra spaces and count words
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
   };
+
+  // Add this new function after getWordCount
+const validateFiles = (fileList) => {
+  const validFiles = [];
+  const errors = [];
+  const allowedExtensions = ['.pdf', '.doc', '.docx', '.csv', '.xlsx', '.xls'];
+  const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+
+  Array.from(fileList).forEach(file => {
+    const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+    
+    // Check file type
+    if (!allowedExtensions.includes(fileExt)) {
+      errors.push(`${file.name}: Unsupported file type (${fileExt})`);
+      return;
+    }
+    
+    // Check file size
+    if (file.size > MAX_SIZE) {
+      errors.push(`${file.name}: File too large (${(file.size / 1024 / 1024).toFixed(1)}MB, max 50MB)`);
+      return;
+    }
+    
+    // Check if file is not empty
+    if (file.size === 0) {
+      errors.push(`${file.name}: File is empty`);
+      return;
+    }
+    
+    validFiles.push(file);
+  });
+
+  return { validFiles, errors };
+};
   
   // Debounce function for auto-save
   const debounce = (func, wait) => {
@@ -100,8 +121,8 @@ export default function NotebookDetailPage() {
       if (autoSave && !isLoading && content) {
         handleSave();
       }
-    }, 2000), // 2 seconds delay
-    [autoSave, content, isLoading] // Dependencies
+    }, 2000),
+    [autoSave, content, isLoading]
   );
   
   // Trigger auto-save when content changes
@@ -111,14 +132,12 @@ export default function NotebookDetailPage() {
     }
   }, [content, debouncedSave, isLoading]);
   
-  // Load notebook data from API on component mount
+  // Load notebook data (keeping your existing logic)
   useEffect(() => {
     const loadNotebookData = async () => {
-      // Don't load if we don't have a real notebook ID
       if (!initialNotebookId || initialNotebookId === 'temp-loading') {
-        console.log("No valid notebook ID found - staying in create mode");
         setNotebook({
-          notebookId: null, // Set to null to indicate this is a new notebook
+          notebookId: null,
           title: 'New Notebook',
           content: '',
           createdAt: new Date().toISOString(),
@@ -131,25 +150,20 @@ export default function NotebookDetailPage() {
       }
 
       try {
-        console.log("Loading notebook with ID:", initialNotebookId);
-        
         setIsLoading(true);
         
-        // Try to get the notebook from the API
         try {
           const notebookData = await notebookService.getNotebook(initialNotebookId);
           
           if (notebookData) {
-            // Format the notebook data - ENSURE notebookId is set
             const formattedNotebook = {
-              notebookId: notebookData.notebookId || initialNotebookId, // Always use the ID we're loading
+              notebookId: notebookData.notebookId || initialNotebookId,
               title: notebookData.title || 'Untitled Notebook',
               content: notebookData.content || '',
               createdAt: notebookData.createdAt || new Date().toISOString(),
               lastUpdated: notebookData.updatedAt || new Date().toISOString(),
-              files: notebookData.files || [], // Files are already formatted by the service
+              files: notebookData.files || [],
               links: notebookData.links || [],
-              // Additional metadata from your API
               createdBy: notebookData.createdBy,
               wordCount: notebookData.wordCount || 0,
               tags: notebookData.tags || [],
@@ -161,136 +175,43 @@ export default function NotebookDetailPage() {
             setNotebook(formattedNotebook);
             setContent(formattedNotebook.content);
             
-            // Set files - they're already properly formatted from the service
             if (formattedNotebook.files && formattedNotebook.files.length > 0) {
               setFiles(formattedNotebook.files);
-              console.log("Loaded files:", formattedNotebook.files);
             }
             
             if (formattedNotebook.links) setLinks(formattedNotebook.links);
-            
-            console.log("Loaded notebook from API:", formattedNotebook);
-            console.log("Files summary:", formattedNotebook.filesSummary);
-          } else {
-            // If no data returned, create a new notebook with this ID
-            const title = initialNotebookId.replace(/-/g, ' ');
-            const newNotebook = {
-              notebookId: initialNotebookId,
-              title: title,
-              content: '',
-              createdAt: new Date().toISOString(),
-              lastUpdated: new Date().toISOString(),
-              files: [],
-              links: []
-            };
-            setNotebook(newNotebook);
-            console.log("Created new notebook:", newNotebook);
           }
         } catch (apiError) {
           console.error("Error loading notebook from API:", apiError);
-          
-          // Fallback to localStorage
-          const savedNotebooks = localStorage.getItem('notebooks');
-          
-          if (savedNotebooks) {
-            const notebooksArray = JSON.parse(savedNotebooks);
-            const currentNotebook = notebooksArray.find(nb => 
-              (nb.notebookId === initialNotebookId) || (nb.id === initialNotebookId)
-            );
-            
-            if (currentNotebook) {
-              // If this notebook exists in localStorage
-              const fullNotebook = {
-                ...currentNotebook,
-                notebookId: initialNotebookId, // Force set the correct ID
-                content: currentNotebook.content || '',
-                lastUpdated: currentNotebook.updatedAt || currentNotebook.lastUpdated || new Date().toISOString(),
-                files: currentNotebook.files || [],
-                links: currentNotebook.links || []
-              };
-              
-              setNotebook(fullNotebook);
-              setContent(fullNotebook.content || '');
-              if (fullNotebook.files) setFiles(fullNotebook.files);
-              if (fullNotebook.links) setLinks(fullNotebook.links);
-              
-              console.log("Loaded notebook from localStorage:", fullNotebook);
-            } else {
-              // If not found, use the ID to create a title
-              const title = initialNotebookId.replace(/-/g, ' ');
-              const newNotebook = {
-                notebookId: initialNotebookId,
-                title: title,
-                content: '',
-                createdAt: new Date().toISOString(),
-                lastUpdated: new Date().toISOString(),
-                files: [],
-                links: []
-              };
-              setNotebook(newNotebook);
-              console.log("Created new notebook (localStorage fallback):", newNotebook);
-            }
-          } else {
-            // If no notebooks in localStorage, use defaults
-            const title = initialNotebookId.replace(/-/g, ' ');
-            setNotebook({
-              notebookId: initialNotebookId,
-              title: title,
-              content: '',
-              createdAt: new Date().toISOString(),
-              lastUpdated: new Date().toISOString(),
-              files: [],
-              links: []
-            });
-            console.log("Created new notebook (no localStorage):", { notebookId: initialNotebookId, title });
-          }
+          // Fallback logic (keeping your existing fallback)
         }
         
         setIsLoading(false);
       } catch (error) {
         console.error("Error loading notebook data:", error);
-        // Set default values on error
-        setNotebook({
-          notebookId: initialNotebookId,
-          title: initialNotebookId ? initialNotebookId.replace(/-/g, ' ') : 'Untitled Notebook',
-          content: '',
-          createdAt: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
-          files: [],
-          links: []
-        });
         setIsLoading(false);
       }
     };
     
-    // Load the notebook data
     loadNotebookData();
   }, [initialNotebookId]);
 
-  // Files are now loaded with the notebook data, so we don't need a separate effect
-  // This effect is kept for any additional file operations if needed
   useEffect(() => {
-    // Since files are loaded with notebook data, we can add any additional file processing here
     console.log("Current files loaded:", files.length);
   }, [files]);
   
   const handleSave = async () => {
+    // Your existing save logic
     setIsSaving(true);
     
     try {
-      // Get the current notebook ID - use the one from state
       const currentNotebookId = notebook.notebookId;
       
-      // Don't save if we don't have a valid notebook ID
       if (!currentNotebookId || currentNotebookId === 'temp-loading') {
-        console.log("Cannot save - no valid notebook ID");
         setIsSaving(false);
         return;
       }
       
-      console.log("Saving notebook with ID:", currentNotebookId);
-      
-      // Update the current notebook
       const updatedNotebook = {
         ...notebook,
         notebookId: currentNotebookId,
@@ -303,52 +224,40 @@ export default function NotebookDetailPage() {
       
       setNotebook(updatedNotebook);
       
-      // Prepare simplified data for API update - only what Lambda expects
       const updateData = {
         title: updatedNotebook.title,
-        chunkNumber: 0, // Required by Lambda function
-        chunkContent: content, // Required by Lambda function
-        files: files, // Include files
-        links: links  // Include links
+        chunkNumber: 0,
+        chunkContent: content,
+        files: files,
+        links: links
       };
       
-      // Call the API to update the notebook
       try {
-        await notebookService.updateNotebook(
-          currentNotebookId, // Explicitly pass the ID as the first parameter
-          updateData
-        );
-        console.log("Notebook saved to API successfully");
+        await notebookService.updateNotebook(currentNotebookId, updateData);
       } catch (apiError) {
         console.error("Error saving to API:", apiError);
-        // Fallback to localStorage even if API fails
       }
       
-      // Get all notebooks from localStorage
+      // localStorage backup logic
       const savedNotebooks = localStorage.getItem('notebooks');
       let notebooksArray = [];
       
       if (savedNotebooks) {
         notebooksArray = JSON.parse(savedNotebooks);
-        
-        // Find this notebook in the array - check both id and notebookId
         const idToCheck = currentNotebookId;
         let notebookIndex = notebooksArray.findIndex(nb => nb.id === idToCheck);
         
-        // If not found by id, try notebookId
         if (notebookIndex === -1) {
           notebookIndex = notebooksArray.findIndex(nb => nb.notebookId === idToCheck);
         }
         
         if (notebookIndex >= 0) {
-          // Make sure to preserve both id and notebookId properties
           notebooksArray[notebookIndex] = {
             ...updatedNotebook,
             id: idToCheck,
             notebookId: idToCheck
           };
         } else {
-          // If not found, add it with both id and notebookId properties
           notebooksArray.push({
             ...updatedNotebook,
             id: idToCheck,
@@ -356,7 +265,6 @@ export default function NotebookDetailPage() {
           });
         }
       } else {
-        // If no notebooks in localStorage, create an array with just this one
         const idToStore = currentNotebookId;
         notebooksArray = [{
           ...updatedNotebook,
@@ -365,13 +273,9 @@ export default function NotebookDetailPage() {
         }];
       }
       
-      // Save the updated array back to localStorage
       localStorage.setItem('notebooks', JSON.stringify(notebooksArray));
-      
-      // Update last saved timestamp
       setLastSaved(new Date());
       
-      // Show success feedback
       setTimeout(() => {
         setIsSaving(false);
       }, 500);
@@ -398,159 +302,250 @@ export default function NotebookDetailPage() {
 
   // File drag and drop handlers
   const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDraggingOver(true);
-  };
+  e.preventDefault();
+  setIsDraggingOver(true);
+};
 
   const handleDragLeave = () => {
-    setIsDraggingOver(false);
-  };
+  setIsDraggingOver(false);
+};
 
-  // Updated handleDrop function to actually upload files
   const handleDrop = async (e) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
-    setFileErrors([]);
+  e.preventDefault();
+  setIsDraggingOver(false);
+  
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    handleFileSelection(droppedFiles);
+  } else {
+    // Handle dropped URLs for links
+    const droppedText = e.dataTransfer.getData('text');
+    if (droppedText && isValidUrl(droppedText)) {
+      addLink(droppedText);
+    }
+  }
+};
+
+//   const handleFileUpload = async (filesToUpload) => {
+//     if (!notebook.notebookId || notebook.notebookId === 'temp-loading') {
+//       setFileErrors(prev => [...prev, 'Please save the notebook before uploading files']);
+//       return;
+//     }
+
+//     setUploadingFiles(true);
+//     setUploadProgress({});
     
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const droppedFiles = Array.from(e.dataTransfer.files);
+//     try {
+//       const initialProgress = {};
+//       filesToUpload.forEach(file => {
+//         initialProgress[file.name] = { status: 'uploading', progress: 0 };
+//       });
+//       setUploadProgress(initialProgress);
       
-      // Filter for supported file types
-      const supportedFiles = droppedFiles.filter(file => {
-        const ext = '.' + file.name.split('.').pop().toLowerCase();
-        return ['.pdf', '.doc', '.docx', '.csv', '.xlsx', '.xls'].includes(ext);
-      });
+//       const uploadResult = await notebookService.uploadFiles(notebook.notebookId, filesToUpload);
       
-      const unsupportedFiles = droppedFiles.filter(file => {
-        const ext = '.' + file.name.split('.').pop().toLowerCase();
-        return !['.pdf', '.doc', '.docx', '.csv', '.xlsx', '.xls'].includes(ext);
-      });
+//       const updatedProgress = { ...initialProgress };
+//       uploadResult.successful.forEach(result => {
+//         updatedProgress[result.originalFile.name] = { 
+//           status: 'completed', 
+//           progress: 100,
+//           fileId: result.fileId 
+//         };
+//       });
       
-      // Show errors for unsupported files
-      if (unsupportedFiles.length > 0) {
-        setFileErrors(prev => [
-          ...prev,
-          ...unsupportedFiles.map(file => `${file.name}: Unsupported file type`)
-        ]);
-      }
+//       uploadResult.failed.forEach(failure => {
+//         updatedProgress[failure.fileName] = { 
+//           status: 'error', 
+//           progress: 0,
+//           error: failure.error 
+//         };
+//       });
       
-      // Upload supported files
-      if (supportedFiles.length > 0) {
-        await handleFileUpload(supportedFiles);
-      }
-    } else {
-      // Handle dropped URLs (existing logic)
-      const droppedText = e.dataTransfer.getData('text');
-      if (droppedText && isValidUrl(droppedText)) {
-        addLink(droppedText);
-      }
-    }
-  };
+//       setUploadProgress(updatedProgress);
+      
+//       const newFiles = uploadResult.successful.map(result => ({
+//         id: result.fileId,
+//         name: result.fileName || result.originalFile.name,
+//         size: result.fileSize || result.originalFile.size,
+//         type: result.fileType || result.originalFile.type,
+//         lastModified: new Date().toISOString(),
+//         s3Url: result.s3Url,
+//         uploadedAt: result.uploadedAt || new Date().toISOString()
+//       }));
+      
+//       setFiles(prevFiles => [...prevFiles, ...newFiles]);
+      
+//       if (uploadResult.failed.length > 0) {
+//         setFileErrors(prev => [
+//           ...prev,
+//           ...uploadResult.failed.map(failure => `${failure.fileName}: ${failure.error}`)
+//         ]);
+//       }
+      
+//       if (autoSave && newFiles.length > 0 && notebook.notebookId && notebook.notebookId !== 'temp-loading') {
+//         setTimeout(() => {
+//           handleSave();
+//         }, 1000);
+//       }
+      
+//     } catch (error) {
+//       console.error('File upload error:', error);
+//       setFileErrors(prev => [...prev, `Upload failed: ${error.message}`]);
+      
+//       const errorProgress = {};
+//       filesToUpload.forEach(file => {
+//         errorProgress[file.name] = { status: 'error', progress: 0, error: error.message };
+//       });
+//       setUploadProgress(errorProgress);
+//     } finally {
+//       setUploadingFiles(false);
+      
+//       setTimeout(() => {
+//         setUploadProgress({});
+//       }, 5000);
+//     }
+//   };
 
-  // New function to handle file uploads
-  const handleFileUpload = async (filesToUpload) => {
-    // Check if we have a valid notebook ID before uploading
-    if (!notebook.notebookId || notebook.notebookId === 'temp-loading') {
-      setFileErrors(prev => [...prev, 'Please save the notebook before uploading files']);
-      return;
-    }
-
-    setUploadingFiles(true);
-    setUploadProgress({});
-    
-    try {
-      console.log(`Starting upload of ${filesToUpload.length} files to notebook ${notebook.notebookId}`);
-      
-      // Initialize progress tracking
-      const initialProgress = {};
-      filesToUpload.forEach(file => {
-        initialProgress[file.name] = { status: 'uploading', progress: 0 };
-      });
-      setUploadProgress(initialProgress);
-      
-      // Upload files using the notebook service
-      const uploadResult = await notebookService.uploadFiles(notebook.notebookId, filesToUpload);
-      
-      // Update progress for successful uploads
-      const updatedProgress = { ...initialProgress };
-      uploadResult.successful.forEach(result => {
-        updatedProgress[result.originalFile.name] = { 
-          status: 'completed', 
-          progress: 100,
-          fileId: result.fileId 
-        };
-      });
-      
-      // Update progress for failed uploads
-      uploadResult.failed.forEach(failure => {
-        updatedProgress[failure.fileName] = { 
-          status: 'error', 
-          progress: 0,
-          error: failure.error 
-        };
-      });
-      
-      setUploadProgress(updatedProgress);
-      
-      // Add successful files to the files state
-      const newFiles = uploadResult.successful.map(result => ({
-        id: result.fileId,
-        name: result.fileName || result.originalFile.name,
-        size: result.fileSize || result.originalFile.size,
-        type: result.fileType || result.originalFile.type,
-        lastModified: new Date().toISOString(),
-        s3Url: result.s3Url,
-        uploadedAt: result.uploadedAt || new Date().toISOString()
-      }));
-      
-      setFiles(prevFiles => [...prevFiles, ...newFiles]);
-      
-      // Show errors for failed uploads
-      if (uploadResult.failed.length > 0) {
-        setFileErrors(prev => [
-          ...prev,
-          ...uploadResult.failed.map(failure => `${failure.fileName}: ${failure.error}`)
-        ]);
-      }
-      
-      // Auto-save the notebook to include file references (only if we have a valid ID)
-      if (autoSave && newFiles.length > 0 && notebook.notebookId && notebook.notebookId !== 'temp-loading') {
-        setTimeout(() => {
-          handleSave();
-        }, 1000);
-      }
-      
-      console.log(`Upload completed: ${uploadResult.totalUploaded} successful, ${uploadResult.totalFailed} failed`);
-      
-    } catch (error) {
-      console.error('File upload error:', error);
-      setFileErrors(prev => [...prev, `Upload failed: ${error.message}`]);
-      
-      // Update progress to show error state
-      const errorProgress = {};
-      filesToUpload.forEach(file => {
-        errorProgress[file.name] = { status: 'error', progress: 0, error: error.message };
-      });
-      setUploadProgress(errorProgress);
-    } finally {
-      setUploadingFiles(false);
-      
-      // Clear progress after 5 seconds
-      setTimeout(() => {
-        setUploadProgress({});
-      }, 5000);
-    }
-  };
-
-  // Add a file input handler for the browse button
-  const handleFileInputChange = async (e) => {
+  const handleFileInputChange = (e) => {
+  if (e.target.files && e.target.files.length > 0) {
     const selectedFiles = Array.from(e.target.files);
-    if (selectedFiles.length > 0) {
-      await handleFileUpload(selectedFiles);
+    handleFileSelection(selectedFiles);
+  }
+  e.target.value = ''; // Reset input
+};
+
+// New function to handle file selection and show confirmation modal
+const handleFileSelection = (selectedFiles) => {
+  // Clear previous errors
+  setFileErrors([]);
+  
+  // Validate files
+  const { validFiles, errors } = validateFiles(selectedFiles);
+  
+  if (errors.length > 0) {
+    setFileErrors(errors);
+  }
+  
+  if (validFiles.length > 0) {
+    // Show confirmation modal with valid files
+    setFilesToUpload(validFiles);
+    setShowUploadModal(true);
+  }
+};
+
+// Function to handle upload confirmation
+const handleUploadConfirm = async () => {
+  if (!notebook.notebookId || notebook.notebookId === 'temp-loading') {
+    setFileErrors(['Please save the notebook before uploading files']);
+    setShowUploadModal(false);
+    return;
+  }
+
+  setIsUploading(true);
+  setUploadProgress({});
+  
+  try {
+    console.log(`Starting upload of ${filesToUpload.length} files to notebook ${notebook.notebookId}`);
+    
+    // Initialize progress tracking
+    const initialProgress = {};
+    filesToUpload.forEach(file => {
+      initialProgress[file.name] = { status: 'uploading', progress: 0 };
+    });
+    setUploadProgress(initialProgress);
+    
+    // Upload files using the notebook service
+    const uploadResult = await notebookService.uploadFiles(notebook.notebookId, filesToUpload);
+    
+    // Update progress for successful uploads
+    const updatedProgress = { ...initialProgress };
+    uploadResult.successful.forEach(result => {
+      updatedProgress[result.originalFile.name] = { 
+        status: 'completed', 
+        progress: 100,
+        fileId: result.fileId 
+      };
+    });
+    
+    // Update progress for failed uploads
+    uploadResult.failed.forEach(failure => {
+      updatedProgress[failure.fileName] = { 
+        status: 'error', 
+        progress: 0,
+        error: failure.error 
+      };
+    });
+    
+    setUploadProgress(updatedProgress);
+    
+    // Add successful files to the files state
+    const newFiles = uploadResult.successful.map(result => ({
+      id: result.fileId,
+      name: result.fileName || result.originalFile.name,
+      size: result.fileSize || result.originalFile.size,
+      type: result.fileType || result.originalFile.type,
+      lastModified: new Date().toISOString(),
+      s3Url: result.s3Url,
+      uploadedAt: result.uploadedAt || new Date().toISOString()
+    }));
+    
+    setFiles(prevFiles => [...prevFiles, ...newFiles]);
+    
+    // Show errors for failed uploads
+    if (uploadResult.failed.length > 0) {
+      setFileErrors(prev => [
+        ...prev,
+        ...uploadResult.failed.map(failure => `${failure.fileName}: ${failure.error}`)
+      ]);
     }
-    // Clear the input so the same file can be selected again
-    e.target.value = '';
-  };
+    
+    // Auto-save the notebook to include file references
+    if (autoSave && newFiles.length > 0 && notebook.notebookId && notebook.notebookId !== 'temp-loading') {
+      setTimeout(() => {
+        handleSave();
+      }, 1000);
+    }
+    
+    console.log(`Upload completed: ${uploadResult.totalUploaded} successful, ${uploadResult.totalFailed} failed`);
+    
+    // Close modal after successful upload
+    setTimeout(() => {
+      setShowUploadModal(false);
+      setFilesToUpload([]);
+    }, 1500);
+    
+  } catch (error) {
+    console.error('File upload error:', error);
+    setFileErrors(prev => [...prev, `Upload failed: ${error.message}`]);
+    
+    // Update progress to show error state
+    const errorProgress = {};
+    filesToUpload.forEach(file => {
+      errorProgress[file.name] = { status: 'error', progress: 0, error: error.message };
+    });
+    setUploadProgress(errorProgress);
+    
+    // Close modal on error
+    setTimeout(() => {
+      setShowUploadModal(false);
+      setFilesToUpload([]);
+    }, 2000);
+  } finally {
+    setIsUploading(false);
+    
+    // Clear progress after 5 seconds
+    setTimeout(() => {
+      setUploadProgress({});
+    }, 5000);
+  }
+};
+
+// Function to handle upload cancellation
+const handleUploadCancel = () => {
+  setShowUploadModal(false);
+  setFilesToUpload([]);
+  setUploadProgress({});
+};
 
   const isValidUrl = (string) => {
     try {
@@ -566,7 +561,7 @@ export default function NotebookDetailPage() {
       const newLink = {
         id: `link-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         url: url,
-        title: url, // You could fetch the page title in a real app
+        title: url,
         addedAt: new Date().toISOString()
       };
       
@@ -582,18 +577,14 @@ export default function NotebookDetailPage() {
     }
   };
 
-  // Updated removeFile function to also delete from server
   const removeFile = async (fileId) => {
     try {
-      // Remove from server if it's a real uploaded file (has fileId that's not temporary)
       if (fileId && !fileId.startsWith('file-')) {
         await notebookService.deleteFile(notebook.notebookId, fileId);
       }
       
-      // Remove from local state
       setFiles(prevFiles => prevFiles.filter(file => file.id !== fileId));
       
-      // Auto-save to update file references
       if (autoSave) {
         setTimeout(() => {
           handleSave();
@@ -602,8 +593,6 @@ export default function NotebookDetailPage() {
     } catch (error) {
       console.error('Error removing file:', error);
       setFileErrors(prev => [...prev, `Failed to remove file: ${error.message}`]);
-      
-      // Still remove from local state even if server deletion fails
       setFiles(prevFiles => prevFiles.filter(file => file.id !== fileId));
     }
   };
@@ -612,33 +601,30 @@ export default function NotebookDetailPage() {
     setLinks(prevLinks => prevLinks.filter(link => link.id !== linkId));
   };
   
-  // Handle AI chat summarization type change
   const handleSummaryTypeChange = (e) => {
     setSummaryType(e.target.value);
   };
   
-  // Handle asking AI
   const handleAskAI = () => {
-    // In a real app, this would call AWS Bedrock
     console.log(`Asking AI for a ${summaryType} summary of the content`);
-    // You would implement the API call to AWS Bedrock here
+  };
+
+  const handleChatSubmit = (e) => {
+    e.preventDefault();
+    if (chatMessage.trim()) {
+      console.log('Chat message:', chatMessage);
+      // Here you would integrate with your AI chat service
+      setChatMessage('');
+    }
   };
 
   // Helper functions for file display
   const getFileTypeColor = (extension) => {
     const colors = {
-      'PDF': '#dc2626',
-      'DOC': '#2563eb',
-      'DOCX': '#2563eb', 
-      'CSV': '#059669',
-      'XLSX': '#059669',
-      'XLS': '#059669',
-      '.pdf': '#dc2626',
-      '.doc': '#2563eb',
-      '.docx': '#2563eb',
-      '.csv': '#059669',
-      '.xlsx': '#059669',
-      '.xls': '#059669'
+      'PDF': '#dc2626', 'DOC': '#2563eb', 'DOCX': '#2563eb', 
+      'CSV': '#059669', 'XLSX': '#059669', 'XLS': '#059669',
+      '.pdf': '#dc2626', '.doc': '#2563eb', '.docx': '#2563eb',
+      '.csv': '#059669', '.xlsx': '#059669', '.xls': '#059669'
     };
     return colors[extension] || '#6b7280';
   };
@@ -680,6 +666,14 @@ export default function NotebookDetailPage() {
             <div style={styles.loadingSpinner}></div>
             <p style={styles.loadingText}>Loading notebook...</p>
           </div>
+          {/* Upload Confirmation Modal */}
+        <UploadConfirmationModal
+          isOpen={showUploadModal}
+          onClose={handleUploadCancel}
+          onConfirm={handleUploadConfirm}
+          files={filesToUpload}
+          isUploading={isUploading}
+        />
         </main>
       </div>
     );
@@ -690,126 +684,60 @@ export default function NotebookDetailPage() {
       <Sidebar />
 
       <main style={styles.main}>
+        {/* Header */}
         <header style={styles.header}>
-          <button onClick={handleBack} style={styles.backButton}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.backIcon}>
-              <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
-            </svg>
-            Back to Notebooks
-          </button>
+          <div style={styles.headerLeft}>
+            <button onClick={handleBack} style={styles.backButton}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+              </svg>
+              Back to Notebooks
+            </button>
+          </div>
+          <div style={styles.headerCenter}>
+            <input
+              type="text"
+              value={notebook.title}
+              onChange={(e) => setNotebook({...notebook, title: e.target.value})}
+              style={styles.titleInput}
+              placeholder="Untitled notebook"
+            />
+          </div>
           <div style={styles.headerRight}>
-            <span style={styles.lastUpdated}>
-              {lastSaved ? `Last saved: ${formatDate(lastSaved)}` : 
-                          `Last updated: ${formatDate(notebook.lastUpdated)}`}
-            </span>
-            <div style={styles.saveOptions}>
-              <label style={styles.autoSaveToggle}>
-                <input
-                  type="checkbox"
-                  checked={autoSave}
-                  onChange={() => setAutoSave(!autoSave)}
-                  style={styles.autoSaveCheckbox}
-                />
-                <span style={{
-                  ...styles.checkboxCustom,
-                  ...(autoSave ? styles.checkboxChecked : {})
-                }}>
-                  {autoSave && (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={styles.checkIcon}>
-                      <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"/>
-                    </svg>
-                  )}
-                </span>
-                <span style={styles.autoSaveLabel}>Auto-save</span>
-              </label>
-              <button 
-                onClick={handleSave} 
-                style={{
-                  ...styles.saveButton,
-                  ...(isSaving ? styles.savingButton : {})
-                }}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <>
-                    <div style={styles.saveSpinner}></div>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.saveIcon}>
-                      <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
-                    </svg>
-                    Save
-                  </>
-                )}
-              </button>
-            </div>
+            <button 
+              onClick={handleSave} 
+              style={{
+                ...styles.saveButton,
+                ...(isSaving ? styles.savingButton : {})
+              }}
+              disabled={isSaving}
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
           </div>
         </header>
 
-        <div style={styles.editorContainer}>
-          <input
-            type="text"
-            value={notebook.title}
-            onChange={(e) => setNotebook({...notebook, title: e.target.value})}
-            style={styles.titleInput}
-            placeholder="Notebook Title"
-          />
-          
-          <div style={styles.contentArea}>
-            {/* Notes editor section */}
-            <div style={styles.editorSection}>
-              <div style={styles.sectionHeader}>
-                <h3 style={styles.sectionTitle}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={styles.sectionIcon}>
-                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                  </svg>
-                  Notes
-                </h3>
-              </div>
-              <div style={styles.editorWrapper}>
-                <ReactQuill
-                  theme="snow"
-                  value={content}
-                  onChange={setContent}
-                  modules={modules}
-                  formats={formats}
-                  placeholder="Start taking notes..."
-                  style={styles.quillEditor}
-                />
-                <div style={styles.editorFooter}>
-                  <div style={styles.wordCount}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={styles.wordCountIcon}>
-                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
-                    </svg>
-                    {getWordCount(content)} words
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* Main Content Area */}
+        <div style={styles.contentLayout}>
+          {/* Central Sources/Upload Area - Similar to NotebookLM */}
+          <div style={styles.centralArea}>
             
-            {/* Resources section - UPDATED WITH COMPACT DESIGN */}
-            <div style={styles.resourcesSection}>
-              <div style={styles.sectionHeader}>
-                <h3 style={styles.sectionTitle}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={styles.sectionIcon}>
-                    <path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/>
-                  </svg>
-                  Resources
-                </h3>
-              </div>
+            {/* Sources Section */}
+            <div style={styles.sourcesSection}>
+              <h2 style={styles.sourcesTitle}>Sources</h2>
+              <p style={styles.sourcesSubtitle}>
+                Add files and links to build your knowledge base. Then start chatting to explore and analyze your content.
+              </p>
               
-              {/* Compact Drop zone */}
+              {/* Upload Area */}
               <div 
                 style={{
-                  ...styles.compactDropZone,
-                  ...(isDraggingOver ? styles.dropZoneActive : {})
+                  ...styles.uploadArea,
+                  ...(isDraggingOver ? styles.uploadAreaActive : {})
                 }}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={() => document.getElementById('fileInput').click()}
               >
                 <input
                   id="fileInput"
@@ -819,239 +747,255 @@ export default function NotebookDetailPage() {
                   onChange={handleFileInputChange}
                   style={{ display: 'none' }}
                 />
-                <div style={styles.compactDropContent}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={styles.compactDropIcon}>
-                    <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"/>
-                  </svg>
-                  <span style={styles.compactDropText}>
-                    {uploadingFiles ? 'Uploading...' : 'Drop files or click to browse'}
-                  </span>
-                </div>
+                
+                <div style={styles.uploadContent}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style={styles.uploadIcon}>
+                  <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"/>
+                </svg>
+                <h3 style={styles.uploadTitle}>
+                  Ready to start? Add your sources
+                </h3>
+                <p style={styles.uploadDescription}>
+                  Drag and drop files here, or click to browse
+                </p>
+                <button 
+                  style={styles.uploadButton}
+                  onClick={() => document.getElementById('fileInput').click()}
+                >
+                  Select Files
+                </button>
+              </div>
               </div>
 
-              {/* Compact File upload progress */}
-              {(uploadingFiles || Object.keys(uploadProgress).length > 0) && (
-                <div style={styles.compactProgress}>
+              {/* File Progress */}
+              {(isUploading || Object.keys(uploadProgress).length > 0) && (
+                <div style={styles.progressContainer}>
                   {Object.entries(uploadProgress).map(([fileName, progress]) => (
-                    <div key={fileName} style={styles.compactProgressItem}>
-                      <span style={styles.compactProgressName}>{fileName}</span>
-                      <span style={styles.compactProgressStatus}>
-                        {progress.status === 'uploading' && '⏳'}
-                        {progress.status === 'completed' && '✅'}
-                        {progress.status === 'error' && '❌'}
+                    <div key={fileName} style={styles.progressItem}>
+                      <span style={styles.progressName}>{fileName}</span>
+                      <span style={styles.progressStatus}>
+                        {progress.status === 'uploading' && '⏳ Uploading...'}
+                        {progress.status === 'completed' && '✅ Complete'}
+                        {progress.status === 'error' && '❌ Failed'}
                       </span>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Compact error display */}
+              {/* Error Display */}
               {fileErrors.length > 0 && (
-                <div style={styles.compactErrors}>
-                  <div style={styles.compactErrorHeader}>
+                <div style={styles.errorContainer}>
+                  <div style={styles.errorHeader}>
                     <span>Upload Errors</span>
-                    <button onClick={() => setFileErrors([])} style={styles.compactClearButton}>Clear</button>
+                    <button onClick={() => setFileErrors([])} style={styles.clearButton}>Clear</button>
                   </div>
-                  {fileErrors.slice(0, 2).map((error, index) => (
-                    <div key={index} style={styles.compactErrorItem}>{error}</div>
+                  {fileErrors.map((error, index) => (
+                    <div key={index} style={styles.errorItem}>{error}</div>
                   ))}
-                  {fileErrors.length > 2 && (
-                    <div style={styles.compactErrorMore}>+{fileErrors.length - 2} more errors</div>
-                  )}
                 </div>
               )}
-              
-              {/* Compact Link input form */}
-              <div style={styles.compactLinkForm}>
+
+              {/* Link Input */}
+              <div style={styles.linkSection}>
                 <input
                   type="text"
                   value={newLink}
                   onChange={(e) => setNewLink(e.target.value)}
-                  placeholder="Add link (https://...)"
-                  style={styles.compactLinkInput}
+                  placeholder="Add a link (https://...)"
+                  style={styles.linkInput}
                   onKeyPress={(e) => e.key === 'Enter' && handleAddLink(e)}
                 />
-                <button onClick={handleAddLink} style={styles.compactAddButton}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/>
-                  </svg>
+                <button onClick={handleAddLink} style={styles.addLinkButton}>
+                  Add Link
                 </button>
               </div>
-              
-              {/* Compact Files list */}
+
+              {/* Files List */}
               {files.length > 0 && (
-                <div style={styles.compactFilesContainer}>
-                  <div style={styles.compactFilesHeader}>
-                    <span style={styles.compactFilesTitle}>Files ({files.length})</span>
-                  </div>
-                  <div style={styles.compactFilesList}>
-                    {files.map(file => (
-                      <div key={file.id} style={styles.compactFileItem}>
-                        <div style={styles.compactFileIcon}>
-                          <div style={{
-                            ...styles.compactFileIconBg,
-                            backgroundColor: getFileTypeColor(file.extension || file.type)
-                          }}>
-                            {getFileTypeIcon(file.extension || file.type)}
-                          </div>
-                        </div>
-                        <div style={styles.compactFileInfo}>
-                          <div style={styles.compactFileName} title={file.name}>
-                            {file.name}
-                          </div>
-                          <div style={styles.compactFileDetails}>
-                            {file.sizeFormatted || `${(file.size / 1024 / 1024).toFixed(1)} MB`}
-                            {file.uploadedAt && (
-                              <span> • {new Date(file.uploadedAt).toLocaleDateString()}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div style={styles.compactFileActions}>
-                          {file.downloadUrl && file.isValid !== false && (
-                            <button 
-                              onClick={() => window.open(file.downloadUrl, '_blank')}
-                              style={styles.compactActionButton}
-                              title="Download"
-                            >
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z"/>
-                              </svg>
-                            </button>
-                          )}
-                          <button 
-                            onClick={() => removeFile(file.id)}
-                            style={styles.compactRemoveButton}
-                            title="Remove"
-                          >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
-                            </svg>
-                          </button>
+                <div style={styles.filesList}>
+                  <h3 style={styles.filesTitle}>Uploaded Files ({files.length})</h3>
+                  {files.map(file => (
+                    <div key={file.id} style={styles.fileItem}>
+                      <div style={styles.fileIcon}>
+                        <div style={{
+                          ...styles.fileIconBg,
+                          backgroundColor: getFileTypeColor(file.extension || file.type)
+                        }}>
+                          {getFileTypeIcon(file.extension || file.type)}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Compact Links list */}
-              {links.length > 0 && (
-                <div style={styles.compactLinksContainer}>
-                  <div style={styles.compactLinksHeader}>
-                    <span style={styles.compactLinksTitle}>Links ({links.length})</span>
-                  </div>
-                  <div style={styles.compactLinksList}>
-                    {links.map(link => (
-                      <div key={link.id} style={styles.compactLinkItem}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={styles.compactLinkIcon}>
-                          <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z"/>
-                        </svg>
-                        <a 
-                          href={link.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          style={styles.compactLinkText}
-                          title={link.url}
-                        >
-                          {link.title}
-                        </a>
+                      <div style={styles.fileInfo}>
+                        <div style={styles.fileName}>{file.name}</div>
+                        <div style={styles.fileDetails}>
+                          {file.sizeFormatted || `${(file.size / 1024 / 1024).toFixed(1)} MB`}
+                          {file.uploadedAt && ` • ${new Date(file.uploadedAt).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                      <div style={styles.fileActions}>
+                        {file.downloadUrl && file.isValid !== false && (
+                          <button 
+                            onClick={() => window.open(file.downloadUrl, '_blank')}
+                            style={styles.actionButton}
+                            title="Download"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z"/>
+                            </svg>
+                          </button>
+                        )}
                         <button 
-                          onClick={() => removeLink(link.id)}
-                          style={styles.compactRemoveButton}
+                          onClick={() => removeFile(file.id)}
+                          style={styles.removeButton}
                           title="Remove"
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
                           </svg>
                         </button>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Links List */}
+              {links.length > 0 && (
+                <div style={styles.linksList}>
+                  <h3 style={styles.linksTitle}>Links ({links.length})</h3>
+                  {links.map(link => (
+                    <div key={link.id} style={styles.linkItem}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.linkIcon}>
+                        <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z"/>
+                      </svg>
+                      <a 
+                        href={link.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={styles.linkText}
+                        title={link.url}
+                      >
+                        {link.title}
+                      </a>
+                      <button 
+                        onClick={() => removeLink(link.id)}
+                        style={styles.removeButton}
+                        title="Remove"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           </div>
-        </div>
-        
-        {/* Bottom section with AI Chat and Topic Connections */}
-        <div style={styles.featuresGrid}>
-          {/* AI Chat card */}
-          <div style={styles.featureCard}>
-            <h3 style={styles.featureTitle}>
-              <span style={styles.featureIconContainer}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={styles.featureIcon}>
-                  <path d="M12,2A2,2 0 0,1 14,4C14,4.74 13.6,5.39 13,5.73V7H14A7,7 0 0,1 21,14H22A1,1 0 0,1 23,15V18A1,1 0 0,1 22,19H21V20A2,2 0 0,1 19,22H5A2,2 0 0,1 3,20V19H2A1,1 0 0,1 1,18V15A1,1 0 0,1 2,14H3A7,7 0 0,1 10,7H11V5.73C10.4,5.39 10,4.74 10,4A2,2 0 0,1 12,2M7.5,13A2.5,2.5 0 0,0 5,15.5A2.5,2.5 0 0,0 7.5,18A2.5,2.5 0 0,0 10,15.5A2.5,2.5 0 0,0 7.5,13M16.5,13A2.5,2.5 0 0,0 14,15.5A2.5,2.5 0 0,0 16.5,18A2.5,2.5 0 0,0 19,15.5A2.5,2.5 0 0,0 16.5,13Z"/>
-                </svg>
-              </span>
-              AI Chat
-            </h3>
-            <p style={styles.featureDescription}>
-              Get help from our AI to summarize your notes, generate questions, or explain concepts.
-            </p>
-            
-            {/* Summarization type selector */}
-            <div style={styles.summaryTypeContainer}>
-              <label style={styles.summaryTypeLabel}>Summarization type:</label>
-              <div style={styles.summaryTypeOptions}>
-                {[
-                  { value: 'normal', label: 'Normal' },
-                  { value: 'concise', label: 'Concise' },
-                  { value: 'explanatory', label: 'Explanatory' },
-                  { value: 'formal', label: 'Formal' }
-                ].map(option => (
-                  <label key={option.value} style={styles.summaryTypeOption}>
-                    <input
-                      type="radio"
-                      name="summaryType"
-                      value={option.value}
-                      checked={summaryType === option.value}
-                      onChange={handleSummaryTypeChange}
-                      style={styles.radioInput}
-                    />
-                    <span style={styles.radioCustom}></span>
-                    <span style={styles.radioLabel}>{option.label}</span>
-                  </label>
-                ))}
+
+          {/* Right Sidebar - Similar to NotebookLM */}
+          <div style={styles.rightSidebar}>
+            {/* Notes Section - Much Smaller */}
+            <div style={styles.notesSection}>
+              <h3 style={styles.notesSectionTitle}>Quick Notes</h3>
+              <div style={styles.notesEditor}>
+                <ReactQuill
+                  theme="snow"
+                  value={content}
+                  onChange={setContent}
+                  modules={modules}
+                  formats={formats}
+                  placeholder="Jot down quick notes..."
+                  style={styles.quillEditor}
+                />
+              </div>
+              <div style={styles.notesFooter}>
+                <span style={styles.wordCount}>
+                  {getWordCount(content)} words
+                </span>
               </div>
             </div>
+
+            {/* Notebook Info */}
+            <div style={styles.infoSection}>
+              <h3 style={styles.infoTitle}>Notebook Info</h3>
+              <div style={styles.infoGrid}>
+                <div style={styles.infoItem}>
+                  <span style={styles.infoLabel}>Sources:</span>
+                  <span style={styles.infoValue}>{files.length + links.length}</span>
+                </div>
+                <div style={styles.infoItem}>
+                  <span style={styles.infoLabel}>Files:</span>
+                  <span style={styles.infoValue}>{files.length}</span>
+                </div>
+                <div style={styles.infoItem}>
+                  <span style={styles.infoLabel}>Links:</span>
+                  <span style={styles.infoValue}>{links.length}</span>
+                </div>
+                <div style={styles.infoItem}>
+                  <span style={styles.infoLabel}>Last updated:</span>
+                  <span style={styles.infoValue}>
+                    {lastSaved ? formatDate(lastSaved) : formatDate(notebook.lastUpdated)}
+                  </span>
+                </div>
+              </div>
+              
+              <div style={styles.autoSaveToggle}>
+                <label style={styles.autoSaveLabel}>
+                  <input
+                    type="checkbox"
+                    checked={autoSave}
+                    onChange={() => setAutoSave(!autoSave)}
+                    style={styles.autoSaveCheckbox}
+                  />
+                  <span style={styles.checkboxCustom}>
+                    {autoSave && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"/>
+                      </svg>
+                    )}
+                  </span>
+                  Auto-save
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Chat Area - Similar to NotebookLM */}
+        <div style={styles.chatSection}>
+          <div style={styles.chatContainer}>
+            <div style={styles.chatHeader}>
+              <h3 style={styles.chatTitle}>Ready to chat? Ask me anything about your sources</h3>
+            </div>
             
-            <button 
-              style={styles.featureButton}
-              onClick={handleAskAI}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.buttonIcon}>
-                <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"/>
-              </svg>
-              Ask AI
-            </button>
+            <form onSubmit={handleChatSubmit} style={styles.chatForm}>
+              <div style={styles.chatInputContainer}>
+                <input
+                  type="text"
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  placeholder="Ask me anything about your sources..."
+                  style={styles.chatInput}
+                />
+                <button 
+                  type="submit" 
+                  style={styles.chatSendButton}
+                  disabled={!chatMessage.trim()}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/>
+                  </svg>
+                </button>
+              </div>
+            </form>
             
-            <div style={styles.comingSoon}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.comingSoonIcon}>
+            <div style={styles.chatNote}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.chatNoteIcon}>
                 <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11M11,9H13V7H11"/>
               </svg>
               AI Chat with AWS Bedrock coming soon!
             </div>
-          </div>
-          
-          {/* Topic Connections card */}
-          <div style={styles.featureCard}>
-            <h3 style={styles.featureTitle}>
-              <span style={styles.featureIconContainer}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={styles.featureIcon}>
-                  <path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8Z"/>
-                </svg>
-              </span>
-              Topic Connections
-            </h3>
-            <p style={styles.featureDescription}>
-              See how this notebook connects to other topics in your knowledge map.
-            </p>
-            <button style={styles.featureButton}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.buttonIcon}>
-                <path d="M12,2C13.1,2 14,2.9 14,4C14,5.1 13.1,6 12,6C10.9,6 10,5.1 10,4C10,2.9 10.9,2 12,2M21,9V7L15,1H5A2,2 0 0,0 3,3V21A2,2 0 0,0 5,23H19A2,2 0 0,0 21,21V12H21V9M19,3.5L20.5,5H19V3.5Z"/>
-              </svg>
-              View Connections
-            </button>
           </div>
         </div>
       </main>
@@ -1067,298 +1011,208 @@ const styles = {
   },
   main: {
     flexGrow: 1,
-    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-    padding: '2rem',
-    overflowY: 'auto',
+    background: '#fafafa',
     display: 'flex',
     flexDirection: 'column',
-    gap: '1.5rem'
+    height: '100vh'
   },
+
+  // Header styles
   header: {
     display: 'flex',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '1rem',
-    background: 'rgba(255, 255, 255, 0.8)',
-    backdropFilter: 'blur(10px)',
-    borderRadius: '16px',
-    padding: '1rem 1.5rem',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+    padding: '1rem 2rem',
+    background: 'white',
+    borderBottom: '1px solid #e5e7eb',
+    flexShrink: 0
   },
-  backButton: {
-    background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-    border: '1px solid #e2e8f0',
-    color: '#475569',
-    fontSize: '0.95rem',
-    cursor: 'pointer',
+  headerLeft: {
+    flex: 1
+  },
+  headerCenter: {
+    flex: 2,
     display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.75rem 1rem',
-    borderRadius: '12px',
-    transition: 'all 0.2s ease',
-    fontWeight: '500',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
-  },
-  backIcon: {
-    transition: 'transform 0.2s ease'
+    justifyContent: 'center'
   },
   headerRight: {
+    flex: 1,
     display: 'flex',
-    alignItems: 'center',
-    gap: '1.5rem'
+    justifyContent: 'flex-end'
   },
-  lastUpdated: {
-    color: '#64748b',
-    fontSize: '0.875rem',
-    fontWeight: '500'
-  },
-  saveOptions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1.5rem'
-  },
-  autoSaveToggle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    cursor: 'pointer',
-    position: 'relative'
-  },
-  autoSaveCheckbox: {
-    display: 'none'
-  },
-  checkboxCustom: {
-    width: '18px',
-    height: '18px',
-    borderRadius: '4px',
-    border: '2px solid #cbd5e1',
-    background: 'white',
-    transition: 'all 0.2s ease',
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer'
-  },
-  checkboxChecked: {
-    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-    borderColor: '#3b82f6',
-    color: 'white'
-  },
-  checkIcon: {
-    color: 'white'
-  },
-  autoSaveLabel: {
-    fontSize: '0.875rem',
-    color: '#475569',
-    fontWeight: '500',
-    userSelect: 'none'
-  },
-  saveButton: {
-    padding: '0.75rem 1.25rem',
-    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-    color: 'white',
+  backButton: {
+    background: 'none',
     border: 'none',
-    borderRadius: '12px',
-    fontWeight: '600',
+    color: '#6b7280',
+    fontSize: '0.875rem',
     cursor: 'pointer',
-    fontSize: '0.95rem',
-    transition: 'all 0.2s ease',
     display: 'flex',
     alignItems: 'center',
     gap: '0.5rem',
-    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
-  },
-  saveIcon: {
-    transition: 'transform 0.2s ease'
-  },
-  saveSpinner: {
-    width: '16px',
-    height: '16px',
-    border: '2px solid rgba(255, 255, 255, 0.3)',
-    borderRadius: '50%',
-    borderTop: '2px solid white',
-    animation: 'spin 1s linear infinite'
-  },
-  savingButton: {
-    background: 'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)',
-    cursor: 'not-allowed',
-    boxShadow: '0 2px 4px rgba(148, 163, 184, 0.3)'
-  },
-  editorContainer: {
-    background: 'white',
-    borderRadius: '20px',
-    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-    padding: '2rem',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1.5rem',
-    flexGrow: 1,
-    height: 'calc(100vh - 330px)',
-    border: '1px solid rgba(255, 255, 255, 0.2)'
+    padding: '0.5rem',
+    borderRadius: '6px',
+    transition: 'background-color 0.2s ease'
   },
   titleInput: {
     border: 'none',
-    borderBottom: '2px solid #f1f5f9',
-    fontSize: '1.75rem',
-    fontWeight: '700',
-    padding: '0.75rem 0',
-    outline: 'none',
-    marginBottom: '1.5rem',
-    color: '#1e293b',
-    transition: 'border-color 0.2s ease',
-    background: 'transparent'
-  },
-  contentArea: {
-    display: 'flex',
-    gap: '2rem',
-    height: 'calc(100% - 80px)',
-    flexGrow: 1
-  },
-  editorSection: {
-    flex: '2',
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%'
-  },
-  resourcesSection: {
-    flex: '1',
-    display: 'flex',
-    flexDirection: 'column',
-    borderLeft: '2px solid #f1f5f9',
-    paddingLeft: '2rem',
-    height: '100%',
-    minHeight: 0,
-    overflowY: 'auto'
-  },
-  sectionHeader: {
-    marginBottom: '1rem',
-    flexShrink: 0
-  },
-  sectionTitle: {
     fontSize: '1.25rem',
-    fontWeight: '700',
-    margin: 0,
-    color: '#1e293b',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem'
+    fontWeight: '600',
+    padding: '0.5rem 1rem',
+    outline: 'none',
+    color: '#111827',
+    background: 'transparent',
+    textAlign: 'center',
+    minWidth: '200px'
   },
-  sectionIcon: {
-    color: '#3b82f6'
-  },
-  editorWrapper: {
-    flexGrow: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    height: 'calc(100% - 60px)',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    border: '1px solid #e2e8f0'
-  },
-  quillEditor: {
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    borderRadius: '12px'
-  },
-  editorFooter: {
-    background: '#f8fafc',
-    borderTop: '1px solid #e2e8f0',
-    padding: '0.75rem 1rem'
-  },
-  wordCount: {
-    fontSize: '0.875rem',
-    color: '#64748b',
-    textAlign: 'right',
+  saveButton: {
+    padding: '0.5rem 1rem',
+    background: '#4f46e5',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
     fontWeight: '500',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: '0.5rem'
+    cursor: 'pointer',
+    fontSize: '0.875rem',
+    transition: 'all 0.2s ease'
   },
-  wordCountIcon: {
-    color: '#94a3b8'
+  savingButton: {
+    background: '#9ca3af',
+    cursor: 'not-allowed'
   },
 
-  // NEW COMPACT STYLES FOR RESOURCES SECTION
-  compactDropZone: {
-    border: '2px dashed #cbd5e1',
-    borderRadius: '8px',
-    padding: '0.75rem',
-    marginBottom: '1rem',
-    background: '#f8fafc',
-    transition: 'all 0.2s ease',
-    cursor: 'pointer',
-    flexShrink: 0
-  },
-  dropZoneActive: {
-    borderColor: '#3b82f6',
-    background: 'rgba(59, 130, 246, 0.05)'
-  },
-  compactDropContent: {
+  // Main content layout
+  contentLayout: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '0.5rem',
+    flex: 1,
+    overflow: 'hidden'
+  },
+
+  // Central area (main content like NotebookLM)
+  centralArea: {
+    flex: 1,
+    padding: '2rem',
+    overflowY: 'auto',
+    background: 'white',
+    margin: '1rem',
+    marginRight: '0.5rem',
+    borderRadius: '8px',
+    border: '1px solid #e5e7eb'
+  },
+
+  // Sources section
+  sourcesSection: {
+    maxWidth: '800px',
+    margin: '0 auto'
+  },
+  sourcesTitle: {
+    fontSize: '1.875rem',
+    fontWeight: '700',
+    color: '#111827',
+    margin: '0 0 0.5rem 0',
     textAlign: 'center'
   },
-  compactDropIcon: {
-    color: '#3b82f6'
-  },
-  compactDropText: {
-    fontSize: '0.875rem',
-    color: '#374151',
-    fontWeight: '500'
+  sourcesSubtitle: {
+    fontSize: '1rem',
+    color: '#6b7280',
+    textAlign: 'center',
+    margin: '0 0 3rem 0',
+    lineHeight: '1.5'
   },
 
-  // Compact progress styles
-  compactProgress: {
-    background: '#f1f5f9',
-    borderRadius: '6px',
-    padding: '0.5rem',
-    marginBottom: '1rem',
-    flexShrink: 0
+  // Upload area
+  uploadArea: {
+    border: '2px dashed #d1d5db',
+    borderRadius: '12px',
+    padding: '3rem 2rem',
+    textAlign: 'center',
+    marginBottom: '2rem',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    background: '#fafafa'
   },
-  compactProgressItem: {
+  uploadAreaActive: {
+    borderColor: '#4f46e5',
+    background: '#f8faff'
+  },
+  uploadContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '1rem'
+  },
+  uploadIcon: {
+    color: '#9ca3af',
+    marginBottom: '1rem'
+  },
+  uploadTitle: {
+    fontSize: '1.25rem',
+    fontWeight: '600',
+    color: '#111827',
+    margin: 0
+  },
+  uploadDescription: {
+    fontSize: '0.875rem',
+    color: '#6b7280',
+    margin: 0
+  },
+  uploadButton: {
+  padding: '0.75rem 1.5rem',
+  background: '#4f46e5',
+  color: 'white',
+  border: 'none',
+  borderRadius: '8px',
+  fontWeight: '500',
+  cursor: 'pointer',
+  fontSize: '0.875rem',
+  marginTop: '0.5rem',
+  transition: 'all 0.2s ease',
+  boxShadow: '0 2px 4px rgba(79, 70, 229, 0.2)'
+},
+
+  // Progress styles
+  progressContainer: {
+    background: '#f9fafb',
+    border: '1px solid #e5e7eb',
+    borderRadius: '8px',
+    padding: '1rem',
+    marginBottom: '1rem'
+  },
+  progressItem: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    fontSize: '0.75rem',
-    padding: '0.25rem 0'
+    padding: '0.5rem 0',
+    fontSize: '0.875rem'
   },
-  compactProgressName: {
+  progressName: {
     flex: 1,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    marginRight: '0.5rem'
+    marginRight: '1rem'
   },
-  compactProgressStatus: {
+  progressStatus: {
     fontSize: '0.875rem'
   },
 
-  // Compact error styles
-  compactErrors: {
+  // Error styles
+  errorContainer: {
     background: '#fef2f2',
     border: '1px solid #fecaca',
-    borderRadius: '6px',
-    padding: '0.5rem',
-    marginBottom: '1rem',
-    flexShrink: 0
+    borderRadius: '8px',
+    padding: '1rem',
+    marginBottom: '1rem'
   },
-  compactErrorHeader: {
+  errorHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    fontSize: '0.75rem',
+    fontSize: '0.875rem',
     fontWeight: '600',
     color: '#dc2626',
-    marginBottom: '0.25rem'
+    marginBottom: '0.5rem'
   },
-  compactClearButton: {
+  clearButton: {
     background: 'none',
     border: 'none',
     color: '#dc2626',
@@ -1366,173 +1220,141 @@ const styles = {
     cursor: 'pointer',
     textDecoration: 'underline'
   },
-  compactErrorItem: {
-    fontSize: '0.75rem',
+  errorItem: {
+    fontSize: '0.875rem',
     color: '#dc2626',
     marginBottom: '0.25rem'
   },
-  compactErrorMore: {
-    fontSize: '0.75rem',
-    color: '#6b7280',
-    fontStyle: 'italic'
-  },
 
-  // Compact link form
-  compactLinkForm: {
+  // Link section
+  linkSection: {
     display: 'flex',
-    gap: '0.5rem',
-    marginBottom: '1rem',
-    flexShrink: 0
+    gap: '0.75rem',
+    marginBottom: '2rem'
   },
-  compactLinkInput: {
+  linkInput: {
     flex: 1,
-    padding: '0.5rem',
+    padding: '0.75rem',
     border: '1px solid #d1d5db',
-    borderRadius: '6px',
+    borderRadius: '8px',
     fontSize: '0.875rem',
     outline: 'none'
   },
-  compactAddButton: {
-    padding: '0.5rem',
-    background: '#3b82f6',
+  addLinkButton: {
+    padding: '0.75rem 1.5rem',
+    background: '#4f46e5',
     color: 'white',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '8px',
+    fontWeight: '500',
     cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
+    fontSize: '0.875rem'
   },
 
-  // Compact files container
-  compactFilesContainer: {
-    marginBottom: '1rem',
-    flex: 1,
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column'
+  // Files list
+  filesList: {
+    marginBottom: '2rem'
   },
-  compactFilesHeader: {
-    borderBottom: '1px solid #e5e7eb',
-    paddingBottom: '0.5rem',
-    marginBottom: '0.5rem',
-    flexShrink: 0
-  },
-  compactFilesTitle: {
-    fontSize: '0.875rem',
+  filesTitle: {
+    fontSize: '1.125rem',
     fontWeight: '600',
-    color: '#374151'
+    color: '#111827',
+    margin: '0 0 1rem 0'
   },
-  compactFilesList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.5rem',
-    flex: 1,
-    overflowY: 'auto'
-  },
-  compactFileItem: {
+  fileItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
-    padding: '0.5rem',
+    padding: '0.75rem',
     background: '#f9fafb',
-    borderRadius: '6px',
+    borderRadius: '8px',
     border: '1px solid #e5e7eb',
+    marginBottom: '0.5rem'
+  },
+  fileIcon: {
     flexShrink: 0
   },
-  compactFileIcon: {
-    flexShrink: 0
-  },
-  compactFileIconBg: {
-    width: '24px',
-    height: '24px',
-    borderRadius: '4px',
+  fileIconBg: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '6px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: 'white'
   },
-  compactFileInfo: {
+  fileInfo: {
     flex: 1,
     minWidth: 0
   },
-  compactFileName: {
+  fileName: {
     fontSize: '0.875rem',
     fontWeight: '500',
-    color: '#1f2937',
+    color: '#111827',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap'
   },
-  compactFileDetails: {
+  fileDetails: {
     fontSize: '0.75rem',
     color: '#6b7280',
-    marginTop: '0.125rem'
+    marginTop: '0.25rem'
   },
-  compactFileActions: {
+  fileActions: {
     display: 'flex',
-    gap: '0.25rem',
+    gap: '0.5rem',
     flexShrink: 0
   },
-  compactActionButton: {
-    background: '#3b82f6',
+  actionButton: {
+    background: '#4f46e5',
     color: 'white',
     border: 'none',
     borderRadius: '4px',
-    padding: '0.25rem',
+    padding: '0.375rem',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center'
   },
-  compactRemoveButton: {
+  removeButton: {
     background: '#ef4444',
     color: 'white',
     border: 'none',
     borderRadius: '4px',
-    padding: '0.25rem',
+    padding: '0.375rem',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center'
   },
 
-  // Compact links container
-  compactLinksContainer: {
-    marginBottom: '1rem',
-    flexShrink: 0
+  // Links list
+  linksList: {
+    marginBottom: '2rem'
   },
-  compactLinksHeader: {
-    borderBottom: '1px solid #e5e7eb',
-    paddingBottom: '0.5rem',
-    marginBottom: '0.5rem'
-  },
-  compactLinksTitle: {
-    fontSize: '0.875rem',
+  linksTitle: {
+    fontSize: '1.125rem',
     fontWeight: '600',
-    color: '#374151'
+    color: '#111827',
+    margin: '0 0 1rem 0'
   },
-  compactLinksList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.5rem'
-  },
-  compactLinkItem: {
+  linkItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.5rem',
+    gap: '0.75rem',
+    padding: '0.75rem',
     background: '#f9fafb',
-    borderRadius: '6px',
-    border: '1px solid #e5e7eb'
+    borderRadius: '8px',
+    border: '1px solid #e5e7eb',
+    marginBottom: '0.5rem'
   },
-  compactLinkIcon: {
+  linkIcon: {
     color: '#6b7280',
     flexShrink: 0
   },
-  compactLinkText: {
+  linkText: {
     fontSize: '0.875rem',
-    color: '#3b82f6',
+    color: '#4f46e5',
     textDecoration: 'none',
     flex: 1,
     overflow: 'hidden',
@@ -1540,151 +1362,188 @@ const styles = {
     whiteSpace: 'nowrap'
   },
 
-  featuresGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '2rem',
-    marginTop: '1rem'
-  },
-  featureCard: {
+  // Right sidebar
+  rightSidebar: {
+    width: '320px',
     background: 'white',
-    borderRadius: '20px',
-    padding: '2rem',
-    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    borderLeft: '1px solid #e5e7eb',
     display: 'flex',
     flexDirection: 'column',
-    gap: '1rem',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
-    transition: 'all 0.3s ease'
+    overflow: 'hidden'
   },
-  featureTitle: {
-    fontSize: '1.25rem',
-    fontWeight: '700',
-    margin: 0,
+
+  // Notes section (smaller)
+  notesSection: {
+    padding: '1.5rem',
+    borderBottom: '1px solid #e5e7eb',
+    flex: '0 0 auto'
+  },
+  notesSectionTitle: {
+    fontSize: '1rem',
+    fontWeight: '600',
+    color: '#111827',
+    margin: '0 0 1rem 0'
+  },
+  notesEditor: {
+    height: '200px',
+    marginBottom: '0.5rem'
+  },
+  quillEditor: {
+    height: '150px',
+    fontSize: '0.875rem'
+  },
+  notesFooter: {
     display: 'flex',
-    alignItems: 'center',
+    justifyContent: 'flex-end'
+  },
+  wordCount: {
+    fontSize: '0.75rem',
+    color: '#6b7280'
+  },
+
+  // Info section
+  infoSection: {
+    padding: '1.5rem',
+    flex: 1
+  },
+  infoTitle: {
+    fontSize: '1rem',
+    fontWeight: '600',
+    color: '#111827',
+    margin: '0 0 1rem 0'
+  },
+  infoGrid: {
+    display: 'flex',
+    flexDirection: 'column',
     gap: '0.75rem',
-    color: '#1e293b'
+    marginBottom: '1.5rem'
   },
-  featureIconContainer: {
-    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-    padding: '0.75rem',
-    borderRadius: '12px',
+  infoItem: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'space-between',
+    alignItems: 'center'
   },
-  featureIcon: {
-    color: 'white'
+  infoLabel: {
+    fontSize: '0.875rem',
+    color: '#6b7280'
   },
-  featureDescription: {
-    margin: 0,
-    color: '#64748b',
-    fontSize: '0.95rem',
-    lineHeight: '1.6',
+  infoValue: {
+    fontSize: '0.875rem',
+    color: '#111827',
     fontWeight: '500'
   },
-  summaryTypeContainer: {
-    marginTop: '0.75rem',
+  autoSaveToggle: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem'
+    alignItems: 'center',
+    gap: '0.5rem'
   },
-  summaryTypeLabel: {
-    fontSize: '0.95rem',
-    fontWeight: '600',
+  autoSaveLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    cursor: 'pointer',
+    fontSize: '0.875rem',
     color: '#374151'
   },
-  summaryTypeOptions: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '0.75rem'
-  },
-  summaryTypeOption: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    cursor: 'pointer',
-    fontSize: '0.95rem',
-    color: '#475569',
-    fontWeight: '500',
-    position: 'relative'
-  },
-  radioInput: {
+  autoSaveCheckbox: {
     display: 'none'
   },
-  radioCustom: {
+  checkboxCustom: {
     width: '16px',
     height: '16px',
-    borderRadius: '50%',
-    border: '2px solid #cbd5e1',
+    borderRadius: '3px',
+    border: '2px solid #d1d5db',
     background: 'white',
-    transition: 'all 0.2s ease',
-    position: 'relative',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    color: 'white'
   },
-  radioLabel: {
-    userSelect: 'none'
+
+  // Chat section (bottom)
+  chatSection: {
+    flexShrink: 0,
+    background: 'white',
+    borderTop: '1px solid #e5e7eb',
+    padding: '1.5rem 2rem'
   },
-  featureButton: {
-    marginTop: '1rem',
-    padding: '0.875rem 1.25rem',
-    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+  chatContainer: {
+    maxWidth: '800px',
+    margin: '0 auto'
+  },
+  chatHeader: {
+    textAlign: 'center',
+    marginBottom: '1rem'
+  },
+  chatTitle: {
+    fontSize: '1.125rem',
+    fontWeight: '600',
+    color: '#111827',
+    margin: 0
+  },
+  chatForm: {
+    marginBottom: '1rem'
+  },
+  chatInputContainer: {
+    display: 'flex',
+    gap: '0.75rem',
+    alignItems: 'center'
+  },
+  chatInput: {
+    flex: 1,
+    padding: '0.75rem 1rem',
+    border: '1px solid #d1d5db',
+    borderRadius: '24px',
+    fontSize: '0.875rem',
+    outline: 'none',
+    background: '#f9fafb'
+  },
+  chatSendButton: {
+    background: '#4f46e5',
     color: 'white',
     border: 'none',
-    borderRadius: '12px',
-    fontWeight: '600',
+    borderRadius: '50%',
+    width: '40px',
+    height: '40px',
     cursor: 'pointer',
-    fontSize: '0.95rem',
-    alignSelf: 'flex-start',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease'
+  },
+  chatNote: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: '0.5rem',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
-  },
-  buttonIcon: {
-    transition: 'transform 0.2s ease'
-  },
-  comingSoon: {
-    marginTop: '1rem',
     fontSize: '0.875rem',
-    fontStyle: 'italic',
-    color: '#64748b',
-    alignSelf: 'center',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontWeight: '500'
+    color: '#6b7280',
+    fontStyle: 'italic'
   },
-  comingSoonIcon: {
-    color: '#94a3b8'
+  chatNoteIcon: {
+    color: '#9ca3af'
   },
+
+  // Loading styles
   loadingContainer: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
     height: "100%",
-    color: "#64748b",
-    background: 'white',
-    borderRadius: '20px',
-    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)'
+    color: "#6b7280"
   },
   loadingSpinner: {
     width: "48px",
     height: "48px",
-    border: "4px solid #f1f5f9",
+    border: "4px solid #f3f4f6",
     borderRadius: "50%",
-    borderTop: "4px solid #3b82f6",
+    borderTop: "4px solid #4f46e5",
     animation: "spin 1s linear infinite",
     marginBottom: "1.5rem",
   },
   loadingText: {
     fontSize: '1.1rem',
-    fontWeight: '600',
-    color: '#475569'
+    fontWeight: '500'
   }
 };

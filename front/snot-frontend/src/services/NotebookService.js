@@ -494,172 +494,150 @@ _cleanupDeletedNotebookTags(notebookId) {
 }
 
 /**
- * Get a single notebook by ID - Updated to handle your actual API response format
- * @param {string} notebookId - ID of the notebook to retrieve
- * @param {Object} options - Optional parameters
- * @param {number} options.chunk - Specific chunk to retrieve (0-based index)
- * @param {boolean} options.all - If true, return all chunks
- * @returns {Promise<object>} - The notebook data
+ * Fetch a notebook and return it in the unified UI-friendly shape
+ *
+ * @param {string}  notebookId               – required notebook ID
+ * @param {Object=} options
+ * @param {number=} options.chunk            – 0-based chunk index to return
+ * @param {boolean=} options.all             – if true, return **all** chunks
+ * @returns {Promise<object>}                – formatted notebook
  */
 async getNotebook(notebookId, options = {}) {
-    try {
-        // Make sure notebookId is defined
-        if (!notebookId) {
-            throw new Error("Notebook ID is required");
-        }
-
-        console.log(`📖 Fetching notebook: ${notebookId}`);
-
-        // Get auth headers - Lambda will extract email from JWT automatically
-        const headers = await authService.getAuthHeaders();
-        
-        // Validate we have an auth token
-        if (!headers.Authorization) {
-            throw new Error("Authentication required - please login");
-        }
-
-        // Create query parameters based on options only
-        const params = {};
-
-        // Add optional chunk parameter if specified
-        if (options.chunk !== undefined && options.chunk !== null) {
-            params.chunk = options.chunk;
-        }
-
-        // Add optional all parameter if specified
-        if (options.all === true) {
-            params.all = 'true';
-        }
-
-        console.log("Request params:", params);
-        
-        // Make the API call - Lambda will extract email from JWT token
-        const response = await axios.get(
-            `${this.baseUrl}/getNotebook/${notebookId}`,
-            {
-                headers: {
-                    'Authorization': headers.Authorization,
-                    'Content-Type': 'application/json'
-                },
-                params: params
-            }
-        );
-
-        console.log("✅ Response received successfully");
-        console.log("Raw API Response:", response.data);
-
-        // Parse the response - Your Lambda returns a JSON string in the body
-        let parsedData;
-        if (typeof response.data === 'string') {
-            parsedData = JSON.parse(response.data);
-        } else if (response.data.body && typeof response.data.body === 'string') {
-            // Handle Lambda response format with statusCode, headers, body
-            parsedData = JSON.parse(response.data.body);
-        } else {
-            parsedData = response.data;
-        }
-
-        console.log("Parsed notebook data:", parsedData);
-
-        // Validate response structure - Updated for your format
-        if (!parsedData.metadata) {
-            throw new Error("Invalid response format - missing metadata");
-        }
-
-        // Add tags from localStorage if needed
-        try {
-            const localTags = localStorage.getItem('notebookTags');
-            if (localTags) {
-                const notebookTags = JSON.parse(localTags);
-                if (notebookId && notebookTags[notebookId] && 
-                    (!parsedData.metadata?.tags || !parsedData.metadata.tags.length)) {
-                    parsedData.metadata.tags = notebookTags[notebookId];
-                }
-            }
-        } catch (e) {
-            console.error("Failed to retrieve tags from localStorage:", e);
-        }
-
-        // Get the content from first chunk by default
-        let content = '';
-        if (parsedData.chunks && parsedData.chunks['0']) {
-            content = parsedData.chunks['0'];
-        }
-
-        // Format files from the response - Use the detailed files array
-        let formattedFiles = [];
-        if (parsedData.files && Array.isArray(parsedData.files)) {
-            formattedFiles = parsedData.files.map(file => ({
-                id: file.fileId,
-                name: file.fileName,
-                size: file.fileSize,
-                sizeFormatted: file.fileSizeFormatted,
-                type: file.type,
-                extension: file.fileExtension,
-                mimeType: file.mimeType,
-                lastModified: file.uploadedAt,
-                uploadedAt: file.uploadedAt,
-                isValid: file.isValidFile,
-                downloadUrl: file.downloadUrl,
-                s3Key: file.s3Key,
-                s3Url: file.s3Url
-            }));
-        }
-
-        // Format the notebook into a standard structure
-        const formattedNotebook = {
-            notebookId: parsedData.metadata.notebookId || notebookId,
-            title: parsedData.metadata?.title || 'Untitled Notebook',
-            content: content,
-            tags: parsedData.metadata?.tags || [],
-            connections: parsedData.metadata?.connections || [],
-            preview: parsedData.metadata?.preview || '',
-            createdAt: parsedData.metadata?.createdAt || new Date().toISOString(),
-            updatedAt: parsedData.metadata?.updatedAt || new Date().toISOString(),
-            createdBy: parsedData.metadata?.createdBy,
-            wordCount: parsedData.metadata?.wordCount || 0,
-            byteSize: parsedData.metadata?.byteSize || 0,
-            chunkCount: parsedData.metadata?.chunkCount || 1,
-            allChunks: parsedData.chunks || {},
-            // Add files information from your API response
-            files: formattedFiles,
-            filesCount: parsedData.filesCount || 0,
-            filesSummary: parsedData.filesSummary || null
-        };
-
-        console.log("✅ Notebook formatted successfully");
-        console.log("Files found:", formattedNotebook.files.length);
-        console.log("Files summary:", formattedNotebook.filesSummary);
-        
-        return formattedNotebook;
-
-    } catch (error) {
-        console.error('❌ Error fetching notebook:', error);
-        
-        if (error.response) {
-            console.error('Response status:', error.response.status);
-            console.error('Response data:', error.response.data);
-            
-            // Handle specific error cases with user-friendly messages
-            if (error.response.status === 401) {
-                throw new Error('Please login to access this notebook');
-            } else if (error.response.status === 403) {
-                throw new Error('You don\'t have permission to access this notebook');
-            } else if (error.response.status === 404) {
-                throw new Error('Notebook not found');
-            } else if (error.response.status === 500) {
-                throw new Error('Server error - please try again in a moment');
-            }
-        } else if (error.message.includes('Network Error')) {
-            throw new Error('Connection error - please check your internet connection');
-        }
-        
-        throw error;
+  try {
+    /* ---------- sanity checks ---------- */
+    if (!notebookId) {
+      throw new Error('Notebook ID is required');
     }
+
+    console.log(`📖 Fetching notebook: ${notebookId}`);
+
+    /* ---------- auth & user ---------- */
+    // 1. Get the pre-existing auth header from your auth service
+    const authHeaders = await authService.getAuthHeaders();
+    if (!authHeaders?.Authorization) {
+      throw new Error('Authentication required – please login');
+    }
+
+    // 2. Always attach the user's e-mail in X-User-Email
+    const userEmail =
+      authService.getUserData()?.email?.toLowerCase() || 'guest@example.com';
+
+    /* ---------- query parameters ---------- */
+    const params = {};
+    if (options.chunk !== undefined && options.chunk !== null) {
+      params.chunk = options.chunk;
+    }
+    if (options.all === true) {
+      params.all = 'true';
+    }
+    console.log('Request params:', params);
+
+    /* ---------- make the call ---------- */
+    const response = await axios.get(
+      `${this.baseUrl}/getNotebook/${notebookId}`,
+      {
+        headers: {
+          Authorization: authHeaders.Authorization,
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail // <-- NEW single-source identifier
+        },
+        params
+      }
+    );
+
+    console.log('✅ Raw API response received');
+    console.log(response.data);
+
+    /* ---------- normalise the Lambda payload ---------- */
+    let data;
+    if (typeof response.data === 'string') {
+      data = JSON.parse(response.data);
+    } else if (response.data.body && typeof response.data.body === 'string') {
+      data = JSON.parse(response.data.body); // APIGW proxy wrapper
+    } else {
+      data = response.data;
+    }
+    console.log('Parsed notebook data:', data);
+
+    if (!data.metadata) {
+      throw new Error('Invalid response format – missing metadata');
+    }
+
+    /* ---------- restore local tags (optional) ---------- */
+    try {
+      const tagCache = JSON.parse(localStorage.getItem('notebookTags') || '{}');
+      if (
+        tagCache[notebookId] &&
+        (!data.metadata.tags || !data.metadata.tags.length)
+      ) {
+        data.metadata.tags = tagCache[notebookId];
+      }
+    } catch (e) {
+      console.warn('Tag cache read failed:', e);
+    }
+
+    /* ---------- extract first chunk & files ---------- */
+    const firstChunk = data.chunks?.['0'] || '';
+
+    const files =
+      (data.files || []).map(f => ({
+        id: f.fileId,
+        name: f.fileName,
+        size: f.fileSize,
+        sizeFormatted: f.fileSizeFormatted,
+        type: f.type,
+        extension: f.fileExtension,
+        mimeType: f.mimeType,
+        lastModified: f.uploadedAt,
+        uploadedAt: f.uploadedAt,
+        isValid: f.isValidFile,
+        downloadUrl: f.downloadUrl,
+        s3Key: f.s3Key,
+        s3Url: f.s3Url
+      })) || [];
+
+    /* ---------- final "view model" ---------- */
+    const notebook = {
+      notebookId: data.metadata.notebookId || notebookId,
+      title: data.metadata.title || 'Untitled Notebook',
+      content: firstChunk,
+      tags: data.metadata.tags || [],
+      connections: data.metadata.connections || [],
+      preview: data.metadata.preview || '',
+      createdAt: data.metadata.createdAt || new Date().toISOString(),
+      updatedAt: data.metadata.updatedAt || new Date().toISOString(),
+      createdBy: data.metadata.createdBy,
+      wordCount: data.metadata.wordCount || 0,
+      byteSize: data.metadata.byteSize || 0,
+      chunkCount: data.metadata.chunkCount || 1,
+      allChunks: data.chunks || {},
+      files,
+      filesCount: data.filesCount || files.length,
+      filesSummary: data.filesSummary || null
+    };
+
+    console.log('✅ Notebook formatted successfully');
+    return notebook;
+  } catch (error) {
+    /* ---------- friendly error mapping ---------- */
+    console.error('❌ getNotebook error:', error);
+
+    if (error.response) {
+      const { status } = error.response;
+      if (status === 401) throw new Error('Please login to access this notebook');
+      if (status === 403) throw new Error('You do not have permission');
+      if (status === 404) throw new Error('Notebook not found');
+      if (status === 500) throw new Error('Server error – please retry later');
+    } else if (error.message.includes('Network Error')) {
+      throw new Error('Network problem – check your connection');
+    }
+
+    throw error; // fallback
+  }
 }
 
 /**
- * Upload files to a notebook
+ * Upload files to a notebook - Fixed to match Lambda expectations
  * @param {string} notebookId - ID of the notebook
  * @param {FileList|File[]} files - Files to upload
  * @returns {Promise<object[]>} - Array of upload results
@@ -684,9 +662,19 @@ async uploadFiles(notebookId, files) {
       throw new Error("Authentication required - please login");
     }
 
+    // Get user email for X-User-Email header (this is what the Lambda expects)
+    const userData = authService.getUserData();
+    const userEmail = userData?.email;
+    
+    if (!userEmail || !userEmail.includes('@')) {
+      throw new Error("Valid user email required - please login again");
+    }
+
+    console.log(`📧 Using user email: ${userEmail}`);
+
     // Process each file
     const uploadPromises = Array.from(files).map(async (file) => {
-      return await this.uploadSingleFile(notebookId, file, headers);
+      return await this.uploadSingleFile(notebookId, file, headers, userEmail);
     });
 
     // Wait for all uploads to complete
@@ -723,13 +711,14 @@ async uploadFiles(notebookId, files) {
 }
 
 /**
- * Upload a single file
+ * Upload a single file - Fixed to match Lambda expectations
  * @param {string} notebookId - Notebook ID
  * @param {File} file - File object
  * @param {object} headers - Auth headers
+ * @param {string} userEmail - User email for X-User-Email header
  * @returns {Promise<object>} - Upload result
  */
-async uploadSingleFile(notebookId, file, headers) {
+async uploadSingleFile(notebookId, file, headers, userEmail) {
   try {
     // Validate file size (50MB limit)
     const MAX_SIZE = 50 * 1024 * 1024;
@@ -757,16 +746,25 @@ async uploadSingleFile(notebookId, file, headers) {
       contentType: file.type || this.getContentTypeFromExtension(fileExt)
     };
 
-    // Make the upload request
+    console.log("Upload request headers:", {
+      'Authorization': 'Bearer [TOKEN]',
+      'Content-Type': 'application/json',
+      'X-User-Email': userEmail
+    });
+
+    // Make the upload request with X-User-Email header (as Lambda expects)
     const response = await axios.post(
       `${this.baseUrl}/uploadFiles/${notebookId}`,
       payload,
       {
         headers: {
           'Authorization': headers.Authorization,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail,  // This is the key fix - Lambda expects this header
+          'Accept': 'application/json'
         },
-        timeout: 60000 // 60 second timeout for large files
+        timeout: 60000, // 60 second timeout for large files
+        withCredentials: false  // Explicitly set for CORS
       }
     );
 
@@ -802,7 +800,11 @@ async uploadSingleFile(notebookId, file, headers) {
         throw new Error('Notebook not found');
       } else if (error.response.status === 413) {
         throw new Error('File too large - maximum 50MB allowed');
+      } else if (error.response.status === 500) {
+        throw new Error('Server error - please try again in a moment');
       }
+    } else if (error.message.includes('Network Error')) {
+      throw new Error('Connection error - please check your internet connection');
     }
     
     throw error;
