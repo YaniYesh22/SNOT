@@ -1,0 +1,21 @@
+# requirements.txt for CNVmp3 YouTube Downloader API
+
+# FastAPI and web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.2
+python-multipart==0.0.6
+
+# Selenium for web automation
+selenium==4.15.2
+webdriver-manager==4.0.1
+
+# HTTP requests
+requests==2.31.0
+
+# AWS S3 (optional)
+boto3==1.34.34
+botocore==1.34.34
+
+# Additional utilities
+python-dotenv==1.0.0

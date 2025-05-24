@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  cnvmp3-api:
+    build: .
+    container_name: cnvmp3-youtube-downloader
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+
+    # 👉 Load every variable from .env
+    env_file:
+      - .env
+
+    # Still OK to hard-code or override a few:
+    environment:
+      - TEMP_DIR=/tmp/cnvmp3_downloads
+      - DISPLAY=:99
+
+    volumes:
+      - cnvmp3_downloads:/tmp/cnvmp3_downloads
+      - .:/app
+      - /dev/shm:/dev/shm
+
+    shm_size: 2gb
+    security_opt:
+      - seccomp:unconfined
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  cnvmp3_downloads:
+    driver: local
+
+networks:
+  default:
+    name: cnvmp3_network
