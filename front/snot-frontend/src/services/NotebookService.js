@@ -571,7 +571,7 @@ async getNotebook(notebookId, options = {}) {
         headers: {
           Authorization: authHeaders.Authorization,
           'Content-Type': 'application/json',
-          'X-User-Email': userEmail // <-- NEW single-source identifier
+          'X-User-Email': userEmail
         },
         params
       }

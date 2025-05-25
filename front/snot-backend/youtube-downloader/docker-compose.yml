@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   cnvmp3-api:
     build: .

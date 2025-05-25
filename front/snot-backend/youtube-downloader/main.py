@@ -140,19 +140,17 @@ class CNVDownloader:
         self.s3_client = None
         
         # Initialize S3 if configured
-        if all([AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_BUCKET]):
-            try:
-                self.s3_client = boto3.client(
-                    's3',
-                    region_name=AWS_REGION,
-                    aws_access_key_id=AWS_ACCESS_KEY_ID,
-                    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
-                )
-                self.s3_client.head_bucket(Bucket=S3_BUCKET)
-                print("✅ S3 configured successfully")
-            except Exception as e:
-                print(f"⚠️ S3 setup failed: {e}")
-                self.s3_client = None
+        
+        try:
+            self.s3_client = boto3.client("s3", region_name=AWS_REGION)
+            self.s3_client.get_bucket_location(Bucket=S3_BUCKET)
+            print("✅ S3 configured OK")
+        except ClientError as e:
+            if e.response["Error"]["Code"] in ("403", "AccessDenied"):
+                print("🚫 S3 credentials lack ListBucket/GetBucketLocation")
+            else:
+                print(f"⚠️  S3 setup failed: {e}")
+            self.s3_client = None
     
     def create_driver(self):
         """Create Chrome WebDriver with automatic driver management"""
