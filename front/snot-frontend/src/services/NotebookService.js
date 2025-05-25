@@ -147,16 +147,12 @@ async getNotebooks() {
 }
 
  /**
- * Update an existing notebook
+ * Update an existing notebook - Fixed to match Lambda expectations
  * @param {string} notebookId - ID of the notebook to update
  * @param {object} notebookData - Updated notebook data
  * @returns {Promise<object>} - The updated notebook
  */
 async updateNotebook(notebookId, notebookData) {
-  // Get user data outside try block so it's accessible everywhere
-  const userData = authService.getUserData();
-  const userEmail = userData?.email || 'guest';
-  
   // Make sure notebookId is defined and valid
   if (!notebookId) {
     console.error("Missing notebookId in updateNotebook call");
@@ -174,6 +170,21 @@ async updateNotebook(notebookId, notebookData) {
   try {
     // Get auth headers
     const headers = await authService.getAuthHeaders();
+    
+    // Validate we have an auth token
+    if (!headers.Authorization) {
+      throw new Error("Authentication required - please login");
+    }
+
+    // Get user email for X-User-Email header (this is what the Lambda expects)
+    const userData = authService.getUserData();
+    const userEmail = userData?.email;
+    
+    if (!userEmail || !userEmail.includes('@')) {
+      throw new Error("Valid user email required - please login again");
+    }
+
+    console.log(`📧 Using user email: ${userEmail}`);
 
     // Create a simplified payload that matches the Lambda function's expectations
     const payload = {
@@ -208,25 +219,29 @@ async updateNotebook(notebookId, notebookData) {
     
     console.log("Updating notebook with payload:", payload);
     console.log("Request URL:", `${this.baseUrl}/updateNotebook/${notebookId}/update`);
-    console.log("Headers:", {
-      'Authorization': headers.Authorization ? 'Bearer [TOKEN]' : 'Missing',
-      'Content-Type': 'application/json'
+    console.log("Request headers:", {
+      'Authorization': 'Bearer [TOKEN]',
+      'Content-Type': 'application/json',
+      'X-User-Email': userEmail
     });
 
-    // Make the request
+    // Make the request with X-User-Email header (as Lambda expects)
     const response = await axios.post(
       `${this.baseUrl}/updateNotebook/${notebookId}/update`,
       payload,
       { 
         headers: {
           'Authorization': headers.Authorization,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail,  // This is the key fix - Lambda expects this header
+          'Accept': 'application/json'
         },
-        timeout: 30000 // 30 second timeout
+        timeout: 30000, // 30 second timeout
+        withCredentials: false  // Explicitly set for CORS
       }
     );
 
-    console.log("API Response:", response.data);
+    console.log("✅ Update API Response:", response.data);
 
     // Update localStorage for consistency and fallback
     this._updateNotebookInLocalStorage(notebookId, {
@@ -239,29 +254,46 @@ async updateNotebook(notebookId, notebookData) {
 
     return response.data;
   } catch (error) {
-    console.error('Error updating notebook:', error);
+    console.error('❌ Error updating notebook:', error);
     
     // Enhanced error logging
     if (error.response) {
-      console.error('Error status:', error.response.status);
-      console.error('Error details:', error.response.data);
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
       console.error('Response headers:', error.response.headers);
+      
+      // Handle specific error cases with user-friendly messages
+      if (error.response.status === 401) {
+        throw new Error('Please login to update this notebook');
+      } else if (error.response.status === 403) {
+        throw new Error('You don\'t have permission to update this notebook');
+      } else if (error.response.status === 404) {
+        throw new Error('Notebook not found');
+      } else if (error.response.status === 500) {
+        throw new Error('Server error - please try again in a moment');
+      }
     } else if (error.request) {
       console.error('No response received:', error.request);
+      throw new Error('Connection error - please check your internet connection');
     } else {
       console.error('Error creating request:', error.message);
     }
     
-    // Use localStorage as fallback
-    const result = this._updateNotebookInLocalStorage(notebookId, {
-      chunkContent: notebookData.Content || notebookData.content,
-      title: notebookData.Title || notebookData.title,
-      tags: notebookData.tags,
-      files: notebookData.files,
-      links: notebookData.links
-    });
+    // Use localStorage as fallback for connection errors
+    if (error.message.includes('Network Error') || error.message.includes('Connection error')) {
+      console.log("📝 Using localStorage fallback due to connection error");
+      const result = this._updateNotebookInLocalStorage(notebookId, {
+        chunkContent: notebookData.Content || notebookData.content,
+        title: notebookData.Title || notebookData.title,
+        tags: notebookData.tags,
+        files: notebookData.files,
+        links: notebookData.links
+      });
+      
+      return result;
+    }
     
-    return result;
+    throw error;
   }
 }
 
