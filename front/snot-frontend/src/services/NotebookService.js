@@ -669,7 +669,7 @@ async getNotebook(notebookId, options = {}) {
 }
 
 /**
- * Upload files to a notebook - Fixed to match Lambda expectations
+ * Upload files to a notebook - Updated for batch upload
  * @param {string} notebookId - ID of the notebook
  * @param {FileList|File[]} files - Files to upload
  * @returns {Promise<object[]>} - Array of upload results
@@ -704,30 +704,86 @@ async uploadFiles(notebookId, files) {
 
     console.log(`📧 Using user email: ${userEmail}`);
 
-    // Process each file
-    const uploadPromises = Array.from(files).map(async (file) => {
-      return await this.uploadSingleFile(notebookId, file, headers, userEmail);
+    // Validate all files first
+    const validationResults = await this.validateFilesForUpload(files);
+    
+    if (validationResults.errors.length > 0) {
+      return {
+        successful: [],
+        failed: validationResults.errors.map(error => ({
+          fileName: error.fileName,
+          error: error.error
+        })),
+        totalUploaded: 0,
+        totalFailed: validationResults.errors.length
+      };
+    }
+
+    // Convert all files to base64 and prepare payload
+    const filePromises = validationResults.validFiles.map(async (file) => {
+      const base64Content = await this.fileToBase64(file);
+      const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+      
+      return {
+        fileName: file.name,
+        fileContent: base64Content,
+        contentType: file.type || this.getContentTypeFromExtension(fileExt)
+      };
     });
 
-    // Wait for all uploads to complete
-    const results = await Promise.allSettled(uploadPromises);
-    
-    // Process results
-    const successful = [];
-    const failed = [];
-    
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        successful.push(result.value);
-      } else {
-        failed.push({
-          fileName: files[index].name,
-          error: result.reason.message || 'Upload failed'
-        });
+    // Wait for all files to be converted to base64
+    const filesData = await Promise.all(filePromises);
+
+    // Create the batch upload payload
+    const payload = {
+      files: filesData
+    };
+
+    console.log("Batch upload request headers:", {
+      'Authorization': 'Bearer [TOKEN]',
+      'Content-Type': 'application/json',
+      'X-User-Email': userEmail
+    });
+
+    console.log(`Uploading ${filesData.length} files in batch to notebook ${notebookId}`);
+
+    // Make the batch upload request
+    const response = await axios.post(
+      `${this.baseUrl}/uploadFiles/${notebookId}`,
+      payload,
+      {
+        headers: {
+          'Authorization': headers.Authorization,
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail,
+          'Accept': 'application/json'
+        },
+        timeout: 120000, // 2 minute timeout for batch uploads
+        withCredentials: false
       }
-    });
+    );
 
-    console.log(`✅ Upload complete: ${successful.length} successful, ${failed.length} failed`);
+    console.log(`✅ Batch upload completed successfully`);
+    console.log("Batch upload response:", response.data);
+
+    // Process the response - assuming the API returns an array of results
+    const uploadResults = response.data.files || response.data.results || [];
+    
+    const successful = uploadResults
+      .filter(result => result.success !== false && result.fileId)
+      .map(result => ({
+        ...result,
+        originalFile: validationResults.validFiles.find(f => f.name === result.fileName)
+      }));
+    
+    const failed = uploadResults
+      .filter(result => result.success === false || !result.fileId)
+      .map(result => ({
+        fileName: result.fileName,
+        error: result.error || 'Upload failed'
+      }));
+
+    console.log(`✅ Batch upload complete: ${successful.length} successful, ${failed.length} failed`);
     
     return {
       successful,
@@ -737,13 +793,74 @@ async uploadFiles(notebookId, files) {
     };
 
   } catch (error) {
-    console.error('❌ Error in file upload process:', error);
-    throw error;
+    console.error('❌ Error in batch file upload:', error);
+    
+    // Create failed results for all files
+    const allFiles = Array.from(files);
+    const failed = allFiles.map(file => ({
+      fileName: file.name,
+      error: error.message || 'Upload failed'
+    }));
+
+    return {
+      successful: [],
+      failed,
+      totalUploaded: 0,
+      totalFailed: failed.length
+    };
   }
 }
 
 /**
- * Upload a single file - Fixed to match Lambda expectations
+ * Validate files for upload - Helper method
+ * @param {FileList|File[]} files - Files to validate
+ * @returns {Promise<object>} - Validation results
+ */
+async validateFilesForUpload(files) {
+  const validFiles = [];
+  const errors = [];
+  const allowedExtensions = ['.pdf', '.doc', '.docx', '.csv', '.xlsx', '.xls'];
+  const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+
+  Array.from(files).forEach(file => {
+    const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+    
+    // Check file type
+    if (!allowedExtensions.includes(fileExt)) {
+      errors.push({
+        fileName: file.name,
+        error: `Unsupported file type (${fileExt}). Allowed: ${allowedExtensions.join(', ')}`
+      });
+      return;
+    }
+    
+    // Check file size
+    if (file.size > MAX_SIZE) {
+      errors.push({
+        fileName: file.name,
+        error: `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB, max 50MB)`
+      });
+      return;
+    }
+    
+    // Check if file is not empty
+    if (file.size === 0) {
+      errors.push({
+        fileName: file.name,
+        error: 'File is empty'
+      });
+      return;
+    }
+    
+    validFiles.push(file);
+  });
+
+  return { validFiles, errors };
+}
+
+/**
+ * DEPRECATED: Upload a single file (keeping for backward compatibility)
+ * This method is now deprecated in favor of batch uploads
  * @param {string} notebookId - Notebook ID
  * @param {File} file - File object
  * @param {object} headers - Auth headers
@@ -751,95 +868,17 @@ async uploadFiles(notebookId, files) {
  * @returns {Promise<object>} - Upload result
  */
 async uploadSingleFile(notebookId, file, headers, userEmail) {
-  try {
-    // Validate file size (50MB limit)
-    const MAX_SIZE = 50 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-      throw new Error(`File "${file.name}" exceeds 50MB limit`);
-    }
-
-    // Validate file type
-    const allowedExtensions = ['.pdf', '.doc', '.docx', '.csv', '.xlsx', '.xls'];
-    const fileExt = '.' + file.name.split('.').pop().toLowerCase();
-    
-    if (!allowedExtensions.includes(fileExt)) {
-      throw new Error(`File type "${fileExt}" not supported. Allowed: ${allowedExtensions.join(', ')}`);
-    }
-
-    console.log(`📤 Uploading file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
-
-    // Convert file to base64
-    const base64Content = await this.fileToBase64(file);
-
-    // Prepare the request payload
-    const payload = {
-      fileName: file.name,
-      fileContent: base64Content,
-      contentType: file.type || this.getContentTypeFromExtension(fileExt)
-    };
-
-    console.log("Upload request headers:", {
-      'Authorization': 'Bearer [TOKEN]',
-      'Content-Type': 'application/json',
-      'X-User-Email': userEmail
-    });
-
-    // Make the upload request with X-User-Email header (as Lambda expects)
-    const response = await axios.post(
-      `${this.baseUrl}/uploadFiles/${notebookId}`,
-      payload,
-      {
-        headers: {
-          'Authorization': headers.Authorization,
-          'Content-Type': 'application/json',
-          'X-User-Email': userEmail,  // This is the key fix - Lambda expects this header
-          'Accept': 'application/json'
-        },
-        timeout: 60000, // 60 second timeout for large files
-        withCredentials: false  // Explicitly set for CORS
-      }
-    );
-
-    console.log(`✅ File uploaded successfully: ${file.name}`);
-    console.log("Upload response:", response.data);
-    
-    return {
-      ...response.data.file,
-      originalFile: {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified
-      }
-    };
-
-  } catch (error) {
-    console.error(`❌ Error uploading file "${file.name}":`, error);
-    
-    if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', error.response.data);
-      
-      // Handle specific error cases
-      if (error.response.status === 400) {
-        const errorDetails = error.response.data.details || [error.response.data.error];
-        throw new Error(`File validation failed: ${errorDetails.join(', ')}`);
-      } else if (error.response.status === 401) {
-        throw new Error('Authentication required - please login');
-      } else if (error.response.status === 403) {
-        throw new Error('You don\'t have permission to upload to this notebook');
-      } else if (error.response.status === 404) {
-        throw new Error('Notebook not found');
-      } else if (error.response.status === 413) {
-        throw new Error('File too large - maximum 50MB allowed');
-      } else if (error.response.status === 500) {
-        throw new Error('Server error - please try again in a moment');
-      }
-    } else if (error.message.includes('Network Error')) {
-      throw new Error('Connection error - please check your internet connection');
-    }
-    
-    throw error;
+  console.warn('uploadSingleFile is deprecated. Use uploadFiles for batch processing.');
+  
+  // Convert single file to batch and use the new method
+  const result = await this.uploadFiles(notebookId, [file]);
+  
+  if (result.successful.length > 0) {
+    return result.successful[0];
+  } else if (result.failed.length > 0) {
+    throw new Error(result.failed[0].error);
+  } else {
+    throw new Error('Upload failed for unknown reason');
   }
 }
 

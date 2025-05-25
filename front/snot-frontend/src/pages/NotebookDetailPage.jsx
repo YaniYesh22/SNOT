@@ -1,10 +1,11 @@
 import 'react-quill/dist/quill.snow.css';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import UploadConfirmationModal from '../components/UploadConfirmationModal';
+
 import ReactQuill from 'react-quill';
 import Sidebar from '../components/Sidebar';
+import UploadConfirmationModal from '../components/UploadConfirmationModal';
 import notebookService from '../services/NotebookService';
 
 export default function NotebookDetailPage() {
@@ -41,7 +42,7 @@ export default function NotebookDetailPage() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [summaryType, setSummaryType] = useState('normal');
   const [chatMessage, setChatMessage] = useState('');
-
+  
   // Updated state variables for the new upload confirmation flow
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [filesToUpload, setFilesToUpload] = useState([]);
@@ -71,39 +72,39 @@ export default function NotebookDetailPage() {
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
   };
 
-  // Add this new function after getWordCount
-const validateFiles = (fileList) => {
-  const validFiles = [];
-  const errors = [];
-  const allowedExtensions = ['.pdf', '.doc', '.docx', '.csv', '.xlsx', '.xls'];
-  const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+  // File validation function
+  const validateFiles = (fileList) => {
+    const validFiles = [];
+    const errors = [];
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.csv', '.xlsx', '.xls'];
+    const MAX_SIZE = 50 * 1024 * 1024; // 50MB
 
-  Array.from(fileList).forEach(file => {
-    const fileExt = '.' + file.name.split('.').pop().toLowerCase();
-    
-    // Check file type
-    if (!allowedExtensions.includes(fileExt)) {
-      errors.push(`${file.name}: Unsupported file type (${fileExt})`);
-      return;
-    }
-    
-    // Check file size
-    if (file.size > MAX_SIZE) {
-      errors.push(`${file.name}: File too large (${(file.size / 1024 / 1024).toFixed(1)}MB, max 50MB)`);
-      return;
-    }
-    
-    // Check if file is not empty
-    if (file.size === 0) {
-      errors.push(`${file.name}: File is empty`);
-      return;
-    }
-    
-    validFiles.push(file);
-  });
+    Array.from(fileList).forEach(file => {
+      const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+      
+      // Check file type
+      if (!allowedExtensions.includes(fileExt)) {
+        errors.push(`${file.name}: Unsupported file type (${fileExt})`);
+        return;
+      }
+      
+      // Check file size
+      if (file.size > MAX_SIZE) {
+        errors.push(`${file.name}: File too large (${(file.size / 1024 / 1024).toFixed(1)}MB, max 50MB)`);
+        return;
+      }
+      
+      // Check if file is not empty
+      if (file.size === 0) {
+        errors.push(`${file.name}: File is empty`);
+        return;
+      }
+      
+      validFiles.push(file);
+    });
 
-  return { validFiles, errors };
-};
+    return { validFiles, errors };
+  };
   
   // Debounce function for auto-save
   const debounce = (func, wait) => {
@@ -132,7 +133,7 @@ const validateFiles = (fileList) => {
     }
   }, [content, debouncedSave, isLoading]);
   
-  // Load notebook data (keeping your existing logic)
+  // Load notebook data
   useEffect(() => {
     const loadNotebookData = async () => {
       if (!initialNotebookId || initialNotebookId === 'temp-loading') {
@@ -183,7 +184,6 @@ const validateFiles = (fileList) => {
           }
         } catch (apiError) {
           console.error("Error loading notebook from API:", apiError);
-          // Fallback logic (keeping your existing fallback)
         }
         
         setIsLoading(false);
@@ -195,13 +195,8 @@ const validateFiles = (fileList) => {
     
     loadNotebookData();
   }, [initialNotebookId]);
-
-  useEffect(() => {
-    console.log("Current files loaded:", files.length);
-  }, [files]);
   
   const handleSave = async () => {
-    // Your existing save logic
     setIsSaving(true);
     
     try {
@@ -300,252 +295,169 @@ const validateFiles = (fileList) => {
     });
   };
 
-  // File drag and drop handlers
+  // Drag and drop handlers
   const handleDragOver = (e) => {
-  e.preventDefault();
-  setIsDraggingOver(true);
-};
+    e.preventDefault();
+    setIsDraggingOver(true);
+  };
 
   const handleDragLeave = () => {
-  setIsDraggingOver(false);
-};
+    setIsDraggingOver(false);
+  };
 
   const handleDrop = async (e) => {
-  e.preventDefault();
-  setIsDraggingOver(false);
-  
-  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    handleFileSelection(droppedFiles);
-  } else {
-    // Handle dropped URLs for links
-    const droppedText = e.dataTransfer.getData('text');
-    if (droppedText && isValidUrl(droppedText)) {
-      addLink(droppedText);
-    }
-  }
-};
-
-//   const handleFileUpload = async (filesToUpload) => {
-//     if (!notebook.notebookId || notebook.notebookId === 'temp-loading') {
-//       setFileErrors(prev => [...prev, 'Please save the notebook before uploading files']);
-//       return;
-//     }
-
-//     setUploadingFiles(true);
-//     setUploadProgress({});
+    e.preventDefault();
+    setIsDraggingOver(false);
     
-//     try {
-//       const initialProgress = {};
-//       filesToUpload.forEach(file => {
-//         initialProgress[file.name] = { status: 'uploading', progress: 0 };
-//       });
-//       setUploadProgress(initialProgress);
-      
-//       const uploadResult = await notebookService.uploadFiles(notebook.notebookId, filesToUpload);
-      
-//       const updatedProgress = { ...initialProgress };
-//       uploadResult.successful.forEach(result => {
-//         updatedProgress[result.originalFile.name] = { 
-//           status: 'completed', 
-//           progress: 100,
-//           fileId: result.fileId 
-//         };
-//       });
-      
-//       uploadResult.failed.forEach(failure => {
-//         updatedProgress[failure.fileName] = { 
-//           status: 'error', 
-//           progress: 0,
-//           error: failure.error 
-//         };
-//       });
-      
-//       setUploadProgress(updatedProgress);
-      
-//       const newFiles = uploadResult.successful.map(result => ({
-//         id: result.fileId,
-//         name: result.fileName || result.originalFile.name,
-//         size: result.fileSize || result.originalFile.size,
-//         type: result.fileType || result.originalFile.type,
-//         lastModified: new Date().toISOString(),
-//         s3Url: result.s3Url,
-//         uploadedAt: result.uploadedAt || new Date().toISOString()
-//       }));
-      
-//       setFiles(prevFiles => [...prevFiles, ...newFiles]);
-      
-//       if (uploadResult.failed.length > 0) {
-//         setFileErrors(prev => [
-//           ...prev,
-//           ...uploadResult.failed.map(failure => `${failure.fileName}: ${failure.error}`)
-//         ]);
-//       }
-      
-//       if (autoSave && newFiles.length > 0 && notebook.notebookId && notebook.notebookId !== 'temp-loading') {
-//         setTimeout(() => {
-//           handleSave();
-//         }, 1000);
-//       }
-      
-//     } catch (error) {
-//       console.error('File upload error:', error);
-//       setFileErrors(prev => [...prev, `Upload failed: ${error.message}`]);
-      
-//       const errorProgress = {};
-//       filesToUpload.forEach(file => {
-//         errorProgress[file.name] = { status: 'error', progress: 0, error: error.message };
-//       });
-//       setUploadProgress(errorProgress);
-//     } finally {
-//       setUploadingFiles(false);
-      
-//       setTimeout(() => {
-//         setUploadProgress({});
-//       }, 5000);
-//     }
-//   };
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFiles = Array.from(e.dataTransfer.files);
+      handleFileSelection(droppedFiles);
+    } else {
+      // Handle dropped URLs for links
+      const droppedText = e.dataTransfer.getData('text');
+      if (droppedText && isValidUrl(droppedText)) {
+        addLink(droppedText);
+      }
+    }
+  };
 
+  // File input change handler
   const handleFileInputChange = (e) => {
-  if (e.target.files && e.target.files.length > 0) {
-    const selectedFiles = Array.from(e.target.files);
-    handleFileSelection(selectedFiles);
-  }
-  e.target.value = ''; // Reset input
-};
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFiles = Array.from(e.target.files);
+      handleFileSelection(selectedFiles);
+    }
+    e.target.value = ''; // Reset input
+  };
 
-// New function to handle file selection and show confirmation modal
-const handleFileSelection = (selectedFiles) => {
-  // Clear previous errors
-  setFileErrors([]);
-  
-  // Validate files
-  const { validFiles, errors } = validateFiles(selectedFiles);
-  
-  if (errors.length > 0) {
-    setFileErrors(errors);
-  }
-  
-  if (validFiles.length > 0) {
-    // Show confirmation modal with valid files
-    setFilesToUpload(validFiles);
-    setShowUploadModal(true);
-  }
-};
-
-// Function to handle upload confirmation
-const handleUploadConfirm = async () => {
-  if (!notebook.notebookId || notebook.notebookId === 'temp-loading') {
-    setFileErrors(['Please save the notebook before uploading files']);
-    setShowUploadModal(false);
-    return;
-  }
-
-  setIsUploading(true);
-  setUploadProgress({});
-  
-  try {
-    console.log(`Starting upload of ${filesToUpload.length} files to notebook ${notebook.notebookId}`);
+  // New function to handle file selection and show confirmation modal
+  const handleFileSelection = (selectedFiles) => {
+    // Clear previous errors
+    setFileErrors([]);
     
-    // Initialize progress tracking
-    const initialProgress = {};
-    filesToUpload.forEach(file => {
-      initialProgress[file.name] = { status: 'uploading', progress: 0 };
-    });
-    setUploadProgress(initialProgress);
+    // Validate files
+    const { validFiles, errors } = validateFiles(selectedFiles);
     
-    // Upload files using the notebook service
-    const uploadResult = await notebookService.uploadFiles(notebook.notebookId, filesToUpload);
-    
-    // Update progress for successful uploads
-    const updatedProgress = { ...initialProgress };
-    uploadResult.successful.forEach(result => {
-      updatedProgress[result.originalFile.name] = { 
-        status: 'completed', 
-        progress: 100,
-        fileId: result.fileId 
-      };
-    });
-    
-    // Update progress for failed uploads
-    uploadResult.failed.forEach(failure => {
-      updatedProgress[failure.fileName] = { 
-        status: 'error', 
-        progress: 0,
-        error: failure.error 
-      };
-    });
-    
-    setUploadProgress(updatedProgress);
-    
-    // Add successful files to the files state
-    const newFiles = uploadResult.successful.map(result => ({
-      id: result.fileId,
-      name: result.fileName || result.originalFile.name,
-      size: result.fileSize || result.originalFile.size,
-      type: result.fileType || result.originalFile.type,
-      lastModified: new Date().toISOString(),
-      s3Url: result.s3Url,
-      uploadedAt: result.uploadedAt || new Date().toISOString()
-    }));
-    
-    setFiles(prevFiles => [...prevFiles, ...newFiles]);
-    
-    // Show errors for failed uploads
-    if (uploadResult.failed.length > 0) {
-      setFileErrors(prev => [
-        ...prev,
-        ...uploadResult.failed.map(failure => `${failure.fileName}: ${failure.error}`)
-      ]);
+    if (errors.length > 0) {
+      setFileErrors(errors);
     }
     
-    // Auto-save the notebook to include file references
-    if (autoSave && newFiles.length > 0 && notebook.notebookId && notebook.notebookId !== 'temp-loading') {
+    if (validFiles.length > 0) {
+      // Show confirmation modal with valid files
+      setFilesToUpload(validFiles);
+      setShowUploadModal(true);
+    }
+  };
+
+  // Function to handle upload confirmation
+  const handleUploadConfirm = async () => {
+    if (!notebook.notebookId || notebook.notebookId === 'temp-loading') {
+      setFileErrors(['Please save the notebook before uploading files']);
+      setShowUploadModal(false);
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress({});
+    
+    try {
+      // Initialize progress tracking
+      const initialProgress = {};
+      filesToUpload.forEach(file => {
+        initialProgress[file.name] = { status: 'uploading', progress: 0 };
+      });
+      setUploadProgress(initialProgress);
+      
+      // Upload files using the notebook service
+      const uploadResult = await notebookService.uploadFiles(notebook.notebookId, filesToUpload);
+      
+      // Update progress for successful uploads
+      const updatedProgress = { ...initialProgress };
+      uploadResult.successful.forEach(result => {
+        updatedProgress[result.originalFile.name] = { 
+          status: 'completed', 
+          progress: 100,
+          fileId: result.fileId 
+        };
+      });
+      
+      // Update progress for failed uploads
+      uploadResult.failed.forEach(failure => {
+        updatedProgress[failure.fileName] = { 
+          status: 'error', 
+          progress: 0,
+          error: failure.error 
+        };
+      });
+      
+      setUploadProgress(updatedProgress);
+      
+      // Add successful files to the files state
+      const newFiles = uploadResult.successful.map(result => ({
+        id: result.fileId,
+        name: result.fileName || result.originalFile.name,
+        size: result.fileSize || result.originalFile.size,
+        type: result.fileType || result.originalFile.type,
+        lastModified: new Date().toISOString(),
+        s3Url: result.s3Url,
+        uploadedAt: result.uploadedAt || new Date().toISOString()
+      }));
+      
+      setFiles(prevFiles => [...prevFiles, ...newFiles]);
+      
+      // Show errors for failed uploads
+      if (uploadResult.failed.length > 0) {
+        setFileErrors(prev => [
+          ...prev,
+          ...uploadResult.failed.map(failure => `${failure.fileName}: ${failure.error}`)
+        ]);
+      }
+      
+      // Auto-save the notebook to include file references
+      if (autoSave && newFiles.length > 0 && notebook.notebookId && notebook.notebookId !== 'temp-loading') {
+        setTimeout(() => {
+          handleSave();
+        }, 1000);
+      }
+      
+      // Close modal after successful upload
       setTimeout(() => {
-        handleSave();
-      }, 1000);
+        setShowUploadModal(false);
+        setFilesToUpload([]);
+      }, 1500);
+      
+    } catch (error) {
+      console.error('File upload error:', error);
+      setFileErrors(prev => [...prev, `Upload failed: ${error.message}`]);
+      
+      // Update progress to show error state
+      const errorProgress = {};
+      filesToUpload.forEach(file => {
+        errorProgress[file.name] = { status: 'error', progress: 0, error: error.message };
+      });
+      setUploadProgress(errorProgress);
+      
+      // Close modal on error
+      setTimeout(() => {
+        setShowUploadModal(false);
+        setFilesToUpload([]);
+      }, 2000);
+    } finally {
+      setIsUploading(false);
+      
+      // Clear progress after 5 seconds
+      setTimeout(() => {
+        setUploadProgress({});
+      }, 5000);
     }
-    
-    console.log(`Upload completed: ${uploadResult.totalUploaded} successful, ${uploadResult.totalFailed} failed`);
-    
-    // Close modal after successful upload
-    setTimeout(() => {
-      setShowUploadModal(false);
-      setFilesToUpload([]);
-    }, 1500);
-    
-  } catch (error) {
-    console.error('File upload error:', error);
-    setFileErrors(prev => [...prev, `Upload failed: ${error.message}`]);
-    
-    // Update progress to show error state
-    const errorProgress = {};
-    filesToUpload.forEach(file => {
-      errorProgress[file.name] = { status: 'error', progress: 0, error: error.message };
-    });
-    setUploadProgress(errorProgress);
-    
-    // Close modal on error
-    setTimeout(() => {
-      setShowUploadModal(false);
-      setFilesToUpload([]);
-    }, 2000);
-  } finally {
-    setIsUploading(false);
-    
-    // Clear progress after 5 seconds
-    setTimeout(() => {
-      setUploadProgress({});
-    }, 5000);
-  }
-};
+  };
 
-// Function to handle upload cancellation
-const handleUploadCancel = () => {
-  setShowUploadModal(false);
-  setFilesToUpload([]);
-  setUploadProgress({});
-};
+  // Function to handle upload cancellation
+  const handleUploadCancel = () => {
+    setShowUploadModal(false);
+    setFilesToUpload([]);
+    setUploadProgress({});
+  };
 
   const isValidUrl = (string) => {
     try {
@@ -667,13 +579,13 @@ const handleUploadCancel = () => {
             <p style={styles.loadingText}>Loading notebook...</p>
           </div>
           {/* Upload Confirmation Modal */}
-        <UploadConfirmationModal
-          isOpen={showUploadModal}
-          onClose={handleUploadCancel}
-          onConfirm={handleUploadConfirm}
-          files={filesToUpload}
-          isUploading={isUploading}
-        />
+          <UploadConfirmationModal
+            isOpen={showUploadModal}
+            onClose={handleUploadCancel}
+            onConfirm={handleUploadConfirm}
+            files={filesToUpload}
+            isUploading={isUploading}
+          />
         </main>
       </div>
     );
@@ -749,39 +661,23 @@ const handleUploadCancel = () => {
                 />
                 
                 <div style={styles.uploadContent}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style={styles.uploadIcon}>
-                  <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"/>
-                </svg>
-                <h3 style={styles.uploadTitle}>
-                  Ready to start? Add your sources
-                </h3>
-                <p style={styles.uploadDescription}>
-                  Drag and drop files here, or click to browse
-                </p>
-                <button 
-                  style={styles.uploadButton}
-                  onClick={() => document.getElementById('fileInput').click()}
-                >
-                  Select Files
-                </button>
-              </div>
-              </div>
-
-              {/* File Progress */}
-              {(isUploading || Object.keys(uploadProgress).length > 0) && (
-                <div style={styles.progressContainer}>
-                  {Object.entries(uploadProgress).map(([fileName, progress]) => (
-                    <div key={fileName} style={styles.progressItem}>
-                      <span style={styles.progressName}>{fileName}</span>
-                      <span style={styles.progressStatus}>
-                        {progress.status === 'uploading' && '⏳ Uploading...'}
-                        {progress.status === 'completed' && '✅ Complete'}
-                        {progress.status === 'error' && '❌ Failed'}
-                      </span>
-                    </div>
-                  ))}
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style={styles.uploadIcon}>
+                    <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"/>
+                  </svg>
+                  <h3 style={styles.uploadTitle}>
+                    Ready to start? Add your sources
+                  </h3>
+                  <p style={styles.uploadDescription}>
+                    Drag and drop files here, or click to browse
+                  </p>
+                  <button 
+                    style={styles.uploadButton}
+                    onClick={() => document.getElementById('fileInput')?.click()}
+                  >
+                    Select Files
+                  </button>
                 </div>
-              )}
+              </div>
 
               {/* Error Display */}
               {fileErrors.length > 0 && (
@@ -998,6 +894,15 @@ const handleUploadCancel = () => {
             </div>
           </div>
         </div>
+
+        {/* Upload Confirmation Modal */}
+        <UploadConfirmationModal
+          isOpen={showUploadModal}
+          onClose={handleUploadCancel}
+          onConfirm={handleUploadConfirm}
+          files={filesToUpload}
+          isUploading={isUploading}
+        />
       </main>
     </div>
   );
@@ -1126,9 +1031,9 @@ const styles = {
     padding: '3rem 2rem',
     textAlign: 'center',
     marginBottom: '2rem',
-    cursor: 'pointer',
     transition: 'all 0.3s ease',
-    background: '#fafafa'
+    background: '#fafafa',
+    cursor: 'pointer'
   },
   uploadAreaActive: {
     borderColor: '#4f46e5',
@@ -1156,43 +1061,17 @@ const styles = {
     margin: 0
   },
   uploadButton: {
-  padding: '0.75rem 1.5rem',
-  background: '#4f46e5',
-  color: 'white',
-  border: 'none',
-  borderRadius: '8px',
-  fontWeight: '500',
-  cursor: 'pointer',
-  fontSize: '0.875rem',
-  marginTop: '0.5rem',
-  transition: 'all 0.2s ease',
-  boxShadow: '0 2px 4px rgba(79, 70, 229, 0.2)'
-},
-
-  // Progress styles
-  progressContainer: {
-    background: '#f9fafb',
-    border: '1px solid #e5e7eb',
+    padding: '0.75rem 1.5rem',
+    background: '#4f46e5',
+    color: 'white',
+    border: 'none',
     borderRadius: '8px',
-    padding: '1rem',
-    marginBottom: '1rem'
-  },
-  progressItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '0.5rem 0',
-    fontSize: '0.875rem'
-  },
-  progressName: {
-    flex: 1,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    marginRight: '1rem'
-  },
-  progressStatus: {
-    fontSize: '0.875rem'
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontSize: '0.875rem',
+    marginTop: '0.5rem',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 4px rgba(79, 70, 229, 0.2)'
   },
 
   // Error styles
