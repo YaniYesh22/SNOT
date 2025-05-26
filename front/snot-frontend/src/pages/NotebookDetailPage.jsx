@@ -6,6 +6,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import Sidebar from '../components/Sidebar';
 import UploadConfirmationModal from '../components/UploadConfirmationModal';
+import LinkConfirmationModal from '../components/LinkConfirmationModal';
 import notebookService from '../services/NotebookService';
 
 export default function NotebookDetailPage() {
@@ -49,6 +50,10 @@ export default function NotebookDetailPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
   const [fileErrors, setFileErrors] = useState([]);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkToAdd,    setLinkToAdd]    = useState('');
+  const [isAddingLink, setIsAddingLink] = useState(false);
+  const [ytJobId, setYtJobId] = useState(null);
   
   // Quill editor modules configuration - simplified
   const modules = {
@@ -318,6 +323,10 @@ export default function NotebookDetailPage() {
       if (droppedText && isValidUrl(droppedText)) {
         addLink(droppedText);
       }
+      if (droppedText && isValidUrl(droppedText)) {
+        setLinkToAdd(droppedText.trim());
+        setShowLinkModal(true);
+      }
     }
   };
 
@@ -468,6 +477,14 @@ export default function NotebookDetailPage() {
     }
   };
 
+  const buildLinkObject = (url) => ({
+  id:   `link-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  url,
+  title: url,                // will show full url; improve later with OG scrape
+  addedAt: new Date().toISOString()
+});
+
+
   const addLink = (url) => {
     if (isValidUrl(url)) {
       const newLink = {
@@ -484,10 +501,68 @@ export default function NotebookDetailPage() {
 
   const handleAddLink = (e) => {
     e.preventDefault();
-    if (newLink) {
-      addLink(newLink);
+    if (!newLink) return;
+    if (!isValidUrl(newLink)) {
+      setFileErrors(prev => [...prev, '❌ Invalid URL']);
+      return;
     }
+    setLinkToAdd(newLink.trim());
+    setShowLinkModal(true);  // 🔔 open modal
   };
+
+   const handleLinkConfirm = async () => {
+   if (!linkToAdd) return;
+   setIsAddingLink(true);
+  const newObj = {
+    ...buildLinkObject(linkToAdd),
+    status: 'processing'          // 🟢 new field
+  };
+
+   setLinks(prev => [...prev, newObj]);
+   setShowLinkModal(false);
+   setNewLink('');
+   setLinkToAdd('');
+
+   try {
+      const res = await notebookService.addYouTubeLink(
+        notebook.notebookId,
+        newObj.url,
+        'mp3'
+      );
+
+      // If we reached here the request was queued/accepted.
+      // Optionally save the Lambda job-id: res.data.job_name / task_id …
+      // Later you can poll a /status endpoint and update the link object.
+
+      // Persist the optimistic list to the notebook record
+      await notebookService.updateNotebook(notebook.notebookId, {
+        links : [...links, newObj],  // merge existing + new
+        chunkNumber: 0
+      });
+
+    } catch (err) {
+      console.error('addYouTubeLink failed:', err.message);
+
+      // Only roll back on true client errors (4xx except 429)
+      const status = err.response?.status;
+      if (status && status >= 400 && status < 500 && status !== 429) {
+        setLinks(prev => prev.filter(l => l.id !== newObj.id));
+        setFileErrors(p => [...p, `Link failed: ${err.message}`]);
+      } else {
+        // keep it in “processing” state; UI shows spinner
+      }
+    } finally {
+      setIsAddingLink(false);
+    }
+
+ };
+
+
+  const handleLinkCancel = () => {
+    setShowLinkModal(false);
+    setLinkToAdd('');
+  };
+
 
   const removeFile = async (fileId) => {
     try {
@@ -754,34 +829,56 @@ export default function NotebookDetailPage() {
                   ))}
                 </div>
               )}
-
               {/* Links List */}
               {links.length > 0 && (
                 <div style={styles.linksList}>
                   <h3 style={styles.linksTitle}>Links ({links.length})</h3>
+
                   {links.map(link => (
                     <div key={link.id} style={styles.linkItem}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.linkIcon}>
-                        <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z"/>
+                      {/* link icon */}
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        style={styles.linkIcon}
+                      >
+                        <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z" />
                       </svg>
-                      <a 
-                        href={link.url} 
-                        target="_blank" 
+
+                      {/* clickable URL */}
+                      <a
+                        href={link.url}
+                        target="_blank"
                         rel="noopener noreferrer"
                         style={styles.linkText}
                         title={link.url}
                       >
                         {link.title}
                       </a>
-                      <button 
-                        onClick={() => removeLink(link.id)}
-                        style={styles.removeButton}
-                        title="Remove"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
-                        </svg>
-                      </button>
+
+                      {/* right-side control: spinner OR remove button */}
+                      {link.status === 'processing' ? (
+                        <div style={styles.linkSpinner} title="Processing…">
+                          <div style={styles.spinner16}></div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => removeLink(link.id)}
+                          style={styles.removeButton}
+                          title="Remove"
+                        >
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                          >
+                            <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -894,7 +991,6 @@ export default function NotebookDetailPage() {
             </div>
           </div>
         </div>
-
         {/* Upload Confirmation Modal */}
         <UploadConfirmationModal
           isOpen={showUploadModal}
@@ -902,6 +998,13 @@ export default function NotebookDetailPage() {
           onConfirm={handleUploadConfirm}
           files={filesToUpload}
           isUploading={isUploading}
+        />
+        <LinkConfirmationModal
+          isOpen={showLinkModal}
+          onClose={handleLinkCancel}
+          onConfirm={handleLinkConfirm}
+          link={linkToAdd}
+          isAdding={isAddingLink}
         />
       </main>
     </div>
@@ -1129,7 +1232,21 @@ const styles = {
     cursor: 'pointer',
     fontSize: '0.875rem'
   },
-
+  linkSpinner: {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '24px',
+  height: '24px'
+  },
+  spinner16: {
+    width: '16px',
+    height: '16px',
+    border: '2px solid #e5e7eb',
+    borderTop: '2px solid #3b82f6',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
+  },
   // Files list
   filesList: {
     marginBottom: '2rem'
