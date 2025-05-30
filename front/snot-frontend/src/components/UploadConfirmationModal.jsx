@@ -9,7 +9,8 @@ const UploadConfirmationModal = ({
   onClose, 
   onConfirm, 
   files, 
-  isUploading = false 
+  isUploading = false,
+  uploadProgress = {}, // Add uploadProgress prop to track individual file states
 }) => {
   if (!isOpen) return null;
 
@@ -46,6 +47,79 @@ const UploadConfirmationModal = ({
     );
   };
 
+  // Function to get the status icon for each file
+  const getFileStatusIcon = (file) => {
+    const fileProgress = uploadProgress[file.name];
+    
+    // Debug logging to help troubleshoot
+    console.log(`File: ${file.name}, Progress:`, fileProgress);
+    
+    if (!fileProgress || (!isUploading && !fileProgress?.status)) {
+      // Default pending state (orange clock)
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.pendingIcon}>
+          <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M16.2,16.2L11,13V7H12.5V12.2L17,14.9L16.2,16.2Z"/>
+        </svg>
+      );
+    }
+
+    switch (fileProgress.status) {
+      case 'uploading':
+        return (
+          <div style={styles.uploadingIndicator}>
+            <div style={styles.spinner}></div>
+          </div>
+        );
+      
+      case 'completed':
+        return (
+          <div style={styles.successIndicator}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.successIcon}>
+              <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"/>
+            </svg>
+          </div>
+        );
+      
+      case 'error':
+        return (
+          <div style={styles.errorIndicator}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.errorIcon}>
+              <path d="M12,2C17.53,2 22,6.47 22,12C22,17.53 17.53,22 12,22C6.47,22 2,17.53 2,12C2,6.47 6.47,2 12,2M15.59,7L12,10.59L8.41,7L7,8.41L10.59,12L7,15.59L8.41,17L12,13.41L15.59,17L17,15.59L13.41,12L17,8.41L15.59,7Z"/>
+            </svg>
+          </div>
+        );
+      
+      default:
+        return (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.pendingIcon}>
+            <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M16.2,16.2L11,13V7H12.5V12.2L17,14.9L16.2,16.2Z"/>
+          </svg>
+        );
+    }
+  };
+
+  // Function to get file item styling based on status
+  const getFileItemStyle = (file) => {
+    const fileProgress = uploadProgress[file.name];
+    const baseStyle = { ...styles.fileItem };
+    
+    if (fileProgress?.status === 'completed') {
+      return {
+        ...baseStyle,
+        backgroundColor: '#f0fdf4',
+        borderLeft: '3px solid #10b981'
+      };
+    } else if (fileProgress?.status === 'error') {
+      return {
+        ...baseStyle,
+        backgroundColor: '#fef2f2',
+        borderLeft: '3px solid #ef4444'
+      };
+    }
+    
+    return baseStyle;
+  };
+
   return (
     <div style={styles.modalOverlay}>
       <div style={styles.modal}>
@@ -78,30 +152,30 @@ const UploadConfirmationModal = ({
             </div>
             
             <div style={styles.filesContainer}>
-              {files.map((file, index) => (
-                <div key={index} style={styles.fileItem}>
-                  <div style={styles.fileIcon}>
-                    {getFileTypeIcon(file.name)}
-                  </div>
-                  <div style={styles.fileInfo}>
-                    <div style={styles.fileName}>{file.name}</div>
-                    <div style={styles.fileSize}>
-                      {(file.size / 1024 / 1024).toFixed(1)} MB
+              {files.map((file, index) => {
+                const fileProgress = uploadProgress[file.name];
+                return (
+                  <div key={index} style={getFileItemStyle(file)}>
+                    <div style={styles.fileIcon}>
+                      {getFileTypeIcon(file.name)}
+                    </div>
+                    <div style={styles.fileInfo}>
+                      <div style={styles.fileName}>{file.name}</div>
+                      <div style={styles.fileSize}>
+                        {(file.size / 1024 / 1024).toFixed(1)} MB
+                        {fileProgress?.status === 'error' && fileProgress?.error && (
+                          <div style={styles.errorMessage}>
+                            Error: {fileProgress.error}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div style={styles.fileStatus}>
+                      {getFileStatusIcon(file)}
                     </div>
                   </div>
-                  <div style={styles.fileStatus}>
-                    {isUploading ? (
-                      <div style={styles.uploadingIndicator}>
-                        <div style={styles.spinner}></div>
-                      </div>
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.pendingIcon}>
-                        <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M16.2,16.2L11,13V7H12.5V12.2L17,14.9L16.2,16.2Z"/>
-                      </svg>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -292,6 +366,62 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center'
   },
+  successIndicator: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '20px',
+    height: '20px',
+    backgroundColor: '#10b981',
+    borderRadius: '50%',
+    animation: 'successPulse 0.6s ease-out'
+  },
+  successIcon: {
+    color: '#ffffff'
+  },
+  errorIndicator: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '20px',
+    height: '20px',
+    backgroundColor: '#ef4444',
+    borderRadius: '50%'
+  },
+  errorIcon: {
+    color: '#ffffff'
+  },
+  errorMessage: {
+    fontSize: '0.75rem',
+    color: '#ef4444',
+    marginTop: '0.25rem',
+    fontWeight: '500'
+  },
+  testSection: {
+    marginTop: '1rem',
+    padding: '0.75rem',
+    backgroundColor: '#f0f9ff',
+    border: '1px solid #0ea5e9',
+    borderRadius: '6px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem'
+  },
+  testButton: {
+    padding: '0.5rem 1rem',
+    backgroundColor: '#0ea5e9',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    fontSize: '0.75rem',
+    cursor: 'pointer',
+    fontWeight: '500'
+  },
+  testNote: {
+    fontSize: '0.75rem',
+    color: '#0369a1',
+    fontStyle: 'italic'
+  },
   spinner: {
     width: '16px',
     height: '16px',
@@ -365,11 +495,26 @@ const styles = {
   }
 };
 
-// Add CSS animation for spinner
-const spinKeyframes = `
+// Add CSS animations
+const animations = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+  }
+  
+  @keyframes successPulse {
+    0% { 
+      transform: scale(0.8);
+      opacity: 0.8;
+    }
+    50% { 
+      transform: scale(1.1);
+      opacity: 1;
+    }
+    100% { 
+      transform: scale(1);
+      opacity: 1;
+    }
   }
 `;
 
@@ -377,7 +522,7 @@ const spinKeyframes = `
 if (!document.querySelector('#upload-modal-styles')) {
   const style = document.createElement('style');
   style.id = 'upload-modal-styles';
-  style.textContent = spinKeyframes;
+  style.textContent = animations;
   document.head.appendChild(style);
 }
 
