@@ -14,7 +14,6 @@ export default function LoginPage() {
   usePageRefreshLogout();
   
   // Check for existing sessions and clear them
-  // Check for existing sessions and clear them
   useEffect(() => {
     const clearExistingSession = async () => {
       try {
@@ -67,133 +66,103 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      height: '100vh',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#f0f2f5',
-      backgroundImage: 'linear-gradient(135deg, #f0f2f5 0%, #e2e8f0 100%)',
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
-      {/* Background decoration */}
-      <div style={{
-        position: 'absolute',
-        width: '500px',
-        height: '500px',
-        borderRadius: '50%',
-        background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%)',
-        top: '-250px',
-        left: '-150px',
-        zIndex: 0
-      }}></div>
-      <div style={{
-        position: 'absolute',
-        width: '300px',
-        height: '300px',
-        borderRadius: '50%',
-        background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(79, 70, 229, 0.08) 100%)',
-        bottom: '-100px',
-        right: '-50px',
-        zIndex: 0
-      }}></div>
+    <div style={styles.container}>
+      {/* Background Elements */}
+      <div style={styles.backgroundDecorations}>
+        {/* Animated gradient orbs */}
+        <div style={styles.orb1}></div>
+        <div style={styles.orb2}></div>
+        <div style={styles.orb3}></div>
+        
+        {/* Grid pattern overlay */}
+        <div style={styles.gridPattern}></div>
+      </div>
       
-      {/* Content */}
-      <div style={{
-        zIndex: 1,
-        maxWidth: '1200px',
-        width: '100%',
-        display: 'flex',
-        justifyContent: 'space-between',
-        padding: '0 2rem'
-      }}>
+      {/* Main Content */}
+      <div style={styles.contentWrapper}>
         {/* Left side - Branding */}
-        <div style={{
-          flex: '1',
-          maxWidth: '500px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          padding: '2rem'
-        }}>
-          <h1 style={{
-            fontSize: '2.5rem',
-            fontWeight: '700',
-            marginBottom: '1rem',
-            color: '#1e293b'
-          }}>Smart Notebook for Organized Thinking</h1>
-          <p style={{
-            fontSize: '1.1rem',
-            color: '#475569',
-            marginBottom: '2rem',
-            lineHeight: '1.6'
-          }}>
-            Connect your ideas, visualize knowledge, and let AI help you learn more effectively.
-          </p>
-          
-          <div style={{
-            marginBottom: '2rem'
-          }}>
-            <h3 style={{
-              fontSize: '1.25rem',
-              fontWeight: '600',
-              marginBottom: '1rem',
-              color: '#1e293b'
-            }}>How it works:</h3>
-            <ol style={{
-              marginLeft: '1.5rem',
-              color: '#475569',
-              lineHeight: '1.8'
-            }}>
-              <li>Sign up with your email and create a password</li>
-              <li>Check your email for a verification code</li>
-              <li>Enter the code to verify your account</li>
-              <li>Start organizing your knowledge!</li>
-            </ol>
+        <div style={styles.brandingSection}>
+          {/* Logo and brand name */}
+          <div style={styles.brandHeader}>
+            <div style={styles.brandLogoContainer}>
+              <img
+                src="/SNOTLOGO.png"
+                alt="SNOT Logo"
+                style={styles.brandLogo}
+              />
+            </div>
+            <div style={styles.brandText}>
+              <h1 style={styles.brandTitle}>SNOT</h1>
+              <p style={styles.brandTagline}>Smart Notebooks for Organized Thinking</p>
+            </div>
           </div>
           
-          <div style={{
-            display: 'flex',
-            gap: '1rem',
-            marginBottom: '2rem',
-            flexWrap: 'wrap'
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              <span style={{ fontSize: '1.5rem' }}>✉️</span>
-              <span style={{ fontWeight: '500' }}>Email Verification</span>
+          {/* Main heading */}
+          <h2 style={styles.mainTitle}>
+            Transform your ideas into
+            <span style={styles.highlightText}> organized knowledge</span>
+          </h2>
+          
+          <p style={styles.description}>
+            Connect your thoughts, visualize relationships, and let AI help you learn 
+            more effectively. Your personal knowledge companion awaits.
+          </p>
+          
+          {/* Features grid */}
+          <div style={styles.featuresGrid}>
+            <div style={styles.feature}>
+              <div style={styles.featureIcon}>
+                <span style={styles.featureEmoji}>🧠</span>
+              </div>
+              <div style={styles.featureContent}>
+                <h4 style={styles.featureTitle}>AI-Powered Insights</h4>
+                <p style={styles.featureDescription}>Let AI help organize and connect your ideas</p>
+              </div>
             </div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              <span style={{ fontSize: '1.5rem' }}>🔒</span>
-              <span style={{ fontWeight: '500' }}>Secure Access</span>
+            
+            <div style={styles.feature}>
+              <div style={styles.featureIcon}>
+                <span style={styles.featureEmoji}>🔗</span>
+              </div>
+              <div style={styles.featureContent}>
+                <h4 style={styles.featureTitle}>Knowledge Connections</h4>
+                <p style={styles.featureDescription}>Visualize relationships between concepts</p>
+              </div>
             </div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              <span style={{ fontSize: '1.5rem' }}>🧠</span>
-              <span style={{ fontWeight: '500' }}>AI-Powered Features</span>
+            
+            <div style={styles.feature}>
+              <div style={styles.featureIcon}>
+                <span style={styles.featureEmoji}>🚀</span>
+              </div>
+              <div style={styles.featureContent}>
+                <h4 style={styles.featureTitle}>Boost Productivity</h4>
+                <p style={styles.featureDescription}>Streamline your learning and research process</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Steps */}
+          <div style={styles.stepsSection}>
+            <h3 style={styles.stepsTitle}>Get started in seconds</h3>
+            <div style={styles.steps}>
+              <div style={styles.step}>
+                <div style={styles.stepNumber}>1</div>
+                <p style={styles.stepText}>Create your account</p>
+              </div>
+              <div style={styles.step}>
+                <div style={styles.stepNumber}>2</div>
+                <p style={styles.stepText}>Verify your email</p>
+              </div>
+              <div style={styles.step}>
+                <div style={styles.stepNumber}>3</div>
+                <p style={styles.stepText}>Start organizing!</p>
+              </div>
             </div>
           </div>
         </div>
         
         {/* Right side - Login/Signup Form */}
-        <div style={{
-          flex: '1',
-          maxWidth: '500px',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center'
-        }}>
+        <div style={styles.formSection}>
           {showSignup 
             ? <SignupForm onSwitch={toggleForm} onSignupSuccess={handleSignupSuccess} />
             : <ImprovedLoginForm onSubmit={handleLogin} onSwitch={toggleForm} />
@@ -202,4 +171,302 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
+
+const styles = {
+  container: {
+    minHeight: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'linear-gradient(180deg, #fefffe 0%, #f0fdfa 100%)',
+    position: 'relative',
+    overflow: 'hidden',
+    padding: '2rem 1rem'
+  },
+  
+  backgroundDecorations: {
+    position: 'absolute',
+    inset: 0,
+    overflow: 'hidden',
+    pointerEvents: 'none'
+  },
+  
+  orb1: {
+    position: 'absolute',
+    width: '600px',
+    height: '600px',
+    borderRadius: '50%',
+    background: 'radial-gradient(circle, rgba(186, 230, 253, 0.15) 0%, transparent 70%)',
+    top: '-300px',
+    left: '-200px',
+    animation: 'float 20s ease-in-out infinite'
+  },
+  
+  orb2: {
+    position: 'absolute',
+    width: '400px',
+    height: '400px',
+    borderRadius: '50%',
+    background: 'radial-gradient(circle, rgba(219, 234, 254, 0.2) 0%, transparent 70%)',
+    bottom: '-150px',
+    right: '-100px',
+    animation: 'float 15s ease-in-out infinite reverse'
+  },
+  
+  orb3: {
+    position: 'absolute',
+    width: '300px',
+    height: '300px',
+    borderRadius: '50%',
+    background: 'radial-gradient(circle, rgba(224, 242, 254, 0.15) 0%, transparent 70%)',
+    top: '50%',
+    right: '10%',
+    animation: 'float 25s ease-in-out infinite'
+  },
+  
+  gridPattern: {
+    position: 'absolute',
+    inset: 0,
+    backgroundImage: `
+      linear-gradient(rgba(14, 165, 233, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(14, 165, 233, 0.03) 1px, transparent 1px)
+    `,
+    backgroundSize: '50px 50px'
+  },
+  
+  contentWrapper: {
+    maxWidth: '1400px',
+    width: '100%',
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '4rem',
+    alignItems: 'center',
+    zIndex: 1,
+    position: 'relative'
+  },
+  
+  brandingSection: {
+    color: '#0f172a',
+    padding: '2rem'
+  },
+  
+  brandHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+    marginBottom: '3rem'
+  },
+  
+  brandLogoContainer: {
+    width: '60px',
+    height: '60px',
+    background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+    borderRadius: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backdropFilter: 'blur(10px)',
+    border: '2px solid rgba(186, 230, 253, 0.5)',
+    boxShadow: '0 8px 25px rgba(186, 230, 253, 0.3)'
+  },
+  
+  brandLogo: {
+    width: '36px',
+    height: '36px',
+    objectFit: 'contain'
+  },
+  
+  brandText: {
+    flex: 1
+  },
+  
+  brandTitle: {
+    fontSize: '1.75rem',
+    fontWeight: '800',
+    margin: '0',
+    letterSpacing: '-0.025em',
+    color: '#0f172a'
+  },
+  
+  brandTagline: {
+    fontSize: '0.875rem',
+    margin: '0.25rem 0 0 0',
+    color: '#0ea5e9',
+    fontWeight: '600'
+  },
+  
+  mainTitle: {
+    fontSize: '3rem',
+    fontWeight: '800',
+    lineHeight: '1.1',
+    marginBottom: '1.5rem',
+    letterSpacing: '-0.025em',
+    color: '#0f172a'
+  },
+  
+  highlightText: {
+    background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text'
+  },
+  
+  description: {
+    fontSize: '1.25rem',
+    lineHeight: '1.6',
+    marginBottom: '3rem',
+    color: '#475569',
+    fontWeight: '400'
+  },
+  
+  featuresGrid: {
+    display: 'grid',
+    gap: '1.5rem',
+    marginBottom: '3rem'
+  },
+  
+  feature: {
+    display: 'flex',
+    gap: '1rem',
+    alignItems: 'flex-start'
+  },
+  
+  featureIcon: {
+    width: '48px',
+    height: '48px',
+    background: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    flexShrink: 0
+  },
+  
+  featureEmoji: {
+    fontSize: '1.5rem'
+  },
+  
+  featureContent: {
+    flex: 1
+  },
+  
+  featureTitle: {
+    fontSize: '1.125rem',
+    fontWeight: '600',
+    margin: '0 0 0.5rem 0'
+  },
+  
+  featureDescription: {
+    fontSize: '0.875rem',
+    margin: '0',
+    opacity: 0.8,
+    lineHeight: '1.4'
+  },
+  
+  stepsSection: {
+    marginTop: '2rem'
+  },
+  
+  stepsTitle: {
+    fontSize: '1.25rem',
+    fontWeight: '600',
+    marginBottom: '1.5rem'
+  },
+  
+  steps: {
+    display: 'flex',
+    gap: '2rem'
+  },
+  
+  step: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem'
+  },
+  
+  stepNumber: {
+    width: '32px',
+    height: '32px',
+    background: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    border: '1px solid rgba(255, 255, 255, 0.3)'
+  },
+  
+  stepText: {
+    fontSize: '0.875rem',
+    margin: '0',
+    opacity: 0.9
+  },
+  
+  formSection: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '2rem'
+  }
+};
+
+// Add CSS animations
+const pageCSS = `
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px) rotate(0deg);
+    }
+    33% {
+      transform: translateY(-20px) rotate(2deg);
+    }
+    66% {
+      transform: translateY(-10px) rotate(-1deg);
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .content-wrapper {
+      grid-template-columns: 1fr !important;
+      gap: 2rem !important;
+      text-align: center;
+    }
+    
+    .main-title {
+      fontSize: 2rem !important;
+    }
+    
+    .features-grid {
+      grid-template-columns: 1fr !important;
+    }
+    
+    .steps {
+      flex-direction: column !important;
+      gap: 1rem !important;
+    }
+  }
+  
+  /* Smooth transitions for all interactive elements */
+  * {
+    transition: all 0.2s ease;
+  }
+  
+  /* Enhanced glassmorphism effects */
+  .brand-logo-container {
+    backdrop-filter: blur(20px);
+  }
+  
+  .feature-icon {
+    backdrop-filter: blur(20px);
+  }
+`;
+
+// Inject CSS if not already present
+if (!document.querySelector('#modern-login-page-styles')) {
+  const style = document.createElement('style');
+  style.id = 'modern-login-page-styles';
+  style.textContent = pageCSS;
+  document.head.appendChild(style);
 }

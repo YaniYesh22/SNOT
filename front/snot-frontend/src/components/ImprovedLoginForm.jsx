@@ -65,242 +65,453 @@ export default function LoginForm({ onSubmit, onSwitch }) {
   // Forgot password request form
   if (forgotPassword === true) {
     return (
-      <form onSubmit={handleForgotPasswordSubmit} style={styles.form}>
-        <div style={styles.header}>
-          <img
-            src="https://cdn-icons-png.flaticon.com/512/2907/2907432.png"
-            alt="SNOT Logo"
-            style={styles.logo}
-          />
-          <h2 style={styles.title}>Reset Password</h2>
-          <p style={styles.subtitle}>
-            Enter your email address and we'll send you a code to reset your password.
-          </p>
-        </div>
+      <div style={styles.container}>
+        <form onSubmit={handleForgotPasswordSubmit} style={styles.form}>
+          <div style={styles.header}>
+            <div style={styles.logoContainer}>
+              <img
+                src="/SNOTLOGO.png"
+                alt="SNOT Logo"
+                style={styles.logo}
+              />
+            </div>
+            <h2 style={styles.title}>Reset Password</h2>
+            <p style={styles.subtitle}>
+              Enter your email address and we'll send you a code to reset your password.
+            </p>
+          </div>
 
-        {error && <div style={styles.error}>{error}</div>}
+          {error && <div style={styles.error}>{error}</div>}
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          required
-          style={styles.input}
-        />
-        <button 
-          type="submit" 
-          style={styles.button}
-          disabled={isLoading}
-        >
-          {isLoading ? 'Sending...' : 'Send Reset Code'}
-        </button>
-        <p style={styles.footerText}>
-          <a 
-            href="#" 
-            onClick={(e) => {
-              e.preventDefault();
-              setForgotPassword(false);
+          <div style={styles.inputGroup}>
+            <input
+              type="email"
+              placeholder="Email address"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              style={styles.input}
+            />
+          </div>
+          
+          <button 
+            type="submit" 
+            style={{
+              ...styles.button,
+              ...(isLoading ? styles.buttonLoading : {})
             }}
-            style={styles.link}
+            disabled={isLoading}
           >
-            Back to login
-          </a>
-        </p>
-      </form>
+            {isLoading ? (
+              <div style={styles.buttonContent}>
+                <div style={styles.spinner}></div>
+                Sending...
+              </div>
+            ) : 'Send Reset Code'}
+          </button>
+          
+          <div style={styles.footerLinks}>
+            <a 
+              href="#" 
+              onClick={(e) => {
+                e.preventDefault();
+                setForgotPassword(false);
+              }}
+              style={styles.link}
+            >
+              ← Back to login
+            </a>
+          </div>
+        </form>
+      </div>
     );
   }
 
   // Confirm reset code and set new password
   if (forgotPassword === 'confirm') {
     return (
-      <form onSubmit={handleResetPasswordSubmit} style={styles.form}>
-        <div style={styles.header}>
-          <img
-            src="https://cdn-icons-png.flaticon.com/512/2907/2907432.png"
-            alt="SNOT Logo"
-            style={styles.logo}
-          />
-          <h2 style={styles.title}>Create New Password</h2>
-          <p style={styles.subtitle}>
-            Enter the code we sent to your email and create a new password.
-          </p>
-        </div>
+      <div style={styles.container}>
+        <form onSubmit={handleResetPasswordSubmit} style={styles.form}>
+          <div style={styles.header}>
+            <div style={styles.logoContainer}>
+              <img
+                src="/SNOTLOGO.png"
+                alt="SNOT Logo"
+                style={styles.logo}
+              />
+            </div>
+            <h2 style={styles.title}>Create New Password</h2>
+            <p style={styles.subtitle}>
+              Enter the code we sent to your email and create a new password.
+            </p>
+          </div>
 
-        {error && <div style={styles.error}>{error}</div>}
+          {error && <div style={styles.error}>{error}</div>}
 
-        <input
-          type="text"
-          placeholder="Reset Code"
-          value={resetCode}
-          onChange={e => setResetCode(e.target.value)}
-          required
-          style={styles.input}
-        />
-        <input
-          type="password"
-          placeholder="New Password"
-          value={newPassword}
-          onChange={e => setNewPassword(e.target.value)}
-          required
-          style={styles.input}
-        />
-        <button 
-          type="submit" 
-          style={styles.button}
-          disabled={isLoading}
-        >
-          {isLoading ? 'Resetting...' : 'Reset Password'}
-        </button>
-        <p style={styles.footerText}>
-          <a 
-            href="#" 
-            onClick={(e) => {
-              e.preventDefault();
-              setForgotPassword(false);
+          <div style={styles.inputGroup}>
+            <input
+              type="text"
+              placeholder="Reset code"
+              value={resetCode}
+              onChange={e => setResetCode(e.target.value)}
+              required
+              style={styles.input}
+            />
+          </div>
+          
+          <div style={styles.inputGroup}>
+            <input
+              type="password"
+              placeholder="New password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              required
+              style={styles.input}
+            />
+          </div>
+          
+          <button 
+            type="submit" 
+            style={{
+              ...styles.button,
+              ...(isLoading ? styles.buttonLoading : {})
             }}
-            style={styles.link}
+            disabled={isLoading}
           >
-            Back to login
-          </a>
-        </p>
-      </form>
+            {isLoading ? (
+              <div style={styles.buttonContent}>
+                <div style={styles.spinner}></div>
+                Resetting...
+              </div>
+            ) : 'Reset Password'}
+          </button>
+          
+          <div style={styles.footerLinks}>
+            <a 
+              href="#" 
+              onClick={(e) => {
+                e.preventDefault();
+                setForgotPassword(false);
+              }}
+              style={styles.link}
+            >
+              ← Back to login
+            </a>
+          </div>
+        </form>
+      </div>
     );
   }
 
   // Regular login form
   return (
-    <form onSubmit={handleSubmit} style={styles.form}>
-      <div style={styles.header}>
-        <img
-          src="https://cdn-icons-png.flaticon.com/512/2907/2907432.png"
-          alt="SNOT Logo"
-          style={styles.logo}
-        />
-        <h2 style={styles.title}>Smart Notebook Login</h2>
-      </div>
+    <div style={styles.container}>
+      <form onSubmit={handleSubmit} style={styles.form}>
+        <div style={styles.header}>
+          <div style={styles.logoContainer}>
+            <img
+              src="/SNOTLOGO.png"
+              alt="SNOT Logo"
+              style={styles.logo}
+            />
+          </div>
+          <h2 style={styles.title}>Welcome back</h2>
+          <p style={styles.subtitle}>Sign in to your SNOT account</p>
+        </div>
 
-      {error && <div style={styles.error}>{error}</div>}
+        {error && <div style={styles.error}>{error}</div>}
 
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-        required
-        style={styles.input}
-      />
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-        required
-        style={styles.input}
-      />
-      <button 
-        type="submit" 
-        style={styles.button}
-        disabled={isLoading}
-      >
-        {isLoading ? 'Logging in...' : 'Login'}
-      </button>
-      <div style={styles.options}>
-        <a 
-          href="#" 
-          onClick={(e) => {
-            e.preventDefault();
-            setForgotPassword(true);
+        <div style={styles.inputGroup}>
+          <input
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            style={styles.input}
+          />
+        </div>
+        
+        <div style={styles.inputGroup}>
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            style={styles.input}
+          />
+        </div>
+        
+        <button 
+          type="submit" 
+          style={{
+            ...styles.button,
+            ...(isLoading ? styles.buttonLoading : {})
           }}
-          style={styles.link}
+          disabled={isLoading}
         >
-          Forgot Password?
-        </a>
-      </div>
-      <p style={styles.footerText}>
-        Don't have an account? <a href="#" onClick={onSwitch} style={styles.link}>Sign up</a>
-      </p>
-    </form>
+          {isLoading ? (
+            <div style={styles.buttonContent}>
+              <div style={styles.spinner}></div>
+              Signing in...
+            </div>
+          ) : 'Sign in'}
+        </button>
+        
+        <div style={styles.options}>
+          <a 
+            href="#" 
+            onClick={(e) => {
+              e.preventDefault();
+              setForgotPassword(true);
+            }}
+            style={styles.link}
+          >
+            Forgot your password?
+          </a>
+        </div>
+        
+        <div style={styles.divider}>
+          <span style={styles.dividerText}>or</span>
+        </div>
+        
+        <div style={styles.footerText}>
+          Don't have an account?{' '}
+          <a href="#" onClick={onSwitch} style={styles.linkPrimary}>
+            Sign up for free
+          </a>
+        </div>
+      </form>
+    </div>
   );
 }
 
 const styles = {
-  form: {
-    background: '#ffffff',
-    padding: '2.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+  container: {
     width: '100%',
-    maxWidth: '400px',
-    boxSizing: 'border-box'
+    maxWidth: '420px',
+    margin: '0 auto'
+  },
+  form: {
+    background: 'rgba(255, 255, 255, 0.95)',
+    backdropFilter: 'blur(20px)',
+    padding: '3rem 2.5rem',
+    borderRadius: '24px',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.1), 0 8px 25px rgba(0, 0, 0, 0.08)',
+    border: '1px solid rgba(186, 230, 253, 0.3)',
+    width: '100%',
+    boxSizing: 'border-box',
+    position: 'relative',
+    overflow: 'hidden'
   },
   header: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    marginBottom: '1.5rem'
-  },
-  logo: {
-    width: '48px',
-    height: '48px',
-    marginBottom: '0.5rem'
-  },
-  title: {
-    fontSize: '1.5rem',
-    fontWeight: '600',
-    margin: '0 0 0.5rem 0'
-  },
-  subtitle: {
-    fontSize: '0.875rem',
-    color: '#6b7280',
-    marginTop: '0.5rem',
+    marginBottom: '2.5rem',
     textAlign: 'center'
   },
-  input: {
-    marginBottom: '1rem',
-    padding: '0.75rem 1rem',
+  logoContainer: {
+    width: '80px',
+    height: '80px',
+    background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+    borderRadius: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: '1.5rem',
+    boxShadow: '0 12px 40px rgba(186, 230, 253, 0.4)',
+    border: '2px solid rgba(186, 230, 253, 0.5)'
+  },
+  logo: {
+    width: '50px',
+    height: '50px',
+    objectFit: 'contain'
+  },
+  title: {
+    fontSize: '1.875rem',
+    fontWeight: '700',
+    margin: '0 0 0.5rem 0',
+    color: '#0f172a',
+    letterSpacing: '-0.025em'
+  },
+  subtitle: {
     fontSize: '1rem',
-    border: '1px solid #ddd',
-    borderRadius: '6px',
-    outline: 'none',
+    color: '#64748b',
+    margin: '0',
+    fontWeight: '400'
+  },
+  inputGroup: {
+    marginBottom: '1.5rem',
+    position: 'relative'
+  },
+  input: {
     width: '100%',
-    boxSizing: 'border-box'
+    padding: '1rem 1.25rem',
+    fontSize: '1rem',
+    border: '2px solid #e0f2fe',
+    borderRadius: '12px',
+    outline: 'none',
+    boxSizing: 'border-box',
+    transition: 'all 0.2s ease',
+    background: 'rgba(255, 255, 255, 0.9)',
+    color: '#0f172a',
+    fontWeight: '500',
+    '::placeholder': {
+      color: '#94a3b8'
+    }
   },
   button: {
     width: '100%',
-    padding: '0.75rem 1rem',
-    backgroundColor: '#1f78ff',
+    padding: '1rem 1.25rem',
+    background: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
     color: 'white',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '12px',
     fontSize: '1rem',
     fontWeight: '600',
     cursor: 'pointer',
-    transition: 'background-color 0.2s ease',
-    marginBottom: '0.5rem'
+    transition: 'all 0.2s ease',
+    marginBottom: '1.5rem',
+    boxShadow: '0 4px 14px rgba(14, 165, 233, 0.3)',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  buttonLoading: {
+    background: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+    cursor: 'not-allowed',
+    boxShadow: '0 4px 14px rgba(100, 116, 139, 0.3)'
+  },
+  buttonContent: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.5rem'
+  },
+  spinner: {
+    width: '16px',
+    height: '16px',
+    border: '2px solid rgba(255, 255, 255, 0.3)',
+    borderTop: '2px solid white',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
   },
   options: {
     display: 'flex',
     justifyContent: 'center',
-    marginBottom: '1rem'
+    marginBottom: '1.5rem'
+  },
+  divider: {
+    position: 'relative',
+    textAlign: 'center',
+    marginBottom: '1.5rem',
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      top: '50%',
+      left: '0',
+      right: '0',
+      height: '1px',
+      background: '#e0f2fe'
+    }
+  },
+  dividerText: {
+    background: 'rgba(255, 255, 255, 0.95)',
+    padding: '0 1rem',
+    color: '#94a3b8',
+    fontSize: '0.875rem',
+    fontWeight: '500'
   },
   error: {
-    color: 'red',
-    backgroundColor: '#ffe5e5',
-    padding: '0.5rem',
-    borderRadius: '4px',
-    marginBottom: '1rem',
-    fontSize: '0.95rem'
+    color: '#dc2626',
+    backgroundColor: '#fef2f2',
+    border: '1px solid #fecaca',
+    padding: '1rem',
+    borderRadius: '12px',
+    marginBottom: '1.5rem',
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    textAlign: 'center'
   },
   footerText: {
     textAlign: 'center',
-    fontSize: '0.95rem',
-    margin: '1rem 0 0 0',
-    color: '#6b7280'
+    fontSize: '0.875rem',
+    color: '#64748b',
+    fontWeight: '500'
+  },
+  footerLinks: {
+    textAlign: 'center',
+    marginTop: '1.5rem'
   },
   link: {
-    color: '#1f78ff',
+    color: '#64748b',
     textDecoration: 'none',
-    fontWeight: '500'
+    fontWeight: '500',
+    fontSize: '0.875rem',
+    transition: 'color 0.2s ease',
+    ':hover': {
+      color: '#0ea5e9'
+    }
+  },
+  linkPrimary: {
+    color: '#0ea5e9',
+    textDecoration: 'none',
+    fontWeight: '600',
+    transition: 'color 0.2s ease',
+    ':hover': {
+      color: '#0284c7'
+    }
   }
 };
+
+// Add CSS animations
+const loginCSS = `
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  /* Input focus styles */
+  input:focus {
+    border-color: #0ea5e9 !important;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1) !important;
+    transform: translateY(-1px);
+  }
+  
+  input::placeholder {
+    color: #94a3b8 !important;
+  }
+  
+  /* Button hover styles */
+  button:not(:disabled):hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px rgba(14, 165, 233, 0.4) !important;
+  }
+  
+  /* Link hover styles */
+  a:hover {
+    color: #0ea5e9 !important;
+  }
+  
+  /* Glassmorphism effect enhancement */
+  .login-form::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(186, 230, 253, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+    pointer-events: none;
+    border-radius: 24px;
+  }
+`;
+
+// Inject CSS if not already present
+if (!document.querySelector('#modern-login-styles')) {
+  const style = document.createElement('style');
+  style.id = 'modern-login-styles';
+  style.textContent = loginCSS;
+  document.head.appendChild(style);
+}

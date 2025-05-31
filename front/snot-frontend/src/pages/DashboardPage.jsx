@@ -813,10 +813,11 @@ const styles = {
     color: '#3b82f6'
   },
   notebooksCount: {
-    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+    background: 'linear-gradient(135deg,rgb(95, 143, 221) 0%,rgb(83, 127, 247) 100%)',
     color: 'white',
     padding: '0.5rem 1rem',
     borderRadius: '20px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
     fontSize: '0.875rem',
     fontWeight: '600'
   },
@@ -889,7 +890,7 @@ const styles = {
   },
   createButton: {
     padding: "0.875rem 1.5rem",
-    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+    background: 'linear-gradient(135deg,rgb(95, 143, 221) 0%,rgb(83, 127, 247) 100%)',
     color: "#fff",
     border: "none",
     borderRadius: "12px",

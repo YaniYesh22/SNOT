@@ -75,17 +75,27 @@ export default function Sidebar() {
           <>
             <div style={styles.logoSection}>
               <div style={styles.logoIcon}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M19,19H5V5H19V19Z"/>
-                </svg>
+                <img 
+                  src="/SNOTLOGO.png" 
+                  alt="SNOT Logo" 
+                  style={{
+                    width: '55px',
+                    height: '55px',
+                    objectFit: 'contain'
+                  }}
+                />
               </div>
-              <span style={styles.logoText}>SNOT</span>
+              <div style={styles.logoContent}>
+                <span style={styles.logoText}>SNOT</span>
+                <span style={styles.logoSubtext}>Smart Notebooks</span>
+              </div>
               <button 
                 onClick={toggleSidebar} 
                 style={styles.hamburgerButton}
+                className="hamburger-button"
                 type="button"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z"/>
                 </svg>
               </button>
@@ -106,6 +116,9 @@ export default function Sidebar() {
                   {userData?.email || 'user@example.com'}
                 </div>
               </div>
+              <div style={styles.userStatus}>
+                <div style={styles.statusDot}></div>
+              </div>
             </div>
           </>
         ) : (
@@ -119,10 +132,11 @@ export default function Sidebar() {
               <button 
                 onClick={toggleSidebar} 
                 style={styles.expandIndicator}
+              className="expand-indicator"
                 title="Expand sidebar"
                 type="button"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z"/>
                 </svg>
               </button>
@@ -143,6 +157,7 @@ export default function Sidebar() {
                 ...styles.navLink,
                 ...(isActiveRoute('/dashboard') ? styles.navLinkActive : {})
               }}
+              className={isActiveRoute('/dashboard') ? 'nav-link nav-link-active' : 'nav-link'}
               onClick={handleNavClick}
             >
               <div style={styles.navIcon}>
@@ -151,6 +166,11 @@ export default function Sidebar() {
                 </svg>
               </div>
               <span style={styles.navText}>Notebooks</span>
+              <div style={styles.navArrow} className="nav-arrow">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/>
+                </svg>
+              </div>
               {isActiveRoute('/dashboard') && <div style={styles.activeIndicator} />}
             </Link>
             
@@ -160,6 +180,7 @@ export default function Sidebar() {
                 ...styles.navLink,
                 ...(isActiveRoute('/topic-map') ? styles.navLinkActive : {})
               }}
+              className={isActiveRoute('/topic-map') ? 'nav-link nav-link-active' : 'nav-link'}
               onClick={handleNavClick}
             >
               <div style={styles.navIcon}>
@@ -168,6 +189,11 @@ export default function Sidebar() {
                 </svg>
               </div>
               <span style={styles.navText}>Topic Map</span>
+              <div style={styles.navArrow} className="nav-arrow">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/>
+                </svg>
+              </div>
               {isActiveRoute('/topic-map') && <div style={styles.activeIndicator} />}
             </Link>
           </div>
@@ -181,6 +207,7 @@ export default function Sidebar() {
                 ...styles.navLink,
                 ...(isActiveRoute('/settings') ? styles.navLinkActive : {})
               }}
+              className={isActiveRoute('/settings') ? 'nav-link nav-link-active' : 'nav-link'}
               onClick={handleNavClick}
             >
               <div style={styles.navIcon}>
@@ -189,6 +216,11 @@ export default function Sidebar() {
                 </svg>
               </div>
               <span style={styles.navText}>Settings</span>
+              <div style={styles.navArrow} className="nav-arrow">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/>
+                </svg>
+              </div>
               {isActiveRoute('/settings') && <div style={styles.activeIndicator} />}
             </Link>
           </div>
@@ -205,6 +237,7 @@ export default function Sidebar() {
                 ...styles.collapsedNavLink,
                 ...(isActiveRoute('/dashboard') ? styles.collapsedNavLinkActive : {})
               }}
+              className={isActiveRoute('/dashboard') ? 'collapsed-nav-link collapsed-nav-link-active' : 'collapsed-nav-link'}
               title="Notebooks"
               onClick={handleNavClick}
             >
@@ -220,6 +253,7 @@ export default function Sidebar() {
                 ...styles.collapsedNavLink,
                 ...(isActiveRoute('/topic-map') ? styles.collapsedNavLinkActive : {})
               }}
+              className={isActiveRoute('/topic-map') ? 'collapsed-nav-link collapsed-nav-link-active' : 'collapsed-nav-link'}
               title="Topic Map"
               onClick={handleNavClick}
             >
@@ -235,6 +269,7 @@ export default function Sidebar() {
                 ...styles.collapsedNavLink,
                 ...(isActiveRoute('/settings') ? styles.collapsedNavLinkActive : {})
               }}
+              className={isActiveRoute('/settings') ? 'collapsed-nav-link collapsed-nav-link-active' : 'collapsed-nav-link'}
               title="Settings"
               onClick={handleNavClick}
             >
@@ -250,7 +285,7 @@ export default function Sidebar() {
       {/* Footer Section - Expanded */}
       {isExpanded && (
         <div style={styles.footer}>
-          <button onClick={handleLogout} style={styles.logoutButton} type="button">
+          <button onClick={handleLogout} style={styles.logoutButton} className="logout-button" type="button">
             <div style={styles.logoutIcon}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M16,17V14H9V10H16V7L21,12L16,17M14,2A2,2 0 0,1 16,4V6H14V4H5V20H14V18H16V20A2,2 0 0,1 14,22H5A2,2 0 0,1 3,20V4A2,2 0 0,1 5,2H14Z"/>
@@ -267,6 +302,7 @@ export default function Sidebar() {
           <button 
             onClick={handleLogout} 
             style={styles.collapsedLogoutButton} 
+            className="collapsed-logout-button" 
             title="Sign Out"
             type="button"
           >
@@ -283,82 +319,95 @@ export default function Sidebar() {
 const styles = {
   sidebar: {
     height: '100vh',
-    background: 'linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%)',
-    borderRight: '1px solid #e5e7eb',
+    background: 'linear-gradient(180deg, #fefffe 0%, #f0fdfa 100%)',
+    borderRight: '1px solid #a7f3d0',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    position: 'relative'
+    position: 'relative',
+    boxShadow: '0 4px 6px -1px #0ea5e9'
   },
   
   // Header Section
   header: {
     padding: '1.5rem 1.25rem',
-    borderBottom: '1px solid #e5e7eb',
-    background: 'white',
-    flexShrink: 0
+    background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)',
+    flexShrink: 0,
+    borderBottom: '1px solid #bae6fd'
   },
   logoSection: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: '0.75rem',
     marginBottom: '1.5rem'
   },
   logoIcon: {
-    width: '36px',
-    height: '36px',
-    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-    borderRadius: '8px',
+    width: '60px',
+    height: '60px',
+    background: 'transparent',
+    borderRadius: '14px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: 'white',
-    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)'
+    boxShadow: '0 8px 25px -8px rgba(125, 211, 252, 0.4)',
+    flexShrink: 0,
+    border: '0.5px solid #84b2fb'
+  },
+  logoContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column'
   },
   logoText: {
-    fontSize: '1.25rem',
-    fontWeight: '700',
-    color: '#111827',
-    letterSpacing: '0.5px',
-    flex: 1,
-    marginLeft: '0.75rem'
+    fontSize: '1.375rem',
+    fontWeight: '800',
+    color: '#0369a1',
+    letterSpacing: '-0.025em',
+    lineHeight: '1.2'
+  },
+  logoSubtext: {
+    fontSize: '0.75rem',
+    color: '#0ea5e9',
+    fontWeight: '500',
+    marginTop: '0.125rem'
   },
   hamburgerButton: {
     background: 'none',
     border: 'none',
-    color: '#6b7280',
+    color: '#0ea5e9',
     cursor: 'pointer',
     padding: '0.5rem',
-    borderRadius: '6px',
+    borderRadius: '8px',
     transition: 'all 0.2s ease',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    flexShrink: 0
   },
   userSection: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
-    padding: '0.75rem',
-    background: '#f8fafc',
-    borderRadius: '12px',
-    border: '1px solid #e2e8f0'
+    padding: '1rem',
+    background: 'linear-gradient(135deg, #dbeafe 0%,rgb(0, 78, 180) 100%)',
+    borderRadius: '16px',
+    border: '1px solid #93c5fd'
   },
   userAvatar: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '10px',
-    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+    width: '44px',
+    height: '44px',
+    borderRadius: '12px',
+    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
+    boxShadow: '0 4px 14px -6px #3b82f6'
   },
   userInitials: {
     color: 'white',
     fontSize: '0.875rem',
-    fontWeight: '600'
+    fontWeight: '700'
   },
   userInfo: {
     flex: 1,
@@ -367,18 +416,29 @@ const styles = {
   userName: {
     fontSize: '0.875rem',
     fontWeight: '600',
-    color: '#111827',
+    color: 'white',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap'
   },
   userEmail: {
     fontSize: '0.75rem',
-    color: '#6b7280',
+    color: 'rgba(255, 255, 255, 0.8)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     marginTop: '0.125rem'
+  },
+  userStatus: {
+    flexShrink: 0
+  },
+  statusDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #34d399 0%, #10b981 100%)',
+    border: '2px solid white',
+    boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.3)'
   },
 
   // Collapsed Header Styles
@@ -388,36 +448,36 @@ const styles = {
     alignItems: 'center'
   },
   collapsedUserAvatar: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '12px',
-    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+    width: '52px',
+    height: '52px',
+    borderRadius: '16px',
+    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     transition: 'all 0.2s ease',
     position: 'relative',
-    boxShadow: '0 4px 16px rgba(99, 102, 241, 0.4)'
+    boxShadow: '0 8px 25px -8px #3b82f6'
   },
   expandIndicator: {
     position: 'absolute',
-    top: '-6px',
-    right: '-6px',
-    width: '20px',
-    height: '20px',
-    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+    top: '-4px',
+    right: '-4px',
+    width: '18px',
+    height: '18px',
+    background: 'linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%)',
     borderRadius: '50%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: 'white',
-    fontSize: '10px',
+    fontSize: '8px',
     border: '2px solid white',
-    animation: 'pulse 2s infinite',
     cursor: 'pointer',
     zIndex: 10,
     outline: 'none',
-    padding: 0
+    padding: 0,
+    boxShadow: '0 2px 8px #38bdf8'
   },
   
   // Navigation Section
@@ -430,23 +490,24 @@ const styles = {
     marginBottom: '2rem'
   },
   navSectionTitle: {
-    fontSize: '0.75rem',
-    fontWeight: '600',
-    color: '#6b7280',
+    fontSize: '0.6875rem',
+    fontWeight: '700',
+    color: '#0ea5e9',
     textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    marginBottom: '0.75rem',
-    display: 'block'
+    letterSpacing: '0.1em',
+    marginBottom: '1rem',
+    display: 'block',
+    paddingLeft: '0.75rem'
   },
   navLink: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
-    padding: '0.75rem',
+    padding: '0.875rem 0.75rem',
     marginBottom: '0.25rem',
-    borderRadius: '10px',
+    borderRadius: '12px',
     textDecoration: 'none',
-    color: '#6b7280',
+    color: '#0891b2',
     fontSize: '0.875rem',
     fontWeight: '500',
     transition: 'all 0.2s ease',
@@ -454,9 +515,9 @@ const styles = {
     overflow: 'hidden'
   },
   navLinkActive: {
-    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-    color: 'white',
-    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+    background: 'linear-gradient(135deg, #bae6fd 0%, #7dd3fc 100%)',
+    color: '#0369a1',
+    boxShadow: '0 4px 14px -6px rgba(125, 211, 252, 0.4)',
     transform: 'translateY(-1px)'
   },
   navIcon: {
@@ -466,13 +527,19 @@ const styles = {
   navText: {
     flex: 1
   },
+  navArrow: {
+    opacity: 0,
+    transition: 'opacity 0.2s ease',
+    flexShrink: 0,
+    color: '#38bdf8'
+  },
   activeIndicator: {
     position: 'absolute',
     right: '0.75rem',
-    width: '6px',
-    height: '6px',
+    width: '4px',
+    height: '4px',
     borderRadius: '50%',
-    background: 'rgba(255, 255, 255, 0.8)'
+    background: '#0369a1'
   },
 
   // Collapsed Navigation Styles
@@ -486,7 +553,7 @@ const styles = {
   collapsedNavGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.5rem',
+    gap: '0.75rem',
     width: '100%',
     alignItems: 'center'
   },
@@ -498,44 +565,46 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     textDecoration: 'none',
-    color: '#6b7280',
+    color: '#0891b2',
     transition: 'all 0.2s ease',
     position: 'relative',
-    background: 'rgba(255, 255, 255, 0.5)'
+    background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)',
+    border: '1px solid #bae6fd'
   },
   collapsedNavLinkActive: {
-    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-    color: 'white',
-    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)'
+    background: 'linear-gradient(135deg, #bae6fd 0%, #7dd3fc 100%)',
+    color: '#0369a1',
+    boxShadow: '0 4px 14px -6px rgba(125, 211, 252, 0.4)',
+    border: '1px solid rgba(125, 211, 252, 0.3)'
   },
   collapsedActiveIndicator: {
     position: 'absolute',
-    top: '-3px',
-    right: '-3px',
-    width: '8px',
-    height: '8px',
+    top: '-2px',
+    right: '-2px',
+    width: '6px',
+    height: '6px',
     borderRadius: '50%',
-    background: '#10b981',
+    background: '#4ade80',
     border: '2px solid white'
   },
   
   // Footer Section
   footer: {
     padding: '1.25rem',
-    borderTop: '1px solid #e5e7eb',
-    background: 'white',
-    flexShrink: 0
+    background: 'linear-gradient(135deg, #ffffff 0%, #f0fdfa 100%)',
+    flexShrink: 0,
+    borderTop: '1px solid #a7f3d0'
   },
   logoutButton: {
     width: '100%',
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
-    padding: '0.75rem',
-    background: 'none',
-    border: '1px solid #e5e7eb',
-    borderRadius: '10px',
-    color: '#6b7280',
+    padding: '0.875rem 0.75rem',
+    background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+    border: '1px solid #7dd3fc',
+    borderRadius: '12px',
+    color: '#0891b2',
     fontSize: '0.875rem',
     fontWeight: '500',
     cursor: 'pointer',
@@ -552,11 +621,11 @@ const styles = {
   // Collapsed Footer Styles
   collapsedFooter: {
     padding: '1rem',
-    borderTop: '1px solid #e5e7eb',
-    background: 'white',
+    background: 'linear-gradient(135deg, #ffffff 0%, #f0fdfa 100%)',
     display: 'flex',
     justifyContent: 'center',
-    flexShrink: 0
+    flexShrink: 0,
+    borderTop: '1px solid #a7f3d0'
   },
   collapsedLogoutButton: {
     width: '48px',
@@ -565,10 +634,90 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    color: '#ef4444',
+    background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+    border: '1px solid #7dd3fc',
+    color: '#0891b2',
     cursor: 'pointer',
     transition: 'all 0.2s ease'
   }
 };
+
+const sidebarCSS = `
+  /* Hover effects for navigation links */
+  .nav-link:hover {
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%) !important;
+    color: #0369a1 !important;
+    transform: translateX(4px);
+  }
+  
+  .nav-link:hover .nav-arrow {
+    opacity: 1 !important;
+  }
+  
+  .nav-link-active:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 8px 25px -8px rgba(125, 211, 252, 0.5) !important;
+  }
+  
+  /* Hover effects for collapsed navigation */
+  .collapsed-nav-link:hover {
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%) !important;
+    color: #0369a1 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px -6px rgba(125, 211, 252, 0.3) !important;
+  }
+  
+  .collapsed-nav-link-active:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px -8px rgba(125, 211, 252, 0.6) !important;
+  }
+  
+  /* Hover effects for buttons */
+  .hamburger-button:hover {
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%) !important;
+    color: #0369a1 !important;
+  }
+  
+  .logout-button:hover {
+    background: linear-gradient(135deg,rgb(243, 119, 74) 0%,rgb(243, 119, 74) 100%) !important;
+    color: white !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px -6px rgb(243, 119, 74) !important;
+  }
+  
+  .collapsed-logout-button:hover {
+    background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%) !important;
+    color: white !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px -6px rgba(125, 211, 252, 0.4) !important;
+  }
+  
+  /* Pulse animation for expand indicator */
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.05);
+    }
+  }
+  
+  .expand-indicator {
+    animation: pulse 2s infinite;
+  }
+  
+  /* Smooth transitions */
+  * {
+    transition: all 0.2s ease;
+  }
+`;
+
+// Inject CSS if not already present
+if (!document.querySelector('#modern-sidebar-styles')) {
+  const style = document.createElement('style');
+  style.id = 'modern-sidebar-styles';
+  style.textContent = sidebarCSS;
+  document.head.appendChild(style);
+}
