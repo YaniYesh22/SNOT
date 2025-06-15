@@ -1,15 +1,349 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
+import styles from './TopicMapVisualization.module.css'; // Import CSS Module
+
+// D3 Specific Constants (can be part of a config object if they grow)
+const DEFAULT_NODE_BASE_SIZE = 25;
+const DEFAULT_NODE_WORD_SIZE_FACTOR = 100;
+const DEFAULT_NODE_WORD_SIZE_ADD = 5;
+const DEFAULT_NODE_MAX_WORD_SIZE = 40;
+const DEFAULT_NODE_CONNECTION_SIZE_FACTOR = 3;
+const MIN_NODE_SIZE = 30;
+const MAX_NODE_SIZE = 80;
+const NODE_STROKE_WIDTH = 4;
+const HUB_NODE_STROKE_WIDTH = 6;
+const HUB_NODE_CONNECTION_THRESHOLD = 3; // Min connections to be considered a "hub" for styling
+const LINK_BASE_DISTANCE = 80;
+const LINK_STRENGTH_DISTANCE_FACTOR = 120;
+const LINK_BASE_STROKE_WIDTH = 2;
+const LINK_STRENGTH_STROKE_FACTOR = 6;
+const LINK_EXPLICIT_STROKE_WIDTH = 4;
+const LABEL_FONT_SIZE_MIN = 10;
+const LABEL_FONT_SIZE_MAX = 14;
+const LABEL_SIZE_DIVISOR = 4;
+const LABEL_DY_OFFSET = 25; // Offset for label below the node
+const ZOOM_SCALE_EXTENT = [0.1, 5];
+const SIMULATION_CHARGE_BASE = -300;
+const SIMULATION_CHARGE_CONNECTION_FACTOR = -50;
+const SIMULATION_COLLISION_RADIUS_PADDING = 15;
+const SIMULATION_COLLISION_STRENGTH = 0.9;
+const SIMULATION_SAME_TAG_REPULSION = -100;
+
+
+/**
+ * Sets up the SVG container and main group element.
+ * @param {d3.Selection} svg - The D3 selection for the SVG element.
+ * @param {object} dimensions - The width and height of the SVG.
+ * @param {object} margin - The margin object { top, right, bottom, left }.
+ * @returns {d3.Selection} The main D3 group element (g).
+ */
+const setupSVG = (svg, dimensions, margin) => {
+  svg.selectAll("*").remove(); // Clear previous rendering
+  svg.attr("width", dimensions.width).attr("height", dimensions.height);
+
+  // Background - can be styled via CSS module for the SVG if preferred, or keep gradient def here
+  const defs = svg.append("defs");
+  const gradient = defs.append("linearGradient")
+      .attr("id", "backgroundGradientDef") // Unique ID for the gradient definition
+      .attr("x1", "0%").attr("y1", "0%")
+      .attr("x2", "100%").attr("y2", "100%");
+  gradient.append("stop").attr("offset", "0%").style("stop-color", "#f8fafc");
+  gradient.append("stop").attr("offset", "100%").style("stop-color", "#f1f5f9");
+
+  svg.append("rect")
+      .attr("width", dimensions.width)
+      .attr("height", dimensions.height)
+      .attr("fill", "url(#backgroundGradientDef)"); // Use the unique ID
+
+  return svg.append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+};
+
+/**
+ * Creates and configures the D3 force simulation.
+ * @param {Array} nodes - Array of node objects.
+ * @param {Array} links - Array of link objects.
+ * @param {number} innerWidth - The width of the simulation area.
+ * @param {number} innerHeight - The height of the simulation area.
+ * @returns {d3.ForceSimulation} The configured D3 simulation.
+ */
+const createSimulation = (nodes, links, innerWidth, innerHeight) => {
+  const simulation = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(links)
+          .id(d => d.id)
+          .distance(d => d.distance)
+          .strength(d => Math.min(0.8, d.strength))
+      )
+      .force("charge", d3.forceManyBody()
+          .strength(d => SIMULATION_CHARGE_BASE + (d.connectionCount * SIMULATION_CHARGE_CONNECTION_FACTOR))
+      )
+      .force("center", d3.forceCenter(innerWidth / 2, innerHeight / 2))
+      .force("collision", d3.forceCollide()
+          .radius(d => d.size + SIMULATION_COLLISION_RADIUS_PADDING)
+          .strength(SIMULATION_COLLISION_STRENGTH)
+      );
+
+  simulation.force("sameTagRepulsion", d3.forceManyBody()
+      .strength((d) => {
+          const sameTagNodes = nodes.filter(n =>
+              n.id !== d.id && n.tags.some(tag => d.tags.includes(tag))
+          );
+          return sameTagNodes.length > 0 ? SIMULATION_SAME_TAG_REPULSION : 0;
+      })
+  );
+  return simulation;
+};
+
+/**
+ * Draws the links (edges) on the graph.
+ * @param {d3.Selection} g - The main D3 group element.
+ * @param {Array} linksData - Array of link objects.
+ * @param {Function} setSelectedConnection - React state setter for the selected connection.
+ * @returns {d3.Selection} The D3 selection of link elements.
+ */
+const drawLinks = (g, linksData, setSelectedConnection) => {
+  const linkGroup = g.append("g").attr("class", styles.links); // Use CSS module class
+  return linkGroup.selectAll("line")
+      .data(linksData)
+      .enter().append("line")
+      .attr("class", d => { // Apply classes based on type/strength
+          if (d.type === 'explicit') return `${styles.link} ${styles.linkExplicit}`;
+          if (d.strengthCategory === 'strong') return `${styles.link} ${styles.linkStrong}`;
+          if (d.strengthCategory === 'moderate') return `${styles.link} ${styles.linkModerate}`;
+          return `${styles.link} ${styles.linkWeak}`;
+      })
+      .attr("stroke-opacity", d => d.type === 'explicit' ? 0.9 : Math.max(0.3, d.strength)) // Dynamic
+      .attr("stroke-width", d => d.type === 'explicit' ? LINK_EXPLICIT_STROKE_WIDTH : Math.max(LINK_BASE_STROKE_WIDTH, d.strength * LINK_STRENGTH_STROKE_FACTOR)) // Dynamic
+      .attr("stroke-dasharray", d => d.type === 'explicit' ? "0" : "5,5") // Dynamic (or could be classes)
+      // .style("cursor", "pointer") // Moved to .link class in CSS module
+      .on("mouseover", function(event, d) {
+          setSelectedConnection(d);
+          d3.select(this) // Keep dynamic hover styles if they differ significantly from CSS :hover
+              .attr("stroke-width", currentD => currentD.type === 'explicit' ? LINK_EXPLICIT_STROKE_WIDTH + 2 : Math.max(LINK_BASE_STROKE_WIDTH + 2, currentD.strength * (LINK_STRENGTH_STROKE_FACTOR + 2)))
+              .attr("stroke-opacity", 1);
+      })
+      .on("mouseout", function(event, d) {
+          setSelectedConnection(null);
+          d3.select(this)
+              .attr("stroke-width", currentD => currentD.type === 'explicit' ? LINK_EXPLICIT_STROKE_WIDTH : Math.max(LINK_BASE_STROKE_WIDTH, currentD.strength * LINK_STRENGTH_STROKE_FACTOR))
+              .attr("stroke-opacity", currentD => currentD.type === 'explicit' ? 0.9 : Math.max(0.3, currentD.strength));
+      });
+};
+
+/**
+ * Draws the nodes (circles) on the graph.
+ * @param {d3.Selection} g - The main D3 group element.
+ * @param {Array} nodesData - Array of node objects.
+ * @param {d3.ScaleOrdinal} colorScale - D3 color scale for node groups.
+ * @param {Function} setHoveredNode - React state setter for hovered node.
+ * @param {Function} setSelectedNode - React state setter for selected node.
+ * @param {object} selectedNodeState - The current selectedNode state.
+ * @param {d3.DragBehavior} dragBehavior - The D3 drag behavior.
+ * @param {d3.Selection} linkElements - The D3 selection of link elements.
+ * @param {Array} linksData - Array of link objects for highlighting.
+ * @returns {d3.Selection} The D3 selection of node elements.
+ */
+const drawNodes = (g, nodesData, colorScale, setHoveredNode, setSelectedNode, selectedNodeState, dragBehavior, linkElements, linksData) => {
+  const nodeGroup = g.append("g").attr("class", styles.nodes); // Use CSS module class
+
+  const defs = g.select(function() { return this.parentNode; }).select("defs");
+
+  // Add patterns for hub nodes (pattern definition itself is fine in JS)
+  const pattern = defs.selectAll("pattern")
+      .data(nodesData.filter(d => d.connectionCount > HUB_NODE_CONNECTION_THRESHOLD))
+      .enter().append("pattern")
+      .attr("id", d => `pattern-${d.id}`)
+      .attr("patternUnits", "userSpaceOnUse")
+      .attr("width", 4)
+      .attr("height", 4);
+
+  pattern.append("circle")
+      .attr("cx", 2)
+      .attr("cy", 2)
+      .attr("r", 1)
+      .attr("fill", "#ffffff")
+      .attr("opacity", 0.3);
+
+  const nodesSelection = nodeGroup.selectAll("circle")
+      .data(nodesData)
+      .enter().append("circle")
+      .attr("r", d => d.size) // Dynamic
+      .attr("fill", d => { // Dynamic
+          if (d.connectionCount > HUB_NODE_CONNECTION_THRESHOLD) {
+              return `url(#pattern-${d.id})`;
+          }
+          return colorScale(d.group);
+      })
+      .attr("class", d => d.connectionCount > HUB_NODE_CONNECTION_THRESHOLD ? `${styles.node} ${styles.nodeHub}` : `${styles.node} ${styles.nodeDefaultStroke}`)
+      .attr("stroke-width", d => d.connectionCount > HUB_NODE_CONNECTION_THRESHOLD ? HUB_NODE_STROKE_WIDTH : NODE_STROKE_WIDTH) // Dynamic or could be classes
+      // .style("cursor", "pointer") // Moved to .node class
+      // .style("filter", "drop-shadow(0 4px 8px rgba(0,0,0,0.25))") // Moved to .node class
+      .on("mouseover", function (event, d) {
+          setHoveredNode(d);
+          d3.select(this)
+              .transition()
+              .duration(200)
+              .attr("r", d.size * 1.2)
+              .attr("stroke-width", currentD => currentD.connectionCount > HUB_NODE_CONNECTION_THRESHOLD ? HUB_NODE_STROKE_WIDTH + 2 : NODE_STROKE_WIDTH + 2) // Enhanced hover
+              .style("filter", "drop-shadow(0 8px 16px rgba(0,0,0,0.4))"); // Enhanced hover
+
+          linkElements
+              .attr("stroke-opacity", l =>
+                  (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.1
+              );
+
+          nodeGroup.selectAll("circle") // Could use nodesSelection here
+              .attr("opacity", n => {
+                  if (n.id === d.id) return 1;
+                  const isConnected = linksData.some(l =>
+                      (l.source.id === d.id && l.target.id === n.id) ||
+                      (l.target.id === d.id && l.source.id === n.id)
+                  );
+                  return isConnected ? 1 : 0.3;
+              });
+      })
+      .on("mouseout", function (event, d) {
+          setHoveredNode(null);
+          d3.select(this)
+              .transition()
+              .duration(200)
+              .attr("r", d.size)
+              .attr("stroke-width", currentD => currentD.connectionCount > HUB_NODE_CONNECTION_THRESHOLD ? HUB_NODE_STROKE_WIDTH : NODE_STROKE_WIDTH)
+              .style("filter", "drop-shadow(0 4px 8px rgba(0,0,0,0.25))");
+
+          linkElements
+              .attr("stroke-opacity", l => l.type === 'explicit' ? 0.9 : Math.max(0.3, l.strength));
+
+          nodeGroup.selectAll("circle") // Could use nodesSelection here
+              .attr("opacity", 1);
+      })
+      .on("click", function (event, d) {
+          event.stopPropagation();
+          setSelectedNode(selectedNodeState?.id === d.id ? null : d);
+      })
+      .call(dragBehavior);
+  return nodesSelection;
+};
+
+/**
+ * Draws labels for the nodes.
+ * @param {d3.Selection} g - The main D3 group element.
+ * @param {Array} nodesData - Array of node objects.
+ * @param {boolean} showLabels - Flag to determine if labels should be shown.
+ * @returns {d3.Selection|null} The D3 selection of label group elements, or null if labels are not shown.
+ */
+const drawLabels = (g, nodesData, showLabelsFlag) => {
+  if (!showLabelsFlag) {
+    g.select(".labels").remove();
+    return null;
+  }
+  const labelGroup = g.append("g").attr("class", styles.labels); // Use CSS module class
+
+  labelGroup.selectAll("text")
+      .data(nodesData)
+      .enter().append("text")
+      .attr("class", styles.labelText) // Use CSS module class
+      .text(d => {
+          const title = d.title || 'Untitled';
+          return title.length > 20 ? title.substring(0, 20) + "..." : title;
+      })
+      .attr("font-size", d => Math.max(LABEL_FONT_SIZE_MIN, Math.min(LABEL_FONT_SIZE_MAX, d.size / LABEL_SIZE_DIVISOR))) // Dynamic
+      .attr("dy", d => d.size + LABEL_DY_OFFSET); // Dynamic
+
+  const badges = labelGroup.selectAll("g.badge-group")
+      .data(nodesData.filter(d => d.connectionCount > HUB_NODE_CONNECTION_THRESHOLD))
+      .enter().append("g").attr("class", "badge-group"); // Keep class for selection if needed
+
+  badges.append("rect")
+      .attr("class", styles.badgeRect) // Use CSS module class
+      .attr("x", -12)
+      .attr("y", d => -d.size - 15) // Dynamic
+      .attr("width", 24)
+      .attr("height", 16)
+      .attr("rx", 8);
+
+  badges.append("text")
+      .attr("class", styles.badgeText) // Use CSS module class
+      .attr("x", 0)
+      .attr("y", d => -d.size - 7) // Dynamic
+      .text(d => d.connectionCount);
+
+  return labelGroup;
+};
+
+/**
+ * Sets up zoom and pan functionality.
+ * @param {d3.Selection} svg - The D3 selection for the SVG element.
+ * @param {d3.Selection} g - The main D3 group element to apply zoom to.
+ * @returns {d3.ZoomBehavior} The configured D3 zoom behavior.
+ */
+const setupZoom = (svg, g) => {
+  const zoomBehavior = d3.zoom()
+      .scaleExtent(ZOOM_SCALE_EXTENT)
+      .on("zoom", (event) => {
+          g.attr("transform", event.transform);
+      });
+  svg.call(zoomBehavior);
+  return zoomBehavior; // Return for potential use with controls
+};
+
+/**
+ * Creates control buttons for the visualization.
+ * @param {d3.Selection} svg - The D3 selection for the SVG element.
+ * @param {number} width - The width of the SVG.
+ * @param {d3.ForceSimulation} simulation - The D3 simulation object.
+ * @param {string} currentSimState - The current simulation state ('running' or 'stopped').
+ * @param {Function} setSimState - React state setter for simulation state.
+ * @param {d3.ZoomBehavior} zoomBehavior - The D3 zoom behavior object.
+ */
+const createControls = (svg, width, simulation, currentSimState, setSimState, zoomBehavior) => {
+  svg.select(".controls").remove(); // Clear previous controls
+  const controlsGroup = svg.append("g")
+      .attr("class", styles.controls) // Use CSS module class for the group
+      .attr("transform", `translate(${width - 160}, 15)`);
+
+  // Reset zoom button
+  const resetButton = controlsGroup.append("g")
+      .attr("class", `${styles.controlButton} ${styles.resetButton}`)
+      .on("click", () => {
+          svg.transition().duration(750).call(
+              zoomBehavior.transform,
+              d3.zoomIdentity
+          );
+      });
+  resetButton.append("rect").attr("width", 90).attr("height", 30);
+  resetButton.append("text").attr("x", 45).attr("y", 20).text("Reset View");
+
+  // Simulation control button
+  const simButton = controlsGroup.append("g")
+      .attr("class", styles.controlButton) // General class
+      .classed(styles.playPauseButtonRunning, currentSimState === 'running')
+      .classed(styles.playPauseButtonStopped, currentSimState !== 'running')
+      .attr("transform", "translate(0, 35)")
+      .on("click", () => {
+          if (currentSimState === 'running') {
+              simulation.stop();
+              setSimState('stopped');
+          } else {
+              simulation.alpha(0.3).restart();
+              setSimState('running');
+          }
+      });
+  simButton.append("rect").attr("width", 90).attr("height", 30);
+  simButton.append("text").attr("x", 45).attr("y", 20)
+      .text(currentSimState === 'running' ? "Pause" : "Play");
+};
+
 
 const TopicMapVisualization = ({
     connectionsData,
     searchTerm = '',
-    categoryFilter = 'all',
-    sortBy = 'relevance',
+    selectedCategories = [], // Changed from categoryFilter to selectedCategories (array)
+    sortBy = 'relevance', // This prop is received but not used in processDataForVisualization yet
     minSimilarity = 0.2,
     connectionType = 'all',
     showLabels = true,
-    showMetrics = true
+    showMetrics = true // This prop is received but not currently used in the component's rendering
 }) => {
     const containerRef = useRef(null);
     const svgRef = useRef(null);
@@ -25,16 +359,16 @@ const TopicMapVisualization = ({
                        !connectionsData?.isDemoData;
 
     // Enhanced data validation and fallback
-    const data = hasRealData ? connectionsData : generateEnhancedSampleData();
+    const rawData = hasRealData ? connectionsData : generateEnhancedSampleData();
 
     console.log("=== Enhanced TopicMapVisualization Debug ===");
     console.log("connectionsData:", connectionsData);
     console.log("hasRealData:", hasRealData);
     console.log("Final data structure:", {
-        notebooks: data?.notebooks?.length || 0,
-        connections: data?.connections?.length || 0,
-        hasNetworkIntelligence: !!data?.networkIntelligence,
-        hasSmartClusters: !!data?.smartClusters
+        notebooks: rawData?.notebooks?.length || 0,
+        connections: rawData?.connections?.length || 0,
+        hasNetworkIntelligence: !!rawData?.networkIntelligence,
+        hasSmartClusters: !!rawData?.smartClusters
     });
 
     // Generate enhanced sample data for testing
@@ -188,13 +522,17 @@ const TopicMapVisualization = ({
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // Enhanced data processing with smart filtering
-    const processDataForVisualization = () => {
-        if (!data.notebooks || data.notebooks.length === 0) {
+    // Enhanced data processing with smart filtering, wrapped in useMemo
+    const processedData = useMemo(() => {
+        console.log("Processing data for visualization...", {
+            rawDataAvailable: !!(rawData.notebooks && rawData.notebooks.length > 0),
+            searchTerm, selectedCategories, sortBy, minSimilarity, connectionType
+        });
+        if (!rawData.notebooks || rawData.notebooks.length === 0) {
             return { nodes: [], links: [] };
         }
 
-        let filteredNotebooks = [...data.notebooks];
+        let filteredNotebooks = [...rawData.notebooks];
 
         // Apply search filter with enhanced matching
         if (searchTerm.trim()) {
@@ -206,14 +544,16 @@ const TopicMapVisualization = ({
             );
         }
 
-        // Apply category filter
-        if (categoryFilter !== 'all') {
+        // Apply category filter (using selectedCategories array)
+        if (selectedCategories && selectedCategories.length > 0) {
             filteredNotebooks = filteredNotebooks.filter(notebook =>
                 notebook.tags && notebook.tags.some(tag =>
-                    tag.toLowerCase().includes(categoryFilter.toLowerCase())
+                    selectedCategories.includes(tag) // Assuming selectedCategories contains exact tag names
                 )
             );
         }
+
+        // TODO: Implement sortBy logic if needed. Currently, sortBy prop is not used.
 
         // Create enhanced nodes
         const nodes = filteredNotebooks.map(notebook => {
@@ -221,17 +561,13 @@ const TopicMapVisualization = ({
             const primaryTag = tags.length > 0 ? tags[0] : 'uncategorized';
             const wordCount = notebook.wordCount || 0;
             const title = notebook.title || `Notebook ${notebook.notebookId?.substring(0, 8) || 'Unknown'}`;
-
-            // Calculate connection count for this notebook
-            const connectionCount = (data.connections || []).filter(conn =>
+            const connectionCount = (rawData.connections || []).filter(conn =>
                 conn.source === notebook.notebookId || conn.target === notebook.notebookId
             ).length;
 
-            // Enhanced size calculation based on multiple factors
-            const baseSize = 25;
-            const wordSize = Math.min(40, (wordCount / 100) + 5);
-            const connectionSize = connectionCount * 3;
-            const totalSize = baseSize + wordSize + connectionSize;
+            const wordSize = Math.min(DEFAULT_NODE_MAX_WORD_SIZE, (wordCount / DEFAULT_NODE_WORD_SIZE_FACTOR) + DEFAULT_NODE_WORD_SIZE_ADD);
+            const connectionSize = connectionCount * DEFAULT_NODE_CONNECTION_SIZE_FACTOR;
+            const totalSize = DEFAULT_NODE_BASE_SIZE + wordSize + connectionSize;
 
             return {
                 id: notebook.notebookId,
@@ -240,7 +576,7 @@ const TopicMapVisualization = ({
                 wordCount: wordCount,
                 connectionCount: connectionCount,
                 group: primaryTag,
-                size: Math.max(30, Math.min(80, totalSize)),
+                size: Math.max(MIN_NODE_SIZE, Math.min(MAX_NODE_SIZE, totalSize)),
                 notebook: notebook,
                 updatedAt: notebook.updatedAt,
                 preview: notebook.preview || ''
@@ -249,7 +585,7 @@ const TopicMapVisualization = ({
 
         // Create enhanced links with filtering
         const nodeIds = new Set(nodes.map(n => n.id));
-        const availableConnections = data.connections || [];
+        const availableConnections = rawData.connections || [];
 
         const links = availableConnections
             .filter(conn => {
@@ -268,72 +604,56 @@ const TopicMapVisualization = ({
                 strengthCategory: conn.strengthCategory || 'weak',
                 commonTags: conn.commonTags || [],
                 factors: conn.factors || {},
-                distance: Math.max(80, 200 - (conn.strength * 120)),
+                distance: Math.max(LINK_BASE_DISTANCE, 200 - (conn.strength * LINK_STRENGTH_DISTANCE_FACTOR)), // Adjusted distance logic
                 connection: conn
             }));
 
         return { nodes, links };
-    };
+    }, [rawData, searchTerm, selectedCategories, sortBy, minSimilarity, connectionType]);
+
+    // Drag handler functions
+    const dragstarted = useCallback((event, d, simulation) => {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }, []);
+
+    const dragged = useCallback((event, d) => {
+        d.fx = event.x;
+        d.fy = event.y;
+    }, []);
+
+    const dragended = useCallback((event, d, simulation) => {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }, []);
+
 
     // Enhanced D3 visualization
     useEffect(() => {
-        if (!data || !data.notebooks) {
+        if (!processedData || !processedData.nodes || !dimensions.width || !dimensions.height) {
             return;
         }
+        const { nodes, links } = processedData; // Use memoized data
 
-        const { nodes, links } = processDataForVisualization();
+        const svgElement = d3.select(svgRef.current);
+        const margin = { top: 40, right: 40, bottom: 40, left: 40 }; // Keep margin, innerWidth/Height local to useEffect
+        const innerWidth = dimensions.width - margin.left - margin.right;
+        const innerHeight = dimensions.height - margin.top - margin.bottom;
 
         if (nodes.length === 0) {
-            const svg = d3.select(svgRef.current);
-            svg.selectAll("*").remove();
-
-            svg.append("text")
+            svgElement.selectAll("*").remove();
+            svgElement.append("text")
+                .attr("class", styles.noDataText) // Use CSS Module class
                 .attr("x", dimensions.width / 2)
                 .attr("y", dimensions.height / 2)
-                .attr("text-anchor", "middle")
-                .attr("font-size", "18px")
-                .attr("fill", "#6b7280")
-                .attr("font-weight", "500")
                 .text("No notebooks found matching your criteria");
-
             return;
         }
-
-        const svg = d3.select(svgRef.current);
-        svg.selectAll("*").remove();
-
-        const { width, height } = dimensions;
-        const margin = { top: 40, right: 40, bottom: 40, left: 40 };
-
-        svg.attr("width", width).attr("height", height);
-
-        // Enhanced background with subtle gradient
-        const defs = svg.append("defs");
-        const gradient = defs.append("linearGradient")
-            .attr("id", "backgroundGradient")
-            .attr("x1", "0%").attr("y1", "0%")
-            .attr("x2", "100%").attr("y2", "100%");
         
-        gradient.append("stop")
-            .attr("offset", "0%")
-            .attr("stop-color", "#f8fafc");
-        
-        gradient.append("stop")
-            .attr("offset", "100%")
-            .attr("stop-color", "#f1f5f9");
+        const g = setupSVG(svgElement, dimensions, margin); // g is local to this effect
 
-        svg.append("rect")
-            .attr("width", width)
-            .attr("height", height)
-            .attr("fill", "url(#backgroundGradient)");
-
-        const g = svg.append("g")
-            .attr("transform", `translate(${margin.left},${margin.top})`);
-
-        const innerWidth = width - margin.left - margin.right;
-        const innerHeight = height - margin.top - margin.bottom;
-
-        // Enhanced color scale with more sophisticated colors
         const allTags = [...new Set(nodes.flatMap(n => n.tags))];
         const colorScale = d3.scaleOrdinal()
             .domain(allTags.concat(['uncategorized']))
@@ -344,366 +664,143 @@ const TopicMapVisualization = ({
                 '#0ea5e9', '#8b5a2b', '#db2777', '#7c3aed', '#059669'
             ]);
 
-        // Create enhanced force simulation
-        const simulation = d3.forceSimulation(nodes)
-            .force("link", d3.forceLink(links)
-                .id(d => d.id)
-                .distance(d => d.distance)
-                .strength(d => Math.min(0.8, d.strength))
-            )
-            .force("charge", d3.forceManyBody()
-                .strength(d => -300 - (d.connectionCount * 50))
-            )
-            .force("center", d3.forceCenter(innerWidth / 2, innerHeight / 2))
-            .force("collision", d3.forceCollide()
-                .radius(d => d.size + 15)
-                .strength(0.9)
-            );
-
-        // Add repulsion between nodes with same tags
-        simulation.force("sameTagRepulsion", d3.forceManyBody()
-            .strength((d, i) => {
-                const sameTagNodes = nodes.filter(n => 
-                    n.id !== d.id && n.tags.some(tag => d.tags.includes(tag))
-                );
-                return sameTagNodes.length > 0 ? -100 : 0;
-            })
-        );
-
-        // Create enhanced links with different styles
-        const linkGroup = g.append("g").attr("class", "links");
+        const simulation = createSimulation(nodes, links, innerWidth, innerHeight);
         
-        const link = linkGroup.selectAll("line")
-            .data(links)
-            .enter().append("line")
-            .attr("stroke", d => {
-                if (d.type === 'explicit') return '#ef4444';
-                if (d.strengthCategory === 'strong') return '#059669';
-                if (d.strengthCategory === 'moderate') return '#3b82f6';
-                return '#9ca3af';
-            })
-            .attr("stroke-opacity", d => {
-                if (d.type === 'explicit') return 0.9;
-                return Math.max(0.3, d.strength);
-            })
-            .attr("stroke-width", d => {
-                if (d.type === 'explicit') return 4;
-                return Math.max(2, d.strength * 6);
-            })
-            .attr("stroke-dasharray", d => d.type === 'explicit' ? "0" : "5,5")
-            .style("cursor", "pointer")
-            .on("mouseover", function(event, d) {
-                setSelectedConnection(d);
-                d3.select(this)
-                    .attr("stroke-width", d => d.type === 'explicit' ? 6 : Math.max(4, d.strength * 8))
-                    .attr("stroke-opacity", 1);
-            })
-            .on("mouseout", function(event, d) {
-                setSelectedConnection(null);
-                d3.select(this)
-                    .attr("stroke-width", d => d.type === 'explicit' ? 4 : Math.max(2, d.strength * 6))
-                    .attr("stroke-opacity", d => d.type === 'explicit' ? 0.9 : Math.max(0.3, d.strength));
-            });
+        const linkElements = drawLinks(g, links, setSelectedConnection);
 
-        // Create enhanced nodes with patterns
-        const nodeGroup = g.append("g").attr("class", "nodes");
+        const dragBehavior = d3.drag()
+            .on("start", (event, d) => dragstarted(event, d, simulation))
+            .on("drag", dragged)
+            .on("end", (event, d) => dragended(event, d, simulation));
+
+        const nodeElements = drawNodes(g, nodes, colorScale, setHoveredNode, setSelectedNode, selectedNode, dragBehavior, linkElements, links);
         
-        // Add patterns for different node types
-        const pattern = defs.selectAll("pattern")
-            .data(nodes.filter(d => d.connectionCount > 3))
-            .enter().append("pattern")
-            .attr("id", d => `pattern-${d.id}`)
-            .attr("patternUnits", "userSpaceOnUse")
-            .attr("width", 4)
-            .attr("height", 4);
-            
-        pattern.append("circle")
-            .attr("cx", 2)
-            .attr("cy", 2)
-            .attr("r", 1)
-            .attr("fill", "#ffffff")
-            .attr("opacity", 0.3);
+        let labelElementsGroup = drawLabels(g, nodes, showLabels);
 
-        const node = nodeGroup.selectAll("circle")
-            .data(nodes)
-            .enter().append("circle")
-            .attr("r", d => d.size)
-            .attr("fill", d => {
-                if (d.connectionCount > 3) {
-                    return `url(#pattern-${d.id})`;
-                }
-                return colorScale(d.group);
-            })
-            .attr("stroke", d => d.connectionCount > 3 ? "#fbbf24" : "#ffffff")
-            .attr("stroke-width", d => d.connectionCount > 3 ? 6 : 4)
-            .style("cursor", "pointer")
-            .style("filter", "drop-shadow(0 4px 8px rgba(0,0,0,0.25))")
-            .on("mouseover", function (event, d) {
-                setHoveredNode(d);
-                d3.select(this)
-                    .transition()
-                    .duration(200)
-                    .attr("r", d.size * 1.2)
-                    .attr("stroke-width", d => d.connectionCount > 3 ? 8 : 6)
-                    .style("filter", "drop-shadow(0 8px 16px rgba(0,0,0,0.4))");
-                
-                // Highlight connected nodes and links
-                linkGroup.selectAll("line")
-                    .attr("stroke-opacity", l => 
-                        (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.1
-                    );
-                    
-                nodeGroup.selectAll("circle")
-                    .attr("opacity", n => {
-                        if (n.id === d.id) return 1;
-                        const isConnected = links.some(l => 
-                            (l.source.id === d.id && l.target.id === n.id) ||
-                            (l.target.id === d.id && l.source.id === n.id)
-                        );
-                        return isConnected ? 1 : 0.3;
-                    });
-            })
-            .on("mouseout", function (event, d) {
-                setHoveredNode(null);
-                d3.select(this)
-                    .transition()
-                    .duration(200)
-                    .attr("r", d.size)
-                    .attr("stroke-width", d => d.connectionCount > 3 ? 6 : 4)
-                    .style("filter", "drop-shadow(0 4px 8px rgba(0,0,0,0.25))");
-                
-                // Reset highlighting
-                linkGroup.selectAll("line")
-                    .attr("stroke-opacity", d => d.type === 'explicit' ? 0.9 : Math.max(0.3, d.strength));
-                    
-                nodeGroup.selectAll("circle")
-                    .attr("opacity", 1);
-            })
-            .on("click", function (event, d) {
-                event.stopPropagation();
-                setSelectedNode(selectedNode?.id === d.id ? null : d);
-            })
-            .call(d3.drag()
-                .on("start", dragstarted)
-                .on("drag", dragged)
-                .on("end", dragended));
-
-        // Enhanced labels with better positioning
-        const labelGroup = g.append("g").attr("class", "labels");
-        
-        if (showLabels) {
-            const labels = labelGroup.selectAll("text")
-                .data(nodes)
-                .enter().append("text")
-                .text(d => {
-                    const title = d.title || 'Untitled';
-                    return title.length > 20 ? title.substring(0, 20) + "..." : title;
-                })
-                .attr("font-size", d => Math.max(10, Math.min(14, d.size / 4)))
-                .attr("font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif")
-                .attr("fill", "#1f2937")
-                .attr("font-weight", "600")
-                .attr("text-anchor", "middle")
-                .attr("dy", d => d.size + 25)
-                .style("pointer-events", "none")
-                .style("user-select", "none")
-                .style("text-shadow", "2px 2px 4px rgba(255,255,255,0.9)")
-                .style("opacity", 0.9);
-
-            // Connection count badges for highly connected nodes
-            const badges = labelGroup.selectAll("rect")
-                .data(nodes.filter(d => d.connectionCount > 2))
-                .enter().append("g");
-
-            badges.append("rect")
-                .attr("x", d => -12)
-                .attr("y", d => -d.size - 15)
-                .attr("width", 24)
-                .attr("height", 16)
-                .attr("rx", 8)
-                .attr("fill", "#ef4444")
-                .style("pointer-events", "none");
-
-            badges.append("text")
-                .attr("x", 0)
-                .attr("y", d => -d.size - 7)
-                .attr("text-anchor", "middle")
-                .attr("font-size", "10px")
-                .attr("font-weight", "700")
-                .attr("fill", "#ffffff")
-                .text(d => d.connectionCount)
-                .style("pointer-events", "none");
-        }
-
-        // Simulation state tracking
         setSimulationState('running');
-        
+
         simulation.on("tick", () => {
-            const padding = 100;
+            const padding = 100; // Keep nodes away from edges
 
-            node
-                .attr("cx", d => {
-                    d.x = Math.max(padding, Math.min(innerWidth - padding, d.x));
-                    return d.x;
-                })
-                .attr("cy", d => {
-                    d.y = Math.max(padding, Math.min(innerHeight - padding, d.y));
-                    return d.y;
-                });
+            nodeElements
+                .attr("cx", d => d.x = Math.max(d.size + NODE_STROKE_WIDTH, Math.min(innerWidth - d.size - NODE_STROKE_WIDTH, d.x)))
+                .attr("cy", d => d.y = Math.max(d.size + NODE_STROKE_WIDTH, Math.min(innerHeight - d.size - NODE_STROKE_WIDTH, d.y)));
 
-            link
+            linkElements
                 .attr("x1", d => d.source.x)
                 .attr("y1", d => d.source.y)
                 .attr("x2", d => d.target.x)
                 .attr("y2", d => d.target.y);
 
-            if (showLabels) {
-                labelGroup.selectAll("text")
+            if (showLabels && labelElementsGroup) {
+                labelElementsGroup.selectAll("text")
                     .attr("x", d => d.x)
-                    .attr("y", d => d.y);
+                    .attr("y", d => d.y + d.size + LABEL_DY_OFFSET / 2); // Adjust dy based on label position (below node)
 
-                labelGroup.selectAll("g")
-                    .attr("transform", d => `translate(${d.x},${d.y})`);
+                labelElementsGroup.selectAll("g.badge-group") // Select the group for badges
+                     .attr("transform", d => `translate(${d.x},${d.y})`);
             }
         });
 
-        simulation.on("end", () => {
-            setSimulationState('stopped');
-        });
+        simulation.on("end", () => setSimulationState('stopped'));
 
-        // Enhanced zoom and pan
-        const zoom = d3.zoom()
-            .scaleExtent([0.1, 5])
-            .on("zoom", (event) => {
-                g.attr("transform", event.transform);
-            });
+        const zoomBehavior = setupZoom(svgElement, g);
+        createControls(svgElement, dimensions.width, simulation, simulationState, setSimulationState, zoomBehavior);
 
-        svg.call(zoom);
+        // Update controls if simulationState changes from outside (e.g. initial state)
+        // This ensures the play/pause button is correct if the effect re-runs.
+        d3.select(svgRef.current).select(".controls").remove(); // Remove old controls before re-creating
+        createControls(svgElement, dimensions.width, simulation, simulationState, setSimulationState, zoomBehavior);
 
-        // Control buttons
-        const controlsGroup = svg.append("g")
-            .attr("class", "controls")
-            .attr("transform", `translate(${width - 160}, 15)`);
 
-        // Reset zoom button
-        const resetButton = controlsGroup.append("g")
-            .style("cursor", "pointer")
-            .on("click", () => {
-                svg.transition().duration(750).call(
-                    zoom.transform,
-                    d3.zoomIdentity
-                );
-            });
-
-        resetButton.append("rect")
-            .attr("width", 90)
-            .attr("height", 30)
-            .attr("fill", "#3b82f6")
-            .attr("rx", 6);
-
-        resetButton.append("text")
-            .attr("x", 45)
-            .attr("y", 20)
-            .attr("text-anchor", "middle")
-            .attr("fill", "white")
-            .attr("font-size", "12px")
-            .attr("font-weight", "600")
-            .text("Reset View");
-
-        // Simulation control button
-        const simButton = controlsGroup.append("g")
-            .attr("transform", "translate(0, 35)")
-            .style("cursor", "pointer")
-            .on("click", () => {
-                if (simulationState === 'running') {
-                    simulation.stop();
-                    setSimulationState('stopped');
-                } else {
-                    simulation.restart();
-                    setSimulationState('running');
-                }
-            });
-
-        simButton.append("rect")
-            .attr("width", 90)
-            .attr("height", 30)
-            .attr("fill", simulationState === 'running' ? "#ef4444" : "#10b981")
-            .attr("rx", 6);
-
-        simButton.append("text")
-            .attr("x", 45)
-            .attr("y", 20)
-            .attr("text-anchor", "middle")
-            .attr("fill", "white")
-            .attr("font-size", "12px")
-            .attr("font-weight", "600")
-            .text(simulationState === 'running' ? "Pause" : "Play");
-
-        // Drag functions
-        function dragstarted(event, d) {
-            if (!event.active) simulation.alphaTarget(0.3).restart();
-            d.fx = d.x;
-            d.fy = d.y;
-        }
-
-        function dragged(event, d) {
-            d.fx = event.x;
-            d.fy = event.y;
-        }
-
-        function dragended(event, d) {
-            if (!event.active) simulation.alphaTarget(0);
-            d.fx = null;
-            d.fy = null;
-        }
-
-        // Cleanup
         return () => {
             simulation.stop();
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        processedData,
+        dimensions,
+        showLabels,
+        simulationState,
+        dragstarted,
+        dragged,
+        dragended,
+        // Prop `sortBy` is not directly used in this effect but is part of processedData dependency
+        // Prop `showMetrics` is not directly used in this effect
+    ]);
 
-    }, [data, searchTerm, categoryFilter, sortBy, minSimilarity, connectionType, dimensions, showLabels]);
+    // Re-draw labels when showLabels prop changes without re-running the entire simulation
+    useEffect(() => {
+        // Use processedData.nodes here
+        if (!svgRef.current || !processedData || !processedData.nodes || processedData.nodes.length === 0) return;
+
+        const svg = d3.select(svgRef.current);
+        const g = svg.select("g"); // Assuming 'g' is the main group where elements are drawn
+
+        if (g.empty()) return; // Ensure g exists
+
+        // If nodes are already drawn (i.e., nodeElements exist and have data)
+        const nodesData = g.selectAll(".nodes circle").data();
+        if(nodesData.length > 0) {
+             // Clear existing labels before redrawing
+            g.select(".labels").remove();
+            if (showLabels) {
+                // Pass nodesData (which are the D3 bound data objects) to drawLabels
+                const labelElementsGroup = drawLabels(g, nodesData, true);
+                // Need to update positions if simulation is not running
+                if (simulationState !== 'running' && labelElementsGroup) {
+                     labelElementsGroup.selectAll("text")
+                        .attr("x", d => d.x)
+                        .attr("y", d => d.y + d.size + LABEL_DY_OFFSET / 2);
+                    labelElementsGroup.selectAll("g.badge-group")
+                        .attr("transform", d => `translate(${d.x},${d.y})`);
+                }
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showLabels, processedData.nodes, simulationState]);
+
 
     return (
-        <div ref={containerRef} style={styles.container}>
-            <div style={styles.visualizationContainer}>
-                <svg ref={svgRef} style={styles.svg}></svg>
+        <div ref={containerRef} className={styles.container}>
+            <div className={styles.visualizationContainer}>
+                <svg ref={svgRef} className={styles.svg} data-testid="visualization-svg"></svg>
 
                 {/* Enhanced data source indicator */}
-                <div style={styles.dataSourceIndicator}>
-                    <span style={hasRealData ? styles.realDataText : styles.sampleDataText}>
+                <div className={styles.dataSourceIndicator}>
+                    <span className={hasRealData ? styles.realDataText : styles.sampleDataText}>
                         {hasRealData ? 
-                            `✅ Smart Analysis: ${data?.notebooks?.length || 0} notebooks, ${data?.connections?.length || 0} connections` : 
+                            `✅ Smart Analysis: ${processedData.nodes.length} notebooks, ${processedData.links.length} connections` :
                             '📊 Demo Data - Enhanced Smart Mapping'
                         }
                     </span>
                     {simulationState === 'running' && (
-                        <span style={styles.simulationIndicator}>🔄 Simulation Active</span>
+                        <span className={styles.simulationIndicator}>🔄 Simulation Active</span>
                     )}
                 </div>
 
                 {/* Enhanced tooltip for hovered node */}
                 {hoveredNode && (
-                    <div style={styles.tooltip}>
-                        <h4 style={styles.tooltipTitle}>{hoveredNode.title}</h4>
-                        <div style={styles.tooltipSection}>
-                            <p style={styles.tooltipText}>
+                    <div className={styles.tooltip} style={{ left: hoveredNode.x ? hoveredNode.x + hoveredNode.size + 20 : 0, top: hoveredNode.y ? hoveredNode.y - 20 : 0 }}>
+                        <h4 className={styles.tooltipTitle}>{hoveredNode.title}</h4>
+                        <div className={styles.tooltipSection}>
+                            <p className={styles.tooltipText}>
                                 <strong>Tags:</strong> {hoveredNode.tags.length > 0 ? hoveredNode.tags.join(', ') : 'No tags'}
                             </p>
-                            <p style={styles.tooltipText}>
+                            <p className={styles.tooltipText}>
                                 <strong>Words:</strong> {hoveredNode.wordCount.toLocaleString()}
                             </p>
-                            <p style={styles.tooltipText}>
+                            <p className={styles.tooltipText}>
                                 <strong>Connections:</strong> {hoveredNode.connectionCount}
                             </p>
                             {hoveredNode.updatedAt && (
-                                <p style={styles.tooltipText}>
+                                <p className={styles.tooltipText}>
                                     <strong>Updated:</strong> {new Date(hoveredNode.updatedAt).toLocaleDateString()}
                                 </p>
                             )}
                         </div>
                         {hoveredNode.preview && (
-                            <div style={styles.tooltipPreview}>
+                            <div className={styles.tooltipPreview}>
                                 <strong>Preview:</strong>
                                 <p>{hoveredNode.preview.substring(0, 100)}...</p>
                             </div>
@@ -713,29 +810,29 @@ const TopicMapVisualization = ({
 
                 {/* Connection details tooltip */}
                 {selectedConnection && (
-                    <div style={styles.connectionTooltip}>
-                        <h4 style={styles.tooltipTitle}>Connection Details</h4>
-                        <div style={styles.tooltipSection}>
-                            <p style={styles.tooltipText}>
+                     <div className={styles.connectionTooltip} style={{ left: selectedConnection.source.x ? (selectedConnection.source.x + selectedConnection.target.x) / 2 + 15 : 0, top: selectedConnection.source.y ? (selectedConnection.source.y + selectedConnection.target.y) / 2 + 15 : 0 }}>
+                        <h4 className={styles.tooltipTitle}>Connection Details</h4>
+                        <div className={styles.tooltipSection}>
+                            <p className={styles.tooltipText}>
                                 <strong>Type:</strong> {selectedConnection.type === 'explicit' ? 'Explicit Link' : 'Smart Similarity'}
                             </p>
-                            <p style={styles.tooltipText}>
+                            <p className={styles.tooltipText}>
                                 <strong>Strength:</strong> {Math.round(selectedConnection.strength * 100)}%
                             </p>
-                            <p style={styles.tooltipText}>
+                            <p className={styles.tooltipText}>
                                 <strong>Category:</strong> {selectedConnection.strengthCategory}
                             </p>
                             {selectedConnection.commonTags.length > 0 && (
-                                <p style={styles.tooltipText}>
+                                <p className={styles.tooltipText}>
                                     <strong>Common Tags:</strong> {selectedConnection.commonTags.join(', ')}
                                 </p>
                             )}
                         </div>
                         {selectedConnection.factors && Object.keys(selectedConnection.factors).length > 0 && (
-                            <div style={styles.tooltipSection}>
+                            <div className={styles.tooltipSection}>
                                 <strong>Analysis Factors:</strong>
                                 {Object.entries(selectedConnection.factors).map(([key, value]) => (
-                                    <p key={key} style={styles.factorText}>
+                                    <p key={key} className={styles.factorText}>
                                         {key}: {Math.round(value * 100)}%
                                     </p>
                                 ))}
@@ -748,95 +845,7 @@ const TopicMapVisualization = ({
     );
 };
 
-const styles = {
-    container: {
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        width: '100%',
-        position: 'relative',
-        overflow: 'hidden'
-    },
-    visualizationContainer: {
-        flex: 1,
-        position: 'relative',
-        background: '#f8fafc',
-        borderRadius: '8px',
-        overflow: 'hidden'
-    },
-    svg: {
-        width: '100%',
-        height: '100%'
-    },
-    dataSourceIndicator: {
-        position: 'absolute',
-        top: '10px',
-        left: '10px',
-        background: 'rgba(255, 255, 255, 0.9)',
-        padding: '8px 12px',
-        borderRadius: '6px',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-        fontSize: '14px',
-        display: 'flex',
-        gap: '8px',
-        alignItems: 'center'
-    },
-    realDataText: {
-        color: '#059669',
-        fontWeight: '500'
-    },
-    sampleDataText: {
-        color: '#6b7280',
-        fontWeight: '500'
-    },
-    simulationIndicator: {
-        color: '#3b82f6',
-        fontWeight: '500'
-    },
-    tooltip: {
-        position: 'absolute',
-        background: 'white',
-        padding: '16px',
-        borderRadius: '8px',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-        maxWidth: '300px',
-        zIndex: 1000
-    },
-    tooltipTitle: {
-        margin: '0 0 12px 0',
-        fontSize: '16px',
-        fontWeight: '600',
-        color: '#1f2937'
-    },
-    tooltipSection: {
-        marginBottom: '12px'
-    },
-    tooltipText: {
-        margin: '4px 0',
-        fontSize: '14px',
-        color: '#4b5563'
-    },
-    tooltipPreview: {
-        fontSize: '14px',
-        color: '#6b7280',
-        borderTop: '1px solid #e5e7eb',
-        paddingTop: '12px',
-        marginTop: '12px'
-    },
-    connectionTooltip: {
-        position: 'absolute',
-        background: 'white',
-        padding: '16px',
-        borderRadius: '8px',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-        maxWidth: '300px',
-        zIndex: 1000
-    },
-    factorText: {
-        margin: '4px 0',
-        fontSize: '14px',
-        color: '#4b5563'
-    }
-};
+// Original styles object is removed as styles are now in TopicMapVisualization.module.css
+// const styles = { ... };
 
 export default TopicMapVisualization;
