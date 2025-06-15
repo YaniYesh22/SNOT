@@ -1,6 +1,6 @@
 import 'react-quill/dist/quill.snow.css';
 
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 import ReactQuill from 'react-quill';
@@ -36,13 +36,34 @@ export default function NotebookDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [lastSaved, setLastSaved] = useState(null);
-  // const [autoSave, setAutoSave] = useState(true);
   const [files, setFiles] = useState([]);
   const [links, setLinks] = useState([]);
   const [newLink, setNewLink] = useState('');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [summaryType, setSummaryType] = useState('normal');
   const [chatMessage, setChatMessage] = useState('');
+
+  // Enhanced Chat-related state
+  const [chatMessages, setChatMessages] = useState([]);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [conversationId, setConversationId] = useState(null);
+  const chatContainerRef = useRef(null);
+
+  // Summary viewing state
+  const [generatedSummaries, setGeneratedSummaries] = useState({});
+  const [showSummaryView, setShowSummaryView] = useState(false);
+  const [selectedSummaryType, setSelectedSummaryType] = useState(null);
+  const [isFetchingSummary, setIsFetchingSummary] = useState(false);
+
+  // 🔄 FIXED: Progress tracking state
+  const [summaryProgress, setSummaryProgress] = useState(null);
+  const [isPollingProgress, setIsPollingProgress] = useState(false);
+  const [summaryProgressInterval, setSummaryProgressInterval] = useState(null);
+  const [summaryStartTime, setSummaryStartTime] = useState(null);
+  const [summaryTaskId, setSummaryTaskId] = useState(null);
+
+  // Summary page view state
+  const [showSummaryPage, setShowSummaryPage] = useState(false);
+  const [currentSummaryPage, setCurrentSummaryPage] = useState(null);
 
   // Updated state variables for the new upload confirmation flow
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -53,13 +74,60 @@ export default function NotebookDetailPage() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkToAdd, setLinkToAdd] = useState('');
   const [isAddingLink, setIsAddingLink] = useState(false);
-  const [ytJobId, setYtJobId] = useState(null);
+  const [showSummaryDropdown, setShowSummaryDropdown] = useState(false);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
-  // 🆕 ADD DEBUGGING: Monitor notebook and links changes
+  // 🆕 NEW: Helper functions for chat control
+  const hasContentSources = () => {
+    return files.length > 0 || links.length > 0;
+  };
+
+  const hasSummariesForChat = () => {
+    const availableSummaries = Object.entries(generatedSummaries).filter(([type, data]) => {
+      const hasValidUrl = data.url && typeof data.url === 'string' && !data.url.startsWith('#');
+      const isReady = data.ready === true;
+      return hasValidUrl && isReady;
+    });
+    return availableSummaries.length > 0;
+  };
+
+  const getChatState = () => {
+    const sourcesAvailable = hasContentSources();
+    const summariesAvailable = hasSummariesForChat();
+    
+    if (summariesAvailable) {
+      return {
+        state: 'available',
+        title: 'AI Assistant',
+        placeholder: 'Ask me anything...',
+        note: null,
+        disabled: false
+      };
+    } else if (sourcesAvailable) {
+      return {
+        state: 'needs_summary',
+        title: 'Generate a summary to start chatting',
+        placeholder: 'Generate a summary to start chatting...',
+        note: 'Generate a summary to start chatting with your sources!',
+        disabled: true
+      };
+    } else {
+      return {
+        state: 'needs_sources',
+        title: 'Add sources and generate a summary to chat',
+        placeholder: 'Add sources first...',
+        note: 'Upload files or add links, then generate a summary to start chatting!',
+        disabled: true
+      };
+    }
+  };
+
+  // Auto-scroll chat to bottom when new messages are added
   useEffect(() => {
-    console.log('📓 Notebook state updated:', notebook);
-    console.log('🔗 Links state updated:', links);
-  }, [notebook, links]);
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   // Quill editor modules configuration - simplified
   const modules = {
@@ -81,6 +149,1031 @@ export default function NotebookDetailPage() {
     if (!htmlContent) return 0;
     const text = htmlContent.replace(/<[^>]*>/g, ' ');
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+  };
+
+  // Enhanced Chat API function with conversation history
+  const sendChatMessage = async (message) => {
+    try {
+      const headers = await notebookService.authService?.getAuthHeaders() || {};
+      const userData = notebookService.authService?.getUserData() || {};
+      const userEmail = userData?.email;
+
+      if (!userEmail) {
+        throw new Error('Please login to use chat');
+      }
+
+      // Build conversation history from chat messages
+      const conversationHistory = chatMessages.map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.message
+      }));
+
+      // Generate conversation ID if not exists
+      const currentConversationId = conversationId || `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      if (!conversationId) {
+        setConversationId(currentConversationId);
+      }
+
+      const payload = {
+        bucket: 'smart-notebook-media',
+        email: userEmail,
+        notebook_uuid: notebook.notebookId,
+        question: message,
+        conversation_history: conversationHistory,
+        conversation_id: currentConversationId,
+        max_chunks: 5,
+        include_sources: true
+      };
+
+      console.log('🤖 Sending chat message with history:', {
+        ...payload,
+        conversation_history_length: conversationHistory.length
+      });
+
+      const response = await fetch(`${notebookService.baseUrl}/chat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': headers.Authorization,
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail,
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Chat API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('🤖 Chat API response:', data);
+
+      return {
+        answer: data.answer || 'Sorry, I couldn\'t generate a response.',
+        sources: data.sources || [],
+        chunks_found: data.chunks_found || 0,
+        search_method: data.search_method || 'unknown'
+      };
+
+    } catch (error) {
+      console.error('❌ Chat error:', error);
+      throw error;
+    }
+  };
+
+  // Enhanced function to add a chat message with metadata
+  const addChatMessage = (message, sender = 'user', type = 'message', metadata = {}) => {
+    const newMessage = {
+      id: Date.now() + Math.random(),
+      message,
+      sender, // 'user', 'ai', or 'system'
+      type, // 'message', 'summary', 'error'
+      timestamp: new Date().toISOString(),
+      metadata // Additional data like sources, chunks_found, etc.
+    };
+
+    setChatMessages(prev => [...prev, newMessage]);
+    return newMessage;
+  };
+
+  const fetchSummaryContent = async (summaryUrl, summaryType) => {
+    try {
+      setIsFetchingSummary(true);
+      console.log(`📄 Fetching ${summaryType} summary...`);
+
+      let summaryContent;
+
+      // 🆕 NEW: Try getSummary Lambda first if we have the required info
+      try {
+        console.log('🚀 Trying getSummary Lambda...');
+        const lambdaResult = await notebookService.getSummary(notebook.notebookId, summaryType);
+
+        if (lambdaResult && lambdaResult.summary && lambdaResult.summary.content) {
+          summaryContent = lambdaResult.summary.content;
+          console.log('✅ Got summary from Lambda');
+
+          // 🆕 BONUS: Store additional metadata if available
+          const summaryMetadata = {
+            content: summaryContent,
+            url: summaryUrl,
+            fetchedAt: new Date().toISOString(),
+            wordCount: lambdaResult.summary.wordCount,
+            readingTime: lambdaResult.summary.estimatedReadingTime,
+            fileSize: lambdaResult.summary.fileSizeFormatted,
+            lastModified: lambdaResult.summary.lastModified
+          };
+
+          setGeneratedSummaries(prev => ({
+            ...prev,
+            [summaryType]: summaryMetadata
+          }));
+
+          return summaryContent;
+        }
+      } catch (lambdaError) {
+        console.log('⚠️ Lambda failed, trying direct fetch:', lambdaError.message);
+      }
+
+      // Fallback: Direct fetch methods
+      if (summaryUrl.startsWith('s3://')) {
+        summaryContent = await notebookService.fetchSummaryFromS3(summaryUrl, notebook.notebookId, summaryType);
+      } else if (summaryUrl.startsWith('https://')) {
+        const response = await fetch(summaryUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch summary: ${response.status}`);
+        }
+        summaryContent = await response.text();
+      } else {
+        throw new Error('Unsupported summary URL format');
+      }
+
+      // Store the fetched summary
+      setGeneratedSummaries(prev => ({
+        ...prev,
+        [summaryType]: {
+          content: summaryContent,
+          url: summaryUrl,
+          fetchedAt: new Date().toISOString()
+        }
+      }));
+
+      return summaryContent;
+
+    } catch (error) {
+      console.error(`❌ Error fetching ${summaryType} summary:`, error);
+
+      // Add error message to chat
+      addChatMessage(
+        `❌ Failed to fetch ${summaryType} summary: ${error.message}`,
+        'system',
+        'error'
+      );
+
+      throw error;
+    } finally {
+      setIsFetchingSummary(false);
+    }
+  };
+
+  // Function to toggle summary view
+  const toggleSummaryView = (summaryType = null) => {
+    setSelectedSummaryType(summaryType);
+    setShowSummaryView(summaryType !== null);
+  };
+
+  // Function to handle viewing a specific summary
+  const viewSummary = async (summaryType, summaryUrl) => {
+    try {
+      // Check if we already have this summary cached
+      if (generatedSummaries[summaryType]?.content) {
+        toggleSummaryView(summaryType);
+        return;
+      }
+
+      // Fetch the summary content
+      await fetchSummaryContent(summaryUrl, summaryType);
+
+      // Show the summary view
+      toggleSummaryView(summaryType);
+
+    } catch (error) {
+      console.error('Error viewing summary:', error);
+      // Error handling is done in fetchSummaryContent
+    }
+  };
+
+  // 🆕 NEW: Get summary preview for listing
+  const getSummaryPreview = async (notebookId, summaryType) => {
+    try {
+      const result = await notebookService.getSummary(notebookId, summaryType);
+      return {
+        type: summaryType,
+        preview: result.summary.preview || result.summary.content.substring(0, 200) + '...',
+        wordCount: result.summary.wordCount,
+        readingTime: result.summary.estimatedReadingTime,
+        fileSize: result.summary.fileSizeFormatted,
+        lastModified: result.summary.lastModified
+      };
+    } catch (error) {
+      console.error(`Error getting ${summaryType} preview:`, error);
+      return null;
+    }
+  };
+
+  // 🆕 NEW: Download summary as file
+  const downloadSummary = async (notebookId, summaryType, format = 'plain') => {
+    try {
+      const result = await notebookService.getSummary(notebookId, summaryType, format);
+
+      let content, mimeType, extension;
+
+      if (format === 'html') {
+        content = result.content;
+        mimeType = 'text/html';
+        extension = 'html';
+      } else if (format === 'plain') {
+        content = result.content;
+        mimeType = 'text/plain';
+        extension = 'txt';
+      } else {
+        // JSON format
+        content = result.summary.content;
+        mimeType = 'text/plain';
+        extension = 'txt';
+      }
+
+      // Create and download file
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${notebookId}_${summaryType}_summary.${extension}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      console.log(`✅ Downloaded ${summaryType} summary as ${format}`);
+
+    } catch (error) {
+      console.error('Error downloading summary:', error);
+      throw new Error(`Failed to download summary: ${error.message}`);
+    }
+  };
+
+  // Function to open summary page view
+  const openSummaryPage = async (summaryType, summaryUrl) => {
+    try {
+      // Check if we already have this summary cached
+      if (!generatedSummaries[summaryType]?.content) {
+        // Fetch the summary content first
+        await fetchSummaryContent(summaryUrl, summaryType);
+      }
+
+      // Set the current summary page and show it
+      setCurrentSummaryPage(summaryType);
+      setShowSummaryPage(true);
+
+    } catch (error) {
+      console.error('Error opening summary page:', error);
+      // Error handling is done in fetchSummaryContent
+    }
+  };
+
+  // Function to close summary page and return to main notebook view
+  const closeSummaryPage = () => {
+    setShowSummaryPage(false);
+    setCurrentSummaryPage(null);
+  };
+
+  // Function to get formatted summary type name
+  const getFormattedSummaryName = (summaryType) => {
+    const names = {
+      'casual': 'Casual Summarization',
+      'academic': 'Academic Summarization',
+      'simple': 'Simple Summarization'
+    };
+    return names[summaryType] || `${summaryType.charAt(0).toUpperCase() + summaryType.slice(1)} Summarization`;
+  };
+
+  // Function to clear conversation (but keep summaries)
+  const clearConversation = () => {
+    setChatMessages([]);
+    setConversationId(null);
+    // Note: We don't clear generatedSummaries so users can still access them
+  };
+
+  // Function to format chat message timestamp
+  const formatChatTime = (timestamp) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  };
+
+  // Function to render source information
+  const renderSourceInfo = (sources) => {
+    if (!sources || sources.length === 0) return null;
+
+    return (
+      <div style={styles.sourcesInfo}>
+        <div style={styles.sourcesHeader}>📚 Sources:</div>
+        {sources.slice(0, 3).map((source, index) => (
+          <div key={index} style={styles.sourceItem}>
+            <span style={styles.sourceNumber}>{index + 1}.</span>
+            <span style={styles.sourceText}>
+              {source.filename} ({source.content_type})
+              {source.similarity_score && (
+                <span style={styles.sourceScore}>
+                  - {(source.similarity_score * 100).toFixed(0)}% match
+                </span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // 🔄 FIXED: Updated handleSummarize function 
+  const handleSummarize = async (summaryType) => {
+    setShowSummaryDropdown(false);
+    setIsGeneratingSummary(true);
+    setSummaryProgress(null);
+    setSummaryStartTime(new Date());
+    setSummaryTaskId(null);
+
+    try {
+      console.log(`🚀 Starting ${summaryType} summary with progress tracking...`);
+
+      // Step 1: Start the summary generation using your new Lambda endpoint
+      const startResult = await notebookService.startSummary(notebook.notebookId, [summaryType]);
+
+      console.log(`✅ Summary started:`, startResult);
+      setSummaryTaskId(startResult.taskId);
+
+      // Add initial system message
+      addChatMessage(
+        `🚀 Starting ${summaryType} summary generation... This will take ${startResult.estimatedTime || '2-8 minutes'}.`,
+        'system',
+        'summary',
+        {
+          summaryType: summaryType,
+          taskId: startResult.taskId,
+          estimatedTime: startResult.estimatedTime
+        }
+      );
+
+      // Step 2: Start polling for progress
+      setIsPollingProgress(true);
+      startProgressPolling(notebook.notebookId, summaryType, startResult.pollInterval || 10);
+
+    } catch (error) {
+      console.error('❌ Error starting summary:', error);
+
+      // Handle specific error cases
+      let errorMessage = 'Failed to start summary generation';
+
+      if (error.message.includes('already in progress')) {
+        errorMessage = 'Summary generation is already in progress. Please wait for it to complete.';
+      } else if (error.message.includes('still being processed')) {
+        errorMessage = 'Files are still being processed. Please wait and try again in a moment.';
+      } else if (error.message.includes('login')) {
+        errorMessage = 'Please login to generate summaries.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      addChatMessage(`❌ ${errorMessage}`, 'system', 'error');
+
+      setIsGeneratingSummary(false);
+      setSummaryProgress(null);
+      setIsPollingProgress(false);
+    }
+  };
+
+  // 🔄 FIXED: Enhanced startProgressPolling function with better interval management
+  const startProgressPolling = (notebookId, summaryType, pollInterval) => {
+    console.log(`📊 Starting progress polling every ${pollInterval} seconds...`);
+
+    // 🔄 FIXED: Clear any existing interval first to prevent multiple intervals
+    if (summaryProgressInterval) {
+      console.log('🧹 Clearing existing polling interval');
+      clearInterval(summaryProgressInterval);
+      setSummaryProgressInterval(null);
+    }
+
+    // Set polling state
+    setIsPollingProgress(true);
+
+    // Poll immediately first
+    pollSummaryProgress(notebookId, summaryType);
+
+    // Then set up interval for subsequent polls
+    const intervalId = setInterval(() => {
+      // 🔄 FIXED: Check if we should still be polling before each poll
+      console.log('🔄 Interval tick - checking if should continue polling...');
+      pollSummaryProgress(notebookId, summaryType);
+    }, pollInterval * 1000);
+
+    setSummaryProgressInterval(intervalId);
+    console.log(`✅ Polling interval started with ID: ${intervalId}`);
+  };
+
+  // 🔄 FIXED: Updated pollSummaryProgress function with proper completion detection
+  const pollSummaryProgress = async (notebookId, summaryType) => {
+    console.log('🔄 Starting poll attempt...', {
+      notebookId,
+      summaryType,
+      isPollingProgress,
+      intervalExists: !!summaryProgressInterval
+    });
+
+    try {
+      const progress = await notebookService.getSummaryStatus(notebookId);
+
+      console.log(`📊 Progress received:`, {
+        status: progress.status,
+        progressSummary: progress.progressSummary,
+        elapsedTime: progress.elapsedTime,
+        summariesCount: Object.keys(progress.summaries || {}).length
+      });
+
+      setSummaryProgress(progress);
+
+      // 🔄 FIXED: Proper completion detection and polling stop
+      const completionStatuses = ['completed', 'partial_success', 'failed'];
+      if (completionStatuses.includes(progress.status)) {
+        console.log('🎯 COMPLETION DETECTED!', {
+          status: progress.status,
+          willStopPolling: true,
+          willUpdateSummaries: !!progress.summaries
+        });
+
+        // CRITICAL: Stop polling FIRST, then handle completion
+        stopProgressPolling();
+        handleSummaryCompletion(progress, summaryType);
+        return; // Exit the function to prevent further polling
+      }
+
+      console.log('⏳ Still in progress, continuing to poll...');
+
+    } catch (error) {
+      console.error('❌ Poll error:', error);
+
+      // Don't fail immediately on polling errors, just log them
+      if (error.message.includes('Network error')) {
+        console.log('🔄 Network error during polling, will retry...');
+      } else {
+        console.error('❌ Unexpected polling error:', error.message);
+        // If we get too many errors, stop polling
+        stopProgressPolling();
+      }
+    }
+  };
+
+  // 🔄 FIXED: Enhanced stopProgressPolling function with better cleanup
+  const stopProgressPolling = () => {
+    console.log('🛑 STOP POLLING CALLED:', {
+      timestamp: new Date().toISOString(),
+      hadInterval: !!summaryProgressInterval,
+      intervalId: summaryProgressInterval,
+      wasPolling: isPollingProgress,
+      wasGenerating: isGeneratingSummary
+    });
+
+    // Clear the interval if it exists
+    if (summaryProgressInterval) {
+      clearInterval(summaryProgressInterval);
+      setSummaryProgressInterval(null);
+      console.log('✅ Interval cleared successfully');
+    } else {
+      console.log('⚠️ No interval to clear');
+    }
+
+    // Reset all polling-related state
+    setIsPollingProgress(false);
+    setIsGeneratingSummary(false);
+    setSummaryProgress(null);
+    setSummaryTaskId(null);
+
+    console.log('✅ All polling state reset');
+  };
+
+  // 🔄 FIXED: Enhanced handleSummaryCompletion function
+  const handleSummaryCompletion = (progress, summaryType) => {
+    console.log('🎉 HANDLING COMPLETION:', {
+      timestamp: new Date().toISOString(),
+      status: progress.status,
+      summaryType,
+      hasSummaries: !!progress.summaries,
+      summariesCount: Object.keys(progress.summaries || {}).length,
+      currentGeneratedCount: Object.keys(generatedSummaries).length
+    });
+    
+    // 🔄 FIXED: Ensure polling is completely stopped (defensive programming)
+    if (isPollingProgress || summaryProgressInterval) {
+      console.log('🛑 Defensive polling stop in completion handler');
+      stopProgressPolling();
+    }
+    
+    if (progress.status === 'completed') {
+      // 🔄 FIXED: Properly update generatedSummaries state to show in UI immediately
+      if (progress.summaries && Object.keys(progress.summaries).length > 0) {
+        const updatedSummaries = {};
+        Object.entries(progress.summaries).forEach(([type, data]) => {
+          console.log(`📄 Processing summary: ${type}`, {
+            hasUrl: !!data.s3Url,
+            hasDownloadUrl: !!data.downloadUrl
+          });
+          
+          // 🔧 FIX: Only set URL if we have a real URL, not a placeholder
+          const realUrl = data.s3Url || data.downloadUrl;
+          if (realUrl && !realUrl.startsWith('#')) {
+            updatedSummaries[type] = {
+              url: realUrl,
+              ready: true,
+              generatedAt: data.generatedAt || new Date().toISOString(),
+              downloadUrl: data.downloadUrl || data.s3Url,
+              fileSize: data.fileSize,
+              fileSizeFormatted: data.fileSizeFormatted,
+              wordCount: data.wordCount,
+              content: null,
+              hasContent: false,
+              source: 'completion_handler'
+            };
+          } else {
+            console.warn(`⚠️ Skipping ${type} summary - no valid URL available`);
+          }
+        });
+        
+        console.log('🔄 About to update generatedSummaries:', {
+          before: Object.keys(generatedSummaries),
+          adding: Object.keys(updatedSummaries),
+          will_trigger_ui_update: true
+        });
+        
+        // 🔄 FIXED: Force state update to trigger re-render of Generated Summaries section
+        setGeneratedSummaries(prev => {
+          const newSummaries = { ...prev, ...updatedSummaries };
+          console.log('✅ generatedSummaries updated!', {
+            previousCount: Object.keys(prev).length,
+            newCount: Object.keys(newSummaries).length,
+            newKeys: Object.keys(newSummaries)
+          });
+          return newSummaries;
+        });
+      } else {
+        console.log('⚠️ No summaries in progress data');
+      }
+      
+      // 🔄 UPDATED: Don't add chat messages, just log completion
+      const elapsedMsg = progress.elapsedTime ? ` (completed in ${progress.elapsedTime})` : '';
+      console.log(`✨ ${summaryType.charAt(0).toUpperCase() + summaryType.slice(1)} summary completed successfully!${elapsedMsg}`);
+      
+    } else if (progress.status === 'partial_success') {
+      const completedCount = progress.summaryCount || 0;
+      const totalCount = progress.summaryTypes?.length || 1;
+      
+      // 🔄 FIXED: Store partial results in generatedSummaries
+      if (progress.summaries && Object.keys(progress.summaries).length > 0) {
+        const updatedSummaries = {};
+        Object.entries(progress.summaries).forEach(([type, data]) => {
+          const realUrl = data.s3Url || data.downloadUrl;
+          if (realUrl && !realUrl.startsWith('#')) {
+            updatedSummaries[type] = {
+              url: realUrl,
+              ready: true,
+              generatedAt: data.generatedAt || new Date().toISOString(),
+              downloadUrl: data.downloadUrl || data.s3Url,
+              content: null,
+              hasContent: false,
+              source: 'partial_completion'
+            };
+          }
+        });
+        
+        setGeneratedSummaries(prev => {
+          const newSummaries = { ...prev, ...updatedSummaries };
+          console.log('✅ Updated generatedSummaries with partial results:', newSummaries);
+          return newSummaries;
+        });
+      }
+      
+      console.log(`⚠️ Summary partially completed: ${completedCount}/${totalCount} summaries generated. ${progress.message || ''}`);
+      
+    } else if (progress.status === 'failed') {
+      const errorMsg = progress.error || progress.message || 'Summary generation failed';
+      console.error(`❌ Summary generation failed: ${errorMsg}`);
+      
+      // Show any partial results if they exist
+      if (progress.summaries && Object.keys(progress.summaries).length > 0) {
+        // Store partial results even on failure
+        const updatedSummaries = {};
+        Object.entries(progress.summaries).forEach(([type, data]) => {
+          const realUrl = data.s3Url || data.downloadUrl;
+          if (realUrl && !realUrl.startsWith('#')) {
+            updatedSummaries[type] = {
+              url: realUrl,
+              ready: true,
+              generatedAt: data.generatedAt || new Date().toISOString(),
+              downloadUrl: data.downloadUrl || data.s3Url,
+              content: null,
+              hasContent: false,
+              source: 'failed_completion'
+            };
+          }
+        });
+        
+        setGeneratedSummaries(prev => ({ ...prev, ...updatedSummaries }));
+        
+        console.log(`📄 However, ${Object.keys(progress.summaries).length} summary(ies) were completed before the failure.`);
+      }
+    }
+    
+    console.log('🏁 Completion handling finished');
+  };
+
+  // 🆕 NEW: Generated Summaries Section Renderer
+  const renderGeneratedSummariesSection = () => {
+    // ✅ CORRECT: Filter generatedSummaries to show only ready summaries with valid URLs
+    const readySummaries = Object.entries(generatedSummaries).filter(([summaryType, summaryData]) => 
+      summaryData && summaryData.ready && summaryData.url
+    );
+    
+    if (readySummaries.length === 0) {
+      return null;
+    }
+  
+    return (
+      <div style={styles.summariesSection}>
+        <h3 style={styles.summariesTitle}>
+          Generated Summaries ({readySummaries.length})
+        </h3>
+        <div style={styles.summariesList}>
+          {readySummaries.map(([summaryType, summaryData]) => {
+            const metadataItems = [];
+            
+            if (summaryData.generatedAt) {
+              metadataItems.push(`Generated: ${new Date(summaryData.generatedAt).toLocaleDateString()}`);
+            }
+            if (summaryData.fileSizeFormatted) {
+              metadataItems.push(`Size: ${summaryData.fileSizeFormatted}`);
+            }
+            if (summaryData.wordCount) {
+              metadataItems.push(`${summaryData.wordCount} words`);
+            }
+            
+            return (
+              <div 
+                key={summaryType}
+                style={styles.summaryLinkButton}
+                onClick={() => viewSummary(summaryType, summaryData.url)}
+              >
+                <div style={styles.summaryName}>
+                  {getFormattedSummaryName(summaryType)}
+                </div>
+                {metadataItems.length > 0 && (
+                  <div style={styles.summaryMetadata}>
+                    {metadataItems.join(' • ')}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // Progress bar component
+  const renderSummaryProgress = () => {
+    if (!summaryProgress || !isPollingProgress) return null;
+
+    const { status, progressSummary, elapsedTime, estimatedTimeRemaining, message, taskId } = summaryProgress;
+
+    if (status !== 'processing') return null;
+
+    const { completed = 0, processing = 0, pending = 0, total = 1 } = progressSummary || {};
+    const progressPercentage = total > 0 ? Math.round(((completed + (processing * 0.5)) / total) * 100) : 0;
+
+    return (
+      <div style={styles.progressContainer}>
+        <div style={styles.progressHeader}>
+          <div style={styles.progressTitle}>
+            <span style={styles.progressIcon}>⚡</span>
+            Generating Summary...
+          </div>
+          <div style={styles.progressStats}>
+            {completed}/{total} completed
+          </div>
+        </div>
+
+        <div style={styles.progressBar}>
+          <div
+            style={{
+              ...styles.progressBarFill,
+              width: `${Math.min(progressPercentage, 95)}%` // Cap at 95% until fully done
+            }}
+          />
+        </div>
+
+        <div style={styles.progressDetails}>
+          <div style={styles.progressText}>
+            {message || 'Processing your content...'}
+          </div>
+          <div style={styles.progressTime}>
+            {elapsedTime && `⏱️ ${elapsedTime}`}
+            {estimatedTimeRemaining && ` • ~${estimatedTimeRemaining} remaining`}
+            {taskId && (
+              <span style={styles.taskId}> • Task: {taskId.substring(0, 8)}...</span>
+            )}
+          </div>
+        </div>
+
+        {summaryProgress.progress && (
+          <div style={styles.progressTypeDetails}>
+            {Object.entries(summaryProgress.progress).map(([type, typeProgress]) => (
+              <div key={type} style={styles.progressTypeItem}>
+                <span style={styles.progressTypeName}>
+                  {type.charAt(0).toUpperCase() + type.slice(1)}:
+                </span>
+                <span style={{
+                  ...styles.progressTypeStatus,
+                  color: typeProgress.status === 'completed' ? '#10b981' :
+                    typeProgress.status === 'generating' ? '#3b82f6' : '#6b7280'
+                }}>
+                  {typeProgress.status === 'completed' ? '✓ Done' :
+                    typeProgress.status === 'generating' ? '⚡ Generating...' :
+                      '⏳ Pending'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // 🔄 FIXED: Enhanced renderSummaryButton with better loading state management
+  const renderSummaryButton = () => (
+    <div className="summary-dropdown-container" style={styles.summaryContainer}>
+      <button
+        onClick={() => setShowSummaryDropdown(!showSummaryDropdown)}
+        style={{
+          ...styles.summaryButton,
+          ...(isGeneratingSummary ? styles.summaryButtonLoading : {})
+        }}
+        disabled={isGeneratingSummary || (files.length === 0 && links.length === 0)}
+      >
+        {isGeneratingSummary ? (
+          <>
+            <div style={styles.summarySpinner}></div>
+            {isPollingProgress ? 'Generating...' : 'Starting...'}
+          </>
+        ) : (
+          <>
+            <span style={styles.summaryIcon}>✨</span>
+            Summarize
+          </>
+        )}
+      </button>
+
+      {/* 🔄 FIXED: Only show progress when actually polling */}
+      {isPollingProgress && renderSummaryProgress()}
+
+      {showSummaryDropdown && !isGeneratingSummary && (
+        <div style={styles.summaryDropdown}>
+          <div style={styles.summaryDropdownHeader}>
+            Choose Summary Type
+          </div>
+
+          <button
+            onClick={() => handleSummarize('casual')}
+            style={styles.summaryOption}
+          >
+            <div style={styles.summaryOptionTitle}>Casual</div>
+            <div style={styles.summaryOptionDesc}>Conversational and easy to understand</div>
+          </button>
+
+          <button
+            onClick={() => handleSummarize('academic')}
+            style={styles.summaryOption}
+          >
+            <div style={styles.summaryOptionTitle}>Academic</div>
+            <div style={styles.summaryOptionDesc}>Detailed analysis with key findings</div>
+          </button>
+
+          <button
+            onClick={() => handleSummarize('simple')}
+            style={styles.summaryOption}
+          >
+            <div style={styles.summaryOptionTitle}>Beginner Friendly</div>
+            <div style={styles.summaryOptionDesc}>Simple bullet points and essential facts</div>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  // 🆕 NEW: Chat Section Renderer
+  const renderChatSection = () => {
+    const chatState = getChatState();
+    const summariesAvailable = chatState.state === 'available';
+
+    return (
+      <div style={styles.chatSection}>
+        <div style={styles.chatContainer}>
+          <div style={styles.chatHeader}>
+            <h3 style={styles.chatTitle}>
+              {chatState.title}
+            </h3>
+            <div style={styles.chatHeaderActions}>
+              {/* View Summaries dropdown - only show if summaries available */}
+              {summariesAvailable && Object.keys(generatedSummaries).length > 0 && (
+                <div style={styles.summariesDropdown}>
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const summaryType = e.target.value;
+                        const summaryData = generatedSummaries[summaryType];
+                        if (summaryData?.url) {
+                          viewSummary(summaryType, summaryData.url);
+                        }
+                      }
+                      e.target.value = ''; // Reset select
+                    }}
+                    style={styles.summariesSelect}
+                    className="summaries-select"
+                    defaultValue=""
+                  >
+                    <option value="">📄 View Summaries</option>
+                    {Object.entries(generatedSummaries)
+                      .filter(([type, data]) => {
+                        const hasValidUrl = data.url && !data.url.startsWith('#');
+                        return data.ready && hasValidUrl;
+                      })
+                      .map(([type, data]) => (
+                        <option key={type} value={type}>
+                          {type.charAt(0).toUpperCase() + type.slice(1)} Summary
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Clear chat button - only show if chat has messages and summaries available */}
+              {chatMessages.length > 0 && summariesAvailable && (
+                <button onClick={clearConversation} style={styles.clearChatButton} className="clear-chat-button">
+                  Clear Conversation
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Chat Messages - only show if summaries available */}
+          {summariesAvailable && chatMessages.length > 0 && (
+            <div style={styles.chatMessages} ref={chatContainerRef}>
+              {chatMessages.map((message) => (
+                <div key={message.id} style={styles.chatMessage}>
+                  <div style={{
+                    ...styles.chatMessageContent,
+                    ...(message.sender === 'user' ? styles.chatMessageUser : {}),
+                    ...(message.sender === 'ai' ? styles.chatMessageAI : {}),
+                    ...(message.sender === 'system' ? styles.chatMessageSystem : {}),
+                    ...(message.type === 'error' ? styles.chatMessageError : {}),
+                    ...(message.type === 'summary' ? styles.chatMessageSummary : {}),
+                    ...(message.type === 'sources' ? styles.chatMessageSources : {})
+                  }}>
+                    <div style={styles.chatMessageText}>
+                      {message.message}
+                    </div>
+
+                    {/* Display sources for AI messages */}
+                    {message.sender === 'ai' && message.metadata?.sources && (
+                      renderSourceInfo(message.metadata.sources)
+                    )}
+
+                    <div style={styles.chatMessageTime}>
+                      {formatChatTime(message.timestamp)}
+                      {message.metadata?.chunks_found && (
+                        <span style={styles.chatMessageMeta}>
+                          • {message.metadata.chunks_found} sources • {message.metadata.search_method}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Loading indicator for AI responses */}
+              {isChatLoading && (
+                <div style={styles.chatMessage}>
+                  <div style={{ ...styles.chatMessageContent, ...styles.chatMessageAI }}>
+                    <div style={styles.chatTypingIndicator}>
+                      <div style={styles.typingDot}></div>
+                      <div style={styles.typingDot}></div>
+                      <div style={styles.typingDot}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Chat Form - conditional rendering based on summary availability */}
+          <form onSubmit={handleChatSubmit} style={styles.chatForm}>
+            <div style={styles.chatInputContainer}>
+              <input
+                type="text"
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                placeholder={chatState.placeholder}
+                style={{
+                  ...styles.chatInput,
+                  ...(chatState.disabled ? styles.chatInputDisabled : {})
+                }}
+                disabled={chatState.disabled || isChatLoading}
+                readOnly={chatState.disabled}
+              />
+              <button
+                type="submit"
+                style={{
+                  ...styles.chatSendButton,
+                  ...((!chatMessage.trim() || isChatLoading || chatState.disabled) ? styles.chatSendButtonDisabled : {})
+                }}
+                disabled={!chatMessage.trim() || isChatLoading || chatState.disabled}
+              >
+                {isChatLoading ? (
+                  <div style={styles.buttonSpinner}></div>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </form>
+
+          {/* Status message - different based on availability */}
+          {chatState.note && (
+            <div style={styles.chatNote}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.chatNoteIcon}>
+                <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11M11,9H13V7H11" />
+              </svg>
+              {chatState.note}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // 🔄 FIXED: Enhanced cleanup effects with better dependency handling
+  useEffect(() => {
+    // Cleanup polling on component unmount or when polling state changes
+    return () => {
+      if (summaryProgressInterval) {
+        console.log('🧹 Cleaning up progress polling interval on unmount/change');
+        clearInterval(summaryProgressInterval);
+      }
+    };
+  }, [summaryProgressInterval]); // Include dependency to re-run when interval changes
+
+  // 🔄 FIXED: Additional effect to handle polling state changes
+  useEffect(() => {
+    // If polling is disabled but interval exists, clear it
+    if (!isPollingProgress && summaryProgressInterval) {
+      console.log('🧹 Polling disabled, clearing interval');
+      clearInterval(summaryProgressInterval);
+      setSummaryProgressInterval(null);
+    }
+  }, [isPollingProgress, summaryProgressInterval]);
+
+  // 🔍 DEBUG: Add debugging effects to track state changes
+  useEffect(() => {
+    console.log('🔍 generatedSummaries state updated:', {
+      count: Object.keys(generatedSummaries).length,
+      summaries: Object.keys(generatedSummaries),
+      detailed: Object.entries(generatedSummaries).map(([type, data]) => ({
+        type,
+        ready: data.ready,
+        hasUrl: !!data.url,
+        url: data.url,
+        urlValid: data.url && !data.url.startsWith('#')
+      }))
+    });
+  }, [generatedSummaries]);
+
+  useEffect(() => {
+    console.log('🔍 Polling state changed:', {
+      isPollingProgress,
+      isGeneratingSummary,
+      hasInterval: !!summaryProgressInterval,
+      intervalId: summaryProgressInterval
+    });
+  }, [isPollingProgress, isGeneratingSummary, summaryProgressInterval]);
+
+  // 🆕 NEW: Chat availability debugging
+  useEffect(() => {
+    const chatState = getChatState();
+    console.log('🔍 Chat state changed:', {
+      state: chatState.state,
+      disabled: chatState.disabled,
+      sourcesCount: files.length + links.length,
+      summariesCount: Object.keys(generatedSummaries).filter(key => {
+        const data = generatedSummaries[key];
+        return data.ready && data.url && !data.url.startsWith('#');
+      }).length
+    });
+  }, [files, links, generatedSummaries]);
+
+  const handleSummaryDropdownClose = (e) => {
+    if (!e.target.closest('.summary-dropdown-container')) {
+      setShowSummaryDropdown(false);
+    }
   };
 
   // File validation function
@@ -117,26 +1210,6 @@ export default function NotebookDetailPage() {
     return { validFiles, errors };
   };
 
-  // Debounce function for auto-save
-  const debounce = (func, wait) => {
-    let timeout;
-    return function (...args) {
-      const context = this;
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func.apply(context, args), wait);
-    };
-  };
-
-  // // Create a debounced save function
-  // const debouncedSave = useCallback(
-  //   debounce(() => {
-  //     if (autoSave && !isLoading && content) {
-  //       handleSave();
-  //     }
-  //   }, 2000),
-  //   [autoSave, content, isLoading]
-  // );
-
   // Load notebook data
   useEffect(() => {
     const loadNotebookData = async () => {
@@ -157,64 +1230,106 @@ export default function NotebookDetailPage() {
       try {
         setIsLoading(true);
 
-        try {
-          console.log('🔍 Fetching notebook data for:', initialNotebookId);
-          const notebookData = await notebookService.getNotebook(initialNotebookId);
-          console.log('📋 Raw notebook data received:', notebookData);
+        console.log('🔍 Fetching notebook data for:', initialNotebookId);
 
-          if (notebookData) {
-            const formattedNotebook = {
-              notebookId: notebookData.notebookId || initialNotebookId,
-              title: notebookData.title || 'Untitled Notebook',
-              content: notebookData.content || '',
-              createdAt: notebookData.createdAt || new Date().toISOString(),
-              lastUpdated: notebookData.updatedAt || new Date().toISOString(),
-              files: notebookData.files || [],
-              links: notebookData.links || [], // 🔧 Make sure this is included
-              createdBy: notebookData.createdBy,
-              wordCount: notebookData.wordCount || 0,
-              tags: notebookData.tags || [],
-              connections: notebookData.connections || [],
-              filesCount: notebookData.filesCount || 0,
-              filesSummary: notebookData.filesSummary,
-              linksCount: notebookData.linksCount || 0, // 🆕 ADD THIS
-              linksSummary: notebookData.linksSummary // 🆕 ADD THIS
-            };
+        // 🆕 NEW: Use enhanced getNotebook method with summary content
+        const notebookData = await notebookService.getNotebookWithSummaries(initialNotebookId);
 
-            console.log('✅ Formatted notebook:', formattedNotebook);
-            console.log('📎 Links from API:', formattedNotebook.links);
+        console.log('📋 Enhanced notebook data received:', notebookData);
 
-            setNotebook(formattedNotebook);
-            setContent(formattedNotebook.content);
+        if (notebookData) {
+          /* ---------- core notebook object ---------- */
+          const formattedNotebook = {
+            notebookId: notebookData.notebookId || initialNotebookId,
+            title: notebookData.title || 'Untitled Notebook',
+            content: notebookData.content || '',
+            createdAt: notebookData.createdAt || new Date().toISOString(),
+            lastUpdated: notebookData.updatedAt || new Date().toISOString(),
+            files: notebookData.files || [],
+            links: notebookData.links || [],
+            createdBy: notebookData.createdBy,
+            wordCount: notebookData.wordCount || 0,
+            tags: notebookData.tags || [],
+            connections: notebookData.connections || [],
+            filesCount: notebookData.filesCount || 0,
+            filesSummary: notebookData.filesSummary,
+            linksCount: notebookData.linksCount || 0,
+            linksSummary: notebookData.linksSummary,
+            summaryTypesAvailable: notebookData.summaryTypesAvailable || []
+          };
 
-            // 🔧 Update files state
-            if (formattedNotebook.files && formattedNotebook.files.length > 0) {
-              console.log('📁 Setting files:', formattedNotebook.files);
-              setFiles(formattedNotebook.files);
-            }
+          console.log('✅ Formatted notebook:', formattedNotebook);
 
-            // 🔧 Update links state - CRITICAL FIX
-            if (formattedNotebook.links && formattedNotebook.links.length > 0) {
-              console.log('🔗 Setting links:', formattedNotebook.links);
-              setLinks(formattedNotebook.links);
-            } else {
-              console.log('🔗 No links found, setting empty array');
-              setLinks([]);
-            }
+          /* ---------- 🆕 ENHANCED: Process summaries with content ---------- */
+          const initialSummaries = {};
+          if (notebookData.summaries && Object.keys(notebookData.summaries).length > 0) {
+            Object.entries(notebookData.summaries).forEach(([type, summaryData]) => {
+              initialSummaries[type] = {
+                url: summaryData.url,
+                ready: true,
+                generatedAt: summaryData.generatedAt || summaryData.lastModified || new Date().toISOString(),
+
+                // 🆕 NEW: Include content if available
+                content: summaryData.content || null,
+
+                // Enhanced metadata
+                downloadUrl: summaryData.downloadUrl,
+                fileSize: summaryData.fileSize,
+                fileSizeFormatted: summaryData.fileSizeFormatted,
+                wordCount: summaryData.wordCount,
+                readingTime: summaryData.readingTime,
+                characterCount: summaryData.characterCount,
+
+                // Source tracking
+                source: summaryData.source || 'unknown',
+                fetchedAt: summaryData.fetchedAt || new Date().toISOString()
+              };
+            });
+
+            setGeneratedSummaries(initialSummaries);
+            console.log('📄 Loaded enhanced summaries:', {
+              count: Object.keys(initialSummaries).length,
+              types: Object.keys(initialSummaries),
+              withContent: Object.values(initialSummaries).filter(s => s.content).length
+            });
           }
-        } catch (apiError) {
-          console.error("Error loading notebook from API:", apiError);
-        }
 
-        setIsLoading(false);
+          // 🆕 NEW: Handle legacy summary locations for backward compatibility
+          else if (notebookData.summaryLocations) {
+            Object.entries(notebookData.summaryLocations).forEach(([type, url]) => {
+              initialSummaries[type] = {
+                url,
+                ready: true,
+                generatedAt: notebookData.lastSummarization || notebookData.updatedAt || new Date().toISOString(),
+                source: 'legacy_location'
+              };
+            });
+            setGeneratedSummaries(initialSummaries);
+            console.log('📄 Loaded legacy summary locations:', initialSummaries);
+          }
+
+          /* ---------- write state ---------- */
+          setNotebook(formattedNotebook);
+          setContent(formattedNotebook.content);
+          setFiles(formattedNotebook.files);
+          setLinks(formattedNotebook.links);
+        }
       } catch (error) {
-        console.error("Error loading notebook data:", error);
+        console.error('Error loading notebook:', error);
+      } finally {
         setIsLoading(false);
       }
     };
 
     loadNotebookData();
   }, [initialNotebookId]);
+
+  useEffect(() => {
+    if (showSummaryDropdown) {
+      document.addEventListener('click', handleSummaryDropdownClose);
+      return () => document.removeEventListener('click', handleSummaryDropdownClose);
+    }
+  }, [showSummaryDropdown]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -234,7 +1349,7 @@ export default function NotebookDetailPage() {
         content: content,
         lastUpdated: new Date().toISOString(),
         files: files,
-        links: links // 🔧 Make sure links are included in save
+        links: links
       };
 
       setNotebook(updatedNotebook);
@@ -243,7 +1358,7 @@ export default function NotebookDetailPage() {
         title: updatedNotebook.title,
         chunkNumber: 0,
         chunkContent: content,
-        links: links // 🔧 Include links in update data
+        links: links
       };
 
       try {
@@ -434,13 +1549,6 @@ export default function NotebookDetailPage() {
         ]);
       }
 
-      // // Auto-save the notebook to include file references
-      // if (autoSave && newFiles.length > 0 && notebook.notebookId && notebook.notebookId !== 'temp-loading') {
-      //   setTimeout(() => {
-      //     handleSave();
-      //   }, 1000);
-      // }
-
       // Close modal after successful upload
       setTimeout(() => {
         setShowUploadModal(false);
@@ -494,23 +1602,8 @@ export default function NotebookDetailPage() {
     url,
     title: url,
     addedAt: new Date().toISOString(),
-    status: 'pending' // 🔧 Add default status
+    status: 'pending'
   });
-
-  const addLink = (url) => {
-    if (isValidUrl(url)) {
-      const newLink = {
-        id: `link-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        url: url,
-        title: url,
-        addedAt: new Date().toISOString(),
-        status: 'pending'
-      };
-
-      setLinks(prevLinks => [...prevLinks, newLink]);
-      setNewLink('');
-    }
-  };
 
   const handleAddLink = (e) => {
     e.preventDefault();
@@ -523,7 +1616,7 @@ export default function NotebookDetailPage() {
     setShowLinkModal(true);
   };
 
-  // 🔧 UPDATED: Enhanced link confirmation with better state management
+  // Enhanced link confirmation with better state management
   const handleLinkConfirm = async () => {
     if (!linkToAdd) return;
     setIsAddingLink(true);
@@ -567,7 +1660,7 @@ export default function NotebookDetailPage() {
         return updated;
       });
 
-      // 🔧 Save to backend with updated links
+      // Save to backend with updated links
       const currentLinks = links.filter(l => l.id !== newObj.id);
       const finalLinks = [...currentLinks, { ...newObj, status: 'completed' }];
 
@@ -617,11 +1710,6 @@ export default function NotebookDetailPage() {
 
       setFiles(prevFiles => prevFiles.filter(file => file.id !== fileId));
 
-      // if (autoSave) {
-      //   setTimeout(() => {
-      //     handleSave();
-      //   }, 500);
-      // }
     } catch (error) {
       console.error('Error removing file:', error);
       setFileErrors(prev => [...prev, `Failed to remove file: ${error.message}`]);
@@ -638,20 +1726,62 @@ export default function NotebookDetailPage() {
     });
   };
 
-  const handleSummaryTypeChange = (e) => {
-    setSummaryType(e.target.value);
-  };
-
-  const handleAskAI = () => {
-    console.log(`Asking AI for a ${summaryType} summary of the content`);
-  };
-
-  const handleChatSubmit = (e) => {
+  // 🔄 UPDATED: Enhanced chat submit handler with availability check
+  const handleChatSubmit = async (e) => {
     e.preventDefault();
-    if (chatMessage.trim()) {
-      console.log('Chat message:', chatMessage);
-      // Here you would integrate with your AI chat service
-      setChatMessage('');
+    if (!chatMessage.trim()) return;
+
+    // 🆕 NEW: Check if chat is available
+    const chatState = getChatState();
+    if (chatState.disabled) {
+      console.log('🚫 Chat blocked:', chatState.state);
+      return; // Silently block chat if not available
+    }
+
+    const userMessage = chatMessage.trim();
+    setChatMessage('');
+    setIsChatLoading(true);
+
+    // Add user message to chat
+    addChatMessage(userMessage, 'user');
+
+    try {
+      // Send message to AI
+      const aiResponse = await sendChatMessage(userMessage);
+
+      // Add AI response to chat with metadata
+      const responseMetadata = {
+        sources: aiResponse.sources,
+        chunks_found: aiResponse.chunks_found,
+        search_method: aiResponse.search_method
+      };
+
+      addChatMessage(aiResponse.answer, 'ai', 'message', responseMetadata);
+
+      // Optionally add sources information as a separate system message
+      if (aiResponse.sources && aiResponse.sources.length > 0) {
+        const sourcesText = `📚 Sources used: ${aiResponse.sources.map((s, i) =>
+          `${i + 1}. ${s.filename} (${s.content_type})`
+        ).join(', ')}`;
+
+        addChatMessage(sourcesText, 'system', 'sources', { sources: aiResponse.sources });
+      }
+
+    } catch (error) {
+      console.error('❌ Chat error:', error);
+
+      let errorMsg = 'Sorry, I encountered an error. ';
+      if (error.message.includes('login')) {
+        errorMsg += 'Please make sure you\'re logged in.';
+      } else if (error.message.includes('vector database')) {
+        errorMsg += 'Please process your files first by generating a summary.';
+      } else {
+        errorMsg += 'Please try again in a moment.';
+      }
+
+      addChatMessage(errorMsg, 'ai', 'error');
+    } finally {
+      setIsChatLoading(false);
     }
   };
 
@@ -694,7 +1824,7 @@ export default function NotebookDetailPage() {
     );
   };
 
-  // 🆕 ADD: Helper function to render links
+  // Helper function to render links
   const renderLinks = () => {
     console.log('🔗 Rendering links, current links state:', links);
 
@@ -772,6 +1902,29 @@ export default function NotebookDetailPage() {
     );
   };
 
+  // 🔍 DEBUG: Add test function to verify state (accessible in browser console)
+  window.debugSummarySystem = () => {
+    console.log('🔍 SUMMARY SYSTEM DEBUG REPORT:', {
+      timestamp: new Date().toISOString(),
+      polling: {
+        isPollingProgress,
+        isGeneratingSummary,
+        hasInterval: !!summaryProgressInterval,
+        intervalId: summaryProgressInterval
+      },
+      summaries: {
+        count: Object.keys(generatedSummaries).length,
+        types: Object.keys(generatedSummaries),
+        data: generatedSummaries
+      },
+      progress: summaryProgress,
+      ui: {
+        summariesSectionVisible: Object.keys(generatedSummaries).length > 0,
+        chatMessagesCount: chatMessages.length
+      }
+    });
+  };
+
   if (isLoading) {
     return (
       <div style={styles.container}>
@@ -781,7 +1934,6 @@ export default function NotebookDetailPage() {
             <div style={styles.loadingSpinner}></div>
             <p style={styles.loadingText}>Loading notebook...</p>
           </div>
-          {/* Upload Confirmation Modal */}
           <UploadConfirmationModal
             isOpen={showUploadModal}
             onClose={handleUploadCancel}
@@ -825,279 +1977,380 @@ export default function NotebookDetailPage() {
 
         {/* Main Content Area */}
         <div style={styles.contentLayout}>
-          {/* Central Sources/Upload Area - Similar to NotebookLM */}
-          <div style={styles.centralArea}>
+          {/* Conditional rendering for summary page vs main notebook view */}
+          {showSummaryPage && currentSummaryPage ? (
+            /* Summary Page View */
+            <div style={styles.summaryPageContainer}>
+              <div style={styles.summaryPageHeader}>
+                <button onClick={closeSummaryPage} style={styles.backToNotebookButton}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                  </svg>
+                  Back to Notebook
+                </button>
+                <div style={styles.summaryPageTitle}>
+                  <h1 style={styles.summaryPageMainTitle}>
+                    {getFormattedSummaryName(currentSummaryPage)}
+                  </h1>
+                  <p style={styles.summaryPageSubtitle}>
+                    Generated for: {notebook.title}
+                  </p>
+                </div>
+              </div>
 
-            {/* Sources Section with Title */}
-            <div style={styles.sourcesSection}>
-              {/* Title and Upload Area - Side by Side */}
-              <div style={styles.titleAndUploadContainer}>
-                {/* Title Section - Left Side */}
-                <div style={styles.titleSection}>
-                  <div style={styles.titleContainer}>
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" style={styles.notebookIcon}>
-                      <path d="M19,3H14.82C14.4,1.84 13.3,1 12,1C10.7,1 9.6,1.84 9.18,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M12,2.75A1.25,1.25 0 0,1 13.25,4A1.25,1.25 0 0,1 12,5.25A1.25,1.25 0 0,1 10.75,4A1.25,1.25 0 0,1 12,2.75Z" />
-                    </svg>
-                    <div style={styles.titleContent}>
-                      <input
-                        type="text"
-                        value={notebook.title}
-                        onChange={(e) => setNotebook({ ...notebook, title: e.target.value })}
-                        style={styles.titleInput}
-                        placeholder="Untitled Notebook"
-                      />
-                      <div style={styles.titleSubtext}>
-                        {formatDate(lastSaved || notebook.lastUpdated)}
-                        {(files.length > 0 || links.length > 0) && (
-                          <span style={styles.titleSeparator}>•</span>
-                        )}
-                        {files.length > 0 && (
-                          <span style={styles.titleCounter}>
-                            {files.length} file{files.length !== 1 ? 's' : ''}
-                          </span>
-                        )}
-                        {links.length > 0 && (
-                          <>
-                            {files.length > 0 && <span style={styles.titleSeparator}>,</span>}
-                            <span style={styles.titleCounter}>
-                              {links.length} link{links.length !== 1 ? 's' : ''}
-                            </span>
-                          </>
-                        )}
+              <div style={styles.summaryPageContent}>
+                {generatedSummaries[currentSummaryPage]?.content ? (
+                  <div style={styles.summaryPageText}>
+                    <div style={styles.summaryPageMeta}>
+                      <span style={styles.summaryPageMetaItem}>
+                        📅 Generated: {new Date(generatedSummaries[currentSummaryPage].generatedAt || Date.now()).toLocaleString()}
+                      </span>
+                      <span style={styles.summaryPageMetaItem}>
+                        📊 Type: {currentSummaryPage}
+                      </span>
+                      <span style={styles.summaryPageMetaItem}>
+                        📄 Sources: {files.length + links.length}
+                      </span>
+                    </div>
+
+                    <div style={styles.summaryPageTextContent}>
+                      {generatedSummaries[currentSummaryPage].content}
+                    </div>
+
+                    <div style={styles.summaryPageActions}>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedSummaries[currentSummaryPage].content);
+                        }}
+                        style={styles.summaryPageCopyButton}
+                      >
+                        📋 Copy Summary
+                      </button>
+                      <button
+                        onClick={() => {
+                          const blob = new Blob([generatedSummaries[currentSummaryPage].content], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${notebook.title}_${currentSummaryPage}_summary.txt`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        style={styles.summaryPageDownloadButton}
+                      >
+                        💾 Download Summary
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={styles.summaryPageLoading}>
+                    <div style={styles.summaryPageLoadingSpinner}></div>
+                    <p>Loading summary...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Main Notebook View */
+            <>
+              {/* Central Sources/Upload Area - Similar to NotebookLM */}
+              <div style={styles.centralArea}>
+                {/* Sources Section with Title */}
+                <div style={styles.sourcesSection}>
+                  {/* Title and Upload Area - Side by Side */}
+                  <div style={styles.titleAndUploadContainer}>
+                    {/* Title Section - Left Side */}
+                    <div style={styles.titleSection}>
+                      <div style={styles.titleContainer}>
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" style={styles.notebookIcon}>
+                          <path d="M19,3H14.82C14.4,1.84 13.3,1 12,1C10.7,1 9.6,1.84 9.18,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M12,2.75A1.25,1.25 0 0,1 13.25,4A1.25,1.25 0 0,1 12,5.25A1.25,1.25 0 0,1 10.75,4A1.25,1.25 0 0,1 12,2.75Z" />
+                        </svg>
+                        <div style={styles.titleContent}>
+                          <input
+                            type="text"
+                            value={notebook.title}
+                            onChange={(e) => setNotebook({ ...notebook, title: e.target.value })}
+                            style={styles.titleInput}
+                            placeholder="Untitled Notebook"
+                          />
+                          <div style={styles.titleSubtext}>
+                            {formatDate(lastSaved || notebook.lastUpdated)}
+                            {(files.length > 0 || links.length > 0) && (
+                              <span style={styles.titleSeparator}>•</span>
+                            )}
+                            {files.length > 0 && (
+                              <span style={styles.titleCounter}>
+                                {files.length} file{files.length !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {links.length > 0 && (
+                              <>
+                                {files.length > 0 && <span style={styles.titleSeparator}>,</span>}
+                                <span style={styles.titleCounter}>
+                                  {links.length} link{links.length !== 1 ? 's' : ''}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
+                    </div>
+
+                    {/* Upload Area - Right Side */}
+                    <div
+                      style={{
+                        ...styles.uploadArea,
+                        ...(isDraggingOver ? styles.uploadAreaActive : {})
+                      }}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                    >
+                      <input
+                        id="fileInput"
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.csv,.xlsx,.xls"
+                        onChange={handleFileInputChange}
+                        style={{ display: 'none' }}
+                      />
+
+                      <div style={styles.uploadContent}>
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style={styles.uploadIcon}>
+                          <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
+                        </svg>
+                        <h3 style={styles.uploadTitle}>
+                          Ready to start? Add your sources
+                        </h3>
+                        <p style={styles.uploadDescription}>
+                          Drag and drop files here, or click to browse
+                        </p>
+                        <button
+                          style={styles.uploadButton}
+                          onClick={() => document.getElementById('fileInput')?.click()}
+                        >
+                          Select Files
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Error Display */}
+                  {fileErrors.length > 0 && (
+                    <div style={styles.errorContainer}>
+                      <div style={styles.errorHeader}>
+                        <span>Notifications</span>
+                        <button onClick={() => setFileErrors([])} style={styles.clearButton}>Clear</button>
+                      </div>
+                      {fileErrors.map((error, index) => (
+                        <div key={index} style={styles.errorItem}>{error}</div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Link Input */}
+                  <div style={styles.linkSection}>
+                    <input
+                      type="text"
+                      value={newLink}
+                      onChange={(e) => setNewLink(e.target.value)}
+                      placeholder="Add a link (https://...)"
+                      style={styles.linkInput}
+                      onKeyPress={(e) => e.key === 'Enter' && handleAddLink(e)}
+                    />
+                    <button onClick={handleAddLink} style={styles.addLinkButton}>
+                      Add Link
+                    </button>
+                  </div>
+
+                  {/* Files and Links Container - Centered */}
+                  <div style={styles.filesLinksContainer}>
+                    {/* Files List */}
+                    {files.length > 0 && (
+                      <div style={styles.filesList}>
+                        <h3 style={styles.filesTitle}>Uploaded Files ({files.length})</h3>
+                        {files.map(file => (
+                          <div key={file.id} style={styles.fileItem}>
+                            <div style={styles.fileIcon}>
+                              <div style={{
+                                ...styles.fileIconBg,
+                                backgroundColor: getFileTypeColor(file.extension || file.type)
+                              }}>
+                                {getFileTypeIcon(file.extension || file.type)}
+                              </div>
+                            </div>
+                            <div style={styles.fileInfo}>
+                              <div style={styles.fileName}>{file.name}</div>
+                              <div style={styles.fileDetails}>
+                                {file.sizeFormatted || `${(file.size / 1024 / 1024).toFixed(1)} MB`}
+                                {file.uploadedAt && ` • ${new Date(file.uploadedAt).toLocaleDateString()}`}
+                              </div>
+                            </div>
+                            <div style={styles.fileActions}>
+                              {file.downloadUrl && file.isValid !== false && (
+                                <button
+                                  onClick={() => window.open(file.downloadUrl, '_blank')}
+                                  style={styles.actionButton}
+                                  title="Download"
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
+                                  </svg>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => removeFile(file.id)}
+                                style={styles.removeButton}
+                                title="Remove"
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Use the renderLinks function */}
+                    {renderLinks()}
+                  </div>
+                </div>
+
+                {/* 🔄 FIXED: Use renderSummaryButton function */}
+                {renderSummaryButton()}
+              </div>
+
+              {/* Right Sidebar - Similar to NotebookLM */}
+              <div style={styles.rightSidebar}>
+                {/* Notes Section - Much Smaller */}
+                <div style={styles.notesSection}>
+                  <h3 style={styles.notesSectionTitle}>Quick Notes</h3>
+                  <div style={styles.notesEditor}>
+                    <ReactQuill
+                      theme="snow"
+                      value={content}
+                      onChange={setContent}
+                      modules={modules}
+                      formats={formats}
+                      placeholder="Like to write on your own? Add your notes here..."
+                      style={styles.quillEditor}
+                    />
+                  </div>
+                  <div style={styles.notesFooter}>
+                    <span style={styles.wordCount}>
+                      {getWordCount(content)} words
+                    </span>
+                  </div>
+                </div>
+
+                {/* Notebook Info */}
+                <div style={styles.infoSection}>
+                  <h3 style={styles.infoTitle}>Notebook Info</h3>
+                  <div style={styles.infoGrid}>
+                    <div style={styles.infoItem}>
+                      <span style={styles.infoLabel}>Sources:</span>
+                      <span style={styles.infoValue}>{files.length + links.length}</span>
+                    </div>
+                    <div style={styles.infoItem}>
+                      <span style={styles.infoLabel}>Files:</span>
+                      <span style={styles.infoValue}>{files.length}</span>
+                    </div>
+                    <div style={styles.infoItem}>
+                      <span style={styles.infoLabel}>Links:</span>
+                      <span style={styles.infoValue}>{links.length}</span>
+                    </div>
+                    <div style={styles.infoItem}>
+                      <span style={styles.infoLabel}>Last updated:</span>
+                      <span style={styles.infoValue}>
+                        {lastSaved ? formatDate(lastSaved) : formatDate(notebook.lastUpdated)}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Upload Area - Right Side */}
-                <div
-                  style={{
-                    ...styles.uploadArea,
-                    ...(isDraggingOver ? styles.uploadAreaActive : {})
-                  }}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <input
-                    id="fileInput"
-                    type="file"
-                    multiple
-                    accept=".pdf,.doc,.docx,.csv,.xlsx,.xls"
-                    onChange={handleFileInputChange}
-                    style={{ display: 'none' }}
-                  />
-
-                  <div style={styles.uploadContent}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style={styles.uploadIcon}>
-                      <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
-                    </svg>
-                    <h3 style={styles.uploadTitle}>
-                      Ready to start? Add your sources
-                    </h3>
-                    <p style={styles.uploadDescription}>
-                      Drag and drop files here, or click to browse
-                    </p>
-                    <button
-                      style={styles.uploadButton}
-                      onClick={() => document.getElementById('fileInput')?.click()}
-                    >
-                      Select Files
-                    </button>
-                  </div>
-                </div>
+                {/* 🔄 FIXED: Use the new renderGeneratedSummariesSection function */}
+                {renderGeneratedSummariesSection()}
               </div>
+            </>
+          )}
+        </div>
 
-              {/* Error Display */}
-              {fileErrors.length > 0 && (
-                <div style={styles.errorContainer}>
-                  <div style={styles.errorHeader}>
-                    <span>Upload Errors</span>
-                    <button onClick={() => setFileErrors([])} style={styles.clearButton}>Clear</button>
-                  </div>
-                  {fileErrors.map((error, index) => (
-                    <div key={index} style={styles.errorItem}>{error}</div>
-                  ))}
-                </div>
-              )}
+        {/* 🔄 FIXED: Use the new renderChatSection function */}
+        {renderChatSection()}
 
-              {/* Link Input */}
-              <div style={styles.linkSection}>
-                <input
-                  type="text"
-                  value={newLink}
-                  onChange={(e) => setNewLink(e.target.value)}
-                  placeholder="Add a link (https://...)"
-                  style={styles.linkInput}
-                  onKeyPress={(e) => e.key === 'Enter' && handleAddLink(e)}
-                />
-                <button onClick={handleAddLink} style={styles.addLinkButton}>
-                  Add Link
+        {/* Summary View Modal */}
+        {showSummaryView && selectedSummaryType && (
+          <div style={styles.summaryModal}>
+            <div style={styles.summaryModalContent}>
+              <div style={styles.summaryModalHeader}>
+                <h2 style={styles.summaryModalTitle}>
+                  📄 {selectedSummaryType.charAt(0).toUpperCase() + selectedSummaryType.slice(1)} Summary
+                </h2>
+                <button
+                  onClick={() => toggleSummaryView(null)}
+                  style={styles.summaryModalClose}
+                  className="summary-modal-close"
+                >
+                  ✕
                 </button>
               </div>
 
-              {/* Files and Links Container - Centered */}
-              <div style={styles.filesLinksContainer}>
-                {/* Files List */}
-                {files.length > 0 && (
-                  <div style={styles.filesList}>
-                    <h3 style={styles.filesTitle}>Uploaded Files ({files.length})</h3>
-                    {files.map(file => (
-                      <div key={file.id} style={styles.fileItem}>
-                        <div style={styles.fileIcon}>
-                          <div style={{
-                            ...styles.fileIconBg,
-                            backgroundColor: getFileTypeColor(file.extension || file.type)
-                          }}>
-                            {getFileTypeIcon(file.extension || file.type)}
-                          </div>
-                        </div>
-                        <div style={styles.fileInfo}>
-                          <div style={styles.fileName}>{file.name}</div>
-                          <div style={styles.fileDetails}>
-                            {file.sizeFormatted || `${(file.size / 1024 / 1024).toFixed(1)} MB`}
-                            {file.uploadedAt && ` • ${new Date(file.uploadedAt).toLocaleDateString()}`}
-                          </div>
-                        </div>
-                        <div style={styles.fileActions}>
-                          {file.downloadUrl && file.isValid !== false && (
-                            <button
-                              onClick={() => window.open(file.downloadUrl, '_blank')}
-                              style={styles.actionButton}
-                              title="Download"
-                            >
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
-                              </svg>
-                            </button>
-                          )}
-                          <button
-                            onClick={() => removeFile(file.id)}
-                            style={styles.removeButton}
-                            title="Remove"
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+              <div style={styles.summaryModalBody}>
+                {generatedSummaries[selectedSummaryType]?.content ? (
+                  <div style={styles.summaryContent}>
+                    <div style={styles.summaryMeta}>
+                      <span style={styles.summaryMetaItem}>
+                        📅 Generated: {new Date(generatedSummaries[selectedSummaryType].generatedAt || Date.now()).toLocaleString()}
+                      </span>
+                      <span style={styles.summaryMetaItem}>
+                        📊 Type: {selectedSummaryType}
+                      </span>
+                    </div>
+
+                    <div style={styles.summaryText}>
+                      {generatedSummaries[selectedSummaryType].content}
+                    </div>
+
+                    <div style={styles.summaryActions}>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedSummaries[selectedSummaryType].content);
+                        }}
+                        style={styles.summaryCopyButton}
+                        className="summary-copy-button"
+                      >
+                        📋 Copy Summary
+                      </button>
+                      <button
+                        onClick={() => {
+                          const blob = new Blob([generatedSummaries[selectedSummaryType].content], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${notebook.title}_${selectedSummaryType}_summary.txt`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        style={styles.summaryDownloadButton}
+                        className="summary-download-button"
+                      >
+                        💾 Download Summary
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={styles.summaryLoading}>
+                    <div style={styles.summaryLoadingSpinner}></div>
+                    <p>Loading summary...</p>
                   </div>
                 )}
-
-                {/* 🔧 UPDATED: Use the renderLinks function */}
-                {renderLinks()}
               </div>
             </div>
           </div>
+        )}
 
-          {/* Right Sidebar - Similar to NotebookLM */}
-          <div style={styles.rightSidebar}>
-            {/* Notes Section - Much Smaller */}
-            <div style={styles.notesSection}>
-              <h3 style={styles.notesSectionTitle}>Quick Notes</h3>
-              <div style={styles.notesEditor}>
-                <ReactQuill
-                  theme="snow"
-                  value={content}
-                  onChange={setContent}
-                  modules={modules}
-                  formats={formats}
-                  placeholder="Jot down quick notes..."
-                  style={styles.quillEditor}
-                />
-              </div>
-              <div style={styles.notesFooter}>
-                <span style={styles.wordCount}>
-                  {getWordCount(content)} words
-                </span>
-              </div>
-            </div>
-
-            {/* Notebook Info */}
-            <div style={styles.infoSection}>
-              <h3 style={styles.infoTitle}>Notebook Info</h3>
-              <div style={styles.infoGrid}>
-                <div style={styles.infoItem}>
-                  <span style={styles.infoLabel}>Sources:</span>
-                  <span style={styles.infoValue}>{files.length + links.length}</span>
-                </div>
-                <div style={styles.infoItem}>
-                  <span style={styles.infoLabel}>Files:</span>
-                  <span style={styles.infoValue}>{files.length}</span>
-                </div>
-                <div style={styles.infoItem}>
-                  <span style={styles.infoLabel}>Links:</span>
-                  <span style={styles.infoValue}>{links.length}</span>
-                </div>
-                <div style={styles.infoItem}>
-                  <span style={styles.infoLabel}>Last updated:</span>
-                  <span style={styles.infoValue}>
-                    {lastSaved ? formatDate(lastSaved) : formatDate(notebook.lastUpdated)}
-                  </span>
-                </div>
-              </div>
-
-              {/* <div style={styles.autoSaveToggle}>
-                <label style={styles.autoSaveLabel}>
-                  <input
-                    type="checkbox"
-                    checked={autoSave}
-                    onChange={() => setAutoSave(!autoSave)}
-                    style={styles.autoSaveCheckbox}
-                  />
-                  <span style={styles.checkboxCustom}>
-                    {autoSave && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" />
-                      </svg>
-                    )}
-                  </span>
-                  Auto-save
-                </label>
-              </div> */}
-
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Chat Area - Similar to NotebookLM */}
-        <div style={styles.chatSection}>
-          <div style={styles.chatContainer}>
-            <div style={styles.chatHeader}>
-              <h3 style={styles.chatTitle}>Ready to chat? Ask me anything about your sources</h3>
-            </div>
-
-            <form onSubmit={handleChatSubmit} style={styles.chatForm}>
-              <div style={styles.chatInputContainer}>
-                <input
-                  type="text"
-                  value={chatMessage}
-                  onChange={(e) => setChatMessage(e.target.value)}
-                  placeholder="Ask me anything about your sources..."
-                  style={styles.chatInput}
-                />
-                <button
-                  type="submit"
-                  style={styles.chatSendButton}
-                  disabled={!chatMessage.trim()}
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
-                  </svg>
-                </button>
-              </div>
-            </form>
-
-            <div style={styles.chatNote}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.chatNoteIcon}>
-                <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11M11,9H13V7H11" />
-              </svg>
-              AI Chat with AWS Bedrock coming soon!
-            </div>
-          </div>
-        </div>
         {/* Upload Confirmation Modal */}
         <UploadConfirmationModal
           isOpen={showUploadModal}
@@ -1120,6 +2373,100 @@ export default function NotebookDetailPage() {
 }
 
 const styles = {
+  // Progress styles (moved inline to fix initialization error)
+  progressContainer: {
+    marginTop: '1rem',
+    padding: '1rem',
+    background: '#f8fafc',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '0.875rem',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+  },
+  progressHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '0.75rem'
+  },
+  progressTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    fontWeight: '600',
+    color: '#1e293b'
+  },
+  progressIcon: {
+    fontSize: '1rem',
+    animation: 'pulse 2s infinite'
+  },
+  progressStats: {
+    color: '#64748b',
+    fontSize: '0.8rem',
+    fontWeight: '500'
+  },
+  progressBar: {
+    width: '100%',
+    height: '8px',
+    backgroundColor: '#e2e8f0',
+    borderRadius: '4px',
+    overflow: 'hidden',
+    marginBottom: '0.75rem'
+  },
+  progressBarFill: {
+    height: '100%',
+    background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
+    borderRadius: '4px',
+    transition: 'width 0.5s ease',
+    backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%)',
+    backgroundSize: '16px 16px',
+    animation: 'progressStripes 1s linear infinite'
+  },
+  progressDetails: {
+    marginBottom: '0.5rem'
+  },
+  progressText: {
+    color: '#475569',
+    marginBottom: '0.25rem',
+    fontWeight: '500'
+  },
+  progressTime: {
+    color: '#64748b',
+    fontSize: '0.75rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem'
+  },
+  taskId: {
+    fontFamily: 'monospace',
+    backgroundColor: '#f1f5f9',
+    padding: '0.125rem 0.25rem',
+    borderRadius: '3px',
+    fontSize: '0.7rem'
+  },
+  progressTypeDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.25rem',
+    paddingTop: '0.5rem',
+    borderTop: '1px solid #e2e8f0'
+  },
+  progressTypeItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  progressTypeName: {
+    fontSize: '0.75rem',
+    color: '#64748b',
+    fontWeight: '500'
+  },
+  progressTypeStatus: {
+    fontSize: '0.75rem',
+    fontWeight: '600'
+  },
+
+  // Main container styles
   container: {
     display: "flex",
     height: "100vh",
@@ -1133,7 +2480,7 @@ const styles = {
     height: '100vh'
   },
 
-  // Header styles - Simplified
+  // Header styles
   header: {
     display: 'flex',
     alignItems: 'center',
@@ -1180,14 +2527,14 @@ const styles = {
     cursor: 'not-allowed'
   },
 
-  // Main content layout
+  // Content layout
   contentLayout: {
     display: 'flex',
     flex: 1,
     overflow: 'hidden'
   },
 
-  // Central area (main content like NotebookLM)
+  // Central area
   centralArea: {
     flex: 1,
     padding: '2rem 1rem 2rem 1.5rem',
@@ -1196,14 +2543,20 @@ const styles = {
     margin: '1rem',
     marginRight: '0.5rem',
     borderRadius: '8px',
-    border: '1px solid #e5e7eb'
+    border: '1px solid #e5e7eb',
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column'
   },
 
   // Sources section
   sourcesSection: {
     maxWidth: '1000px',
     margin: '0',
-    marginLeft: '0'
+    marginLeft: '0',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column'
   },
 
   // Title and Upload Container
@@ -1368,7 +2721,7 @@ const styles = {
   },
   addLinkButton: {
     padding: '0.75rem 1.5rem',
-    background: '#4f46e5',
+    background: ' #4f46e5',
     color: 'white',
     border: 'none',
     borderRadius: '8px',
@@ -1538,6 +2891,94 @@ const styles = {
     border: '1px solid #fecaca'
   },
 
+  // Summary styles
+  summaryContainer: {
+    marginTop: 'auto',
+    paddingTop: '2rem',
+    paddingRight: '2rem',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    position: 'relative'
+  },
+  summaryButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    padding: '0.875rem 1.25rem',
+    background: '#4f46e5',
+    color: 'white',
+    border: 'none',
+    borderRadius: '12px',
+    fontWeight: '600',
+    fontSize: '0.9rem',
+    cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+    transition: 'all 0.2s ease',
+    minWidth: '140px',
+    justifyContent: 'center'
+  },
+  summaryButtonLoading: {
+    background: '#9ca3af',
+    cursor: 'not-allowed',
+    boxShadow: '0 2px 6px rgba(156, 163, 175, 0.2)'
+  },
+  summaryIcon: {
+    flexShrink: 0,
+    fontSize: '18px'
+  },
+  summarySpinner: {
+    width: '16px',
+    height: '16px',
+    border: '2px solid rgba(255, 255, 255, 0.3)',
+    borderTop: '2px solid white',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+    flexShrink: 0
+  },
+  summaryDropdown: {
+    position: 'absolute',
+    bottom: '100%',
+    right: 0,
+    marginBottom: '0.5rem',
+    width: '280px',
+    background: 'white',
+    border: '1px solid #e5e7eb',
+    borderRadius: '12px',
+    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
+    overflow: 'hidden',
+    zIndex: 1001
+  },
+  summaryDropdownHeader: {
+    padding: '1rem 1.25rem 0.75rem',
+    fontSize: '0.9rem',
+    fontWeight: '600',
+    color: '#374151',
+    borderBottom: '1px solid #f3f4f6'
+  },
+  summaryOption: {
+    width: '100%',
+    padding: '1rem 1.25rem',
+    background: 'white',
+    border: 'none',
+    textAlign: 'left',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s ease',
+    borderBottom: '1px solid #f9fafb'
+  },
+  summaryOptionTitle: {
+    fontSize: '0.9rem',
+    fontWeight: '600',
+    color: ' #111827',
+    marginBottom: '0.25rem'
+  },
+  summaryOptionDesc: {
+    fontSize: '0.8rem',
+    color: ' #111827',
+    lineHeight: '1.4'
+  },
+
   // Right sidebar
   rightSidebar: {
     width: '320px',
@@ -1548,7 +2989,7 @@ const styles = {
     overflow: 'hidden'
   },
 
-  // Notes section (smaller)
+  // Notes section
   notesSection: {
     padding: '1.5rem',
     borderBottom: '1px solid #e5e7eb',
@@ -1608,57 +3049,537 @@ const styles = {
     color: '#111827',
     fontWeight: '500'
   },
-  // autoSaveToggle: {
-  //   display: 'flex',
-  //   alignItems: 'center',
-  //   gap: '0.5rem'
-  // },
-  // autoSaveLabel: {
-  //   display: 'flex',
-  //   alignItems: 'center',
-  //   gap: '0.5rem',
-  //   cursor: 'pointer',
-  //   fontSize: '0.875rem',
-  //   color: '#374151'
-  // },
-  // autoSaveCheckbox: {
-  //   display: 'none'
-  // },
-  checkboxCustom: {
-    width: '16px',
-    height: '16px',
-    borderRadius: '3px',
-    border: '2px solid #d1d5db',
-    background: 'white',
+
+  // Generated Summaries Section
+  summariesSection: {
+    padding: '1.5rem',
+    borderTop: '1px solid #e5e7eb',
+    flex: 1
+  },
+  summariesTitle: {
+    fontSize: '1rem',
+    fontWeight: '600',
+    color: '#111827',
+    margin: '0 0 1rem 0'
+  },
+  summariesList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem'
+  },
+  summaryLinkButton: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    color: 'white'
+    width: '100%',
+    padding: '0.75rem',
+    background: '#f9fafb',
+    border: '1px solid #e5e7eb',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    textAlign: 'left'
+  },
+  summaryLinkIcon: {
+    fontSize: '1.25rem',
+    marginRight: '0.75rem',
+    flexShrink: 0
+  },
+  summaryLinkContent: {
+    flex: 1,
+    minWidth: 0
+  },
+  summaryLinkTitle: {
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    color: '#111827',
+    marginBottom: '0.25rem'
+  },
+  summaryLinkMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem'
+  },
+  summaryLinkDate: {
+    fontSize: '0.75rem',
+    color: '#6b7280'
+  },
+  summaryLinkSize: {
+    fontSize: '0.75rem',
+    color: '#6b7280'
+  },
+  summaryLinkArrow: {
+    fontSize: '1rem',
+    color: '#4f46e5',
+    fontWeight: '600',
+    marginLeft: '0.5rem',
+    flexShrink: 0
   },
 
-  // Chat section (bottom)
+  // Summary Page Styles
+  summaryPageContainer: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    background: 'white',
+    margin: '1rem',
+    borderRadius: '8px',
+    border: '1px solid #e5e7eb',
+    overflow: 'hidden'
+  },
+  summaryPageHeader: {
+    padding: '1.5rem 2rem',
+    borderBottom: '1px solid #e5e7eb',
+    background: '#fafafa',
+    flexShrink: 0
+  },
+  backToNotebookButton: {
+    background: 'none',
+    border: 'none',
+    color: '#6b7280',
+    fontSize: '0.875rem',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    padding: '0.5rem',
+    borderRadius: '6px',
+    transition: 'background-color 0.2s ease',
+    marginBottom: '1rem'
+  },
+  summaryPageTitle: {
+    marginLeft: '0.5rem'
+  },
+  summaryPageMainTitle: {
+    fontSize: '2rem',
+    fontWeight: '700',
+    color: '#111827',
+    margin: '0 0 0.5rem 0',
+    lineHeight: '1.2'
+  },
+  summaryPageSubtitle: {
+    fontSize: '1rem',
+    color: '#6b7280',
+    margin: 0
+  },
+  summaryPageContent: {
+    flex: 1,
+    overflow: 'auto',
+    padding: '2rem'
+  },
+  summaryPageText: {
+    maxWidth: '800px',
+    margin: '0 auto'
+  },
+  summaryPageMeta: {
+    display: 'flex',
+    gap: '1rem',
+    marginBottom: '2rem',
+    flexWrap: 'wrap'
+  },
+  summaryPageMetaItem: {
+    fontSize: '0.875rem',
+    color: '#6b7280',
+    background: '#f3f4f6',
+    padding: '0.5rem 1rem',
+    borderRadius: '6px'
+  },
+  summaryPageTextContent: {
+    fontSize: '1rem',
+    lineHeight: '1.7',
+    color: '#374151',
+    whiteSpace: 'pre-wrap',
+    marginBottom: '2rem',
+    background: '#fafafa',
+    padding: '2rem',
+    borderRadius: '8px',
+    border: '1px solid #e5e7eb'
+  },
+  summaryPageActions: {
+    display: 'flex',
+    gap: '1rem',
+    justifyContent: 'center',
+    flexWrap: 'wrap'
+  },
+  summaryPageCopyButton: {
+    background: '#059669',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '0.75rem 1.5rem',
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  },
+  summaryPageDownloadButton: {
+    background: '#4f46e5',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '0.75rem 1.5rem',
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  },
+  summaryPageLoading: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '400px',
+    gap: '1rem'
+  },
+  summaryPageLoadingSpinner: {
+    width: '48px',
+    height: '48px',
+    border: '4px solid #f3f4f6',
+    borderRadius: '50%',
+    borderTop: '4px solid #4f46e5',
+    animation: 'spin 1s linear infinite'
+  },
+
+  // Chat section
   chatSection: {
     flexShrink: 0,
     background: 'white',
     borderTop: '1px solid #e5e7eb',
-    padding: '1.5rem 2rem'
+    padding: '1.5rem 2rem',
+    maxHeight: '60vh',
+    display: 'flex',
+    flexDirection: 'column'
   },
   chatContainer: {
     maxWidth: '800px',
-    margin: '0 auto'
+    margin: '0 auto',
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%'
   },
   chatHeader: {
     textAlign: 'center',
-    marginBottom: '1rem'
+    marginBottom: '1rem',
+    flexShrink: 0,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
   },
   chatTitle: {
     fontSize: '1.125rem',
     fontWeight: '600',
     color: '#111827',
+    margin: 0,
+    flex: 1,
+    textAlign: 'left'
+  },
+  chatHeaderActions: {
+    display: 'flex',
+    gap: '0.75rem',
+    alignItems: 'center'
+  },
+  summariesDropdown: {
+    position: 'relative'
+  },
+  summariesSelect: {
+    background: 'white',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    padding: '0.375rem 0.75rem',
+    fontSize: '0.75rem',
+    color: '#374151',
+    cursor: 'pointer',
+    minWidth: '120px'
+  },
+  clearChatButton: {
+    background: 'none',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    padding: '0.375rem 0.75rem',
+    fontSize: '0.75rem',
+    color: '#6b7280',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  },
+
+  // Chat messages
+  chatMessages: {
+    flex: 1,
+    overflowY: 'auto',
+    marginBottom: '1rem',
+    maxHeight: '400px',
+    padding: '0.5rem',
+    border: '1px solid #e5e7eb',
+    borderRadius: '8px',
+    background: '#fafafa'
+  },
+  chatMessage: {
+    marginBottom: '1rem'
+  },
+  chatMessageContent: {
+    borderRadius: '12px',
+    padding: '0.75rem 1rem',
+    maxWidth: '80%',
+    position: 'relative'
+  },
+  chatMessageUser: {
+    background: '#4f46e5',
+    color: 'white',
+    marginLeft: 'auto',
+    borderBottomRightRadius: '4px'
+  },
+  chatMessageAI: {
+    background: 'white',
+    border: '1px solid #e5e7eb',
+    marginRight: 'auto',
+    borderBottomLeftRadius: '4px'
+  },
+  chatMessageSystem: {
+    background: '#f0f9ff',
+    border: '1px solid #bae6fd',
+    color: '#0369a1',
+    marginRight: 'auto',
+    borderBottomLeftRadius: '4px'
+  },
+  chatMessageSummary: {
+    background: '#f0fdf4',
+    border: '1px solid #bbf7d0',
+    color: '#15803d',
+    marginRight: 'auto',
+    borderBottomLeftRadius: '4px'
+  },
+  chatMessageError: {
+    background: '#fef2f2',
+    border: '1px solid #fecaca',
+    color: '#dc2626',
+    marginRight: 'auto',
+    borderBottomLeftRadius: '4px'
+  },
+  chatMessageSources: {
+    background: '#f8fafc',
+    border: '1px solid #e2e8f0',
+    color: '#475569',
+    marginRight: 'auto',
+    borderBottomLeftRadius: '4px',
+    fontSize: '0.8rem'
+  },
+  chatMessageText: {
+    fontSize: '0.875rem',
+    lineHeight: '1.4',
+    marginBottom: '0.25rem',
+    whiteSpace: 'pre-wrap'
+  },
+  chatMessageTime: {
+    fontSize: '0.75rem',
+    opacity: 0.7,
+    textAlign: 'right',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  chatMessageMeta: {
+    fontSize: '0.65rem',
+    opacity: 0.8,
+    fontStyle: 'italic'
+  },
+
+  // Source information
+  sourcesInfo: {
+    marginTop: '0.5rem',
+    padding: '0.5rem',
+    background: 'rgba(79, 70, 229, 0.05)',
+    borderRadius: '4px',
+    border: '1px solid rgba(79, 70, 229, 0.1)'
+  },
+  sourcesHeader: {
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    color: '#4f46e5',
+    marginBottom: '0.25rem'
+  },
+  sourceItem: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '0.25rem',
+    marginBottom: '0.125rem',
+    fontSize: '0.7rem'
+  },
+  sourceNumber: {
+    fontWeight: '600',
+    color: '#4f46e5',
+    minWidth: '12px'
+  },
+  sourceText: {
+    color: '#6b7280',
+    lineHeight: '1.3'
+  },
+  sourceScore: {
+    color: '#059669',
+    fontWeight: '500'
+  },
+
+  // Summary actions
+  summaryActions: {
+    marginTop: '0.5rem',
+    display: 'flex',
+    gap: '0.5rem',
+    flexWrap: 'wrap'
+  },
+  viewSummaryButton: {
+    background: '#4f46e5',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    padding: '0.375rem 0.75rem',
+    fontSize: '0.75rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.25rem'
+  },
+
+  // Summary modal
+  summaryModal: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2000,
+    padding: '2rem'
+  },
+  summaryModalContent: {
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    width: '100%',
+    maxWidth: '800px',
+    maxHeight: '90vh',
+    display: 'flex',
+    flexDirection: 'column',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+  },
+  summaryModalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '1.5rem 2rem',
+    borderBottom: '1px solid #e5e7eb',
+    flexShrink: 0
+  },
+  summaryModalTitle: {
+    fontSize: '1.5rem',
+    fontWeight: '700',
+    color: '#111827',
     margin: 0
   },
+  summaryModalClose: {
+    background: 'none',
+    border: 'none',
+    fontSize: '1.5rem',
+    color: '#6b7280',
+    cursor: 'pointer',
+    padding: '0.5rem',
+    borderRadius: '6px',
+    transition: 'all 0.2s ease'
+  },
+  summaryModalBody: {
+    flex: 1,
+    overflow: 'auto',
+    padding: '2rem'
+  },
+  summaryContent: {
+    height: '100%'
+  },
+  summaryMeta: {
+    display: 'flex',
+    gap: '1rem',
+    marginBottom: '1.5rem',
+    flexWrap: 'wrap'
+  },
+  summaryMetaItem: {
+    fontSize: '0.875rem',
+    color: '#6b7280',
+    background: '#f3f4f6',
+    padding: '0.375rem 0.75rem',
+    borderRadius: '6px'
+  },
+  summaryText: {
+    backgroundColor: '#f9fafb',
+    border: '1px solid #e5e7eb',
+    borderRadius: '8px',
+    padding: '1.5rem',
+    fontSize: '0.9rem',
+    lineHeight: '1.6',
+    color: '#374151',
+    whiteSpace: 'pre-wrap',
+    marginBottom: '1.5rem',
+    minHeight: '300px',
+    overflow: 'auto'
+  },
+  summaryCopyButton: {
+    background: '#059669',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    padding: '0.5rem 1rem',
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  },
+  summaryDownloadButton: {
+    background: '#4f46e5',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    padding: '0.5rem 1rem',
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  },
+  summaryLoading: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '300px',
+    gap: '1rem'
+  },
+  summaryLoadingSpinner: {
+    width: '48px',
+    height: '48px',
+    border: '4px solid #f3f4f6',
+    borderRadius: '50%',
+    borderTop: '4px solid #4f46e5',
+    animation: 'spin 1s linear infinite'
+  },
+
+  // Typing indicator
+  chatTypingIndicator: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.25rem',
+    padding: '0.5rem 0'
+  },
+  typingDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: '#6b7280',
+    animation: 'typingAnimation 1.4s infinite ease-in-out'
+  },
+
+  // Chat form
   chatForm: {
-    marginBottom: '1rem'
+    marginBottom: '1rem',
+    flexShrink: 0
   },
   chatInputContainer: {
     display: 'flex',
@@ -1674,6 +3595,11 @@ const styles = {
     outline: 'none',
     background: '#f9fafb'
   },
+  chatInputDisabled: {
+    backgroundColor: '#f3f4f6',
+    color: '#9ca3af',
+    cursor: 'not-allowed'
+  },
   chatSendButton: {
     background: '#4f46e5',
     color: 'white',
@@ -1687,6 +3613,22 @@ const styles = {
     justifyContent: 'center',
     transition: 'all 0.2s ease'
   },
+  chatSendButtonDisabled: {
+    background: '#9ca3af',
+    cursor: 'not-allowed'
+  },
+
+  // Button spinner
+  buttonSpinner: {
+    width: '16px',
+    height: '16px',
+    border: '2px solid rgba(255, 255, 255, 0.3)',
+    borderTop: '2px solid white',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
+  },
+
+  // Chat note
   chatNote: {
     display: 'flex',
     alignItems: 'center',
@@ -1694,13 +3636,14 @@ const styles = {
     gap: '0.5rem',
     fontSize: '0.875rem',
     color: '#6b7280',
-    fontStyle: 'italic'
+    fontStyle: 'italic',
+    flexShrink: 0
   },
   chatNoteIcon: {
     color: '#9ca3af'
   },
 
-  // Loading styles
+  // Loading
   loadingContainer: {
     display: "flex",
     flexDirection: "column",
@@ -1721,14 +3664,121 @@ const styles = {
   loadingText: {
     fontSize: '1.1rem',
     fontWeight: '500'
+  },
+
+  // Misc
+  checkboxCustom: {
+    width: '16px',
+    height: '16px',
+    borderRadius: '3px',
+    border: '2px solid #d1d5db',
+    background: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'white'
   }
 };
 
-// Add CSS animation for spinner
-const spinKeyframes = `
+const enhancedAnimations = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+  }
+  
+  @keyframes progressStripes {
+    0% { background-position: 0 0; }
+    100% { background-position: 16px 0; }
+  }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  @keyframes typingAnimation {
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-10px); }
+  }
+  
+  .summary-dropdown-container button:hover:not(:disabled) {
+    background: #3730a3 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4) !important;
+  }
+  
+  .summary-dropdown-container .summary-option:hover {
+    background-color: #f9fafb !important;
+  }
+  
+  .summary-dropdown-container .summary-option:last-child {
+    border-bottom: none !important;
+  }
+  
+  /* Add typing animation delay for dots */
+  .typingDot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  
+  .typingDot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+  
+  /* Summary modal animations */
+  .summary-modal-close:hover {
+    background-color: #f3f4f6 !important;
+    color: #374151 !important;
+  }
+  
+  .summary-copy-button:hover {
+    background-color: #047857 !important;
+  }
+  
+  .summary-download-button:hover {
+    background-color: #3730a3 !important;
+  }
+  
+  .view-summary-button:hover {
+    background-color: #3730a3 !important;
+  }
+  
+  .summaries-select:hover {
+    border-color: #9ca3af !important;
+  }
+  
+  .clear-chat-button:hover {
+    background-color: #f9fafb !important;
+    border-color: #9ca3af !important;
+  }
+  
+  /* Summary link button hover effects */
+  .summary-link-button:hover {
+    background-color: #f3f4f6 !important;
+    border-color: #d1d5db !important;
+    transform: translateX(2px);
+  }
+  
+  /* Summary page button hover effects */
+  .summary-page-copy:hover {
+    background-color: #047857 !important;
+  }
+  
+  .summary-page-download:hover {
+    background-color: #3730a3 !important;
+  }
+  
+  /* Back to notebook button hover */
+  .back-to-notebook:hover {
+    background-color: #f3f4f6 !important;
+  }
+  
+  .progress-container {
+    animation: fadeIn 0.3s ease-out;
   }
 `;
 
@@ -1736,6 +3786,6 @@ const spinKeyframes = `
 if (!document.querySelector('#notebook-detail-styles')) {
   const style = document.createElement('style');
   style.id = 'notebook-detail-styles';
-  style.textContent = spinKeyframes;
+  style.textContent = enhancedAnimations;
   document.head.appendChild(style);
 }

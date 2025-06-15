@@ -6,46 +6,169 @@ const TopicMapVisualization = ({
     searchTerm = '',
     categoryFilter = 'all',
     sortBy = 'relevance',
-    minSimilarity = 0.1
+    minSimilarity = 0.2,
+    connectionType = 'all',
+    showLabels = true,
+    showMetrics = true
 }) => {
-    const svgRef = useRef();
-    const containerRef = useRef();
-    const [selectedNode, setSelectedNode] = useState(null);
+    const containerRef = useRef(null);
+    const svgRef = useRef(null);
+    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [hoveredNode, setHoveredNode] = useState(null);
-    const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+    const [selectedNode, setSelectedNode] = useState(null);
+    const [selectedConnection, setSelectedConnection] = useState(null);
+    const [simulationState, setSimulationState] = useState('stopped');
 
-    // Better data handling - only use sample data if explicitly no data is available
-    const hasRealData = connectionsData && connectionsData.notebooks && connectionsData.notebooks.length > 0;
-    const data = hasRealData ? connectionsData : generateSampleData();
+    // Check if we have real data
+    const hasRealData = connectionsData?.notebooks?.length > 0 && 
+                       connectionsData?.connections?.length > 0 &&
+                       !connectionsData?.isDemoData;
 
-    console.log("=== TopicMapVisualization Debug ===");
-    console.log("connectionsData prop:", connectionsData);
+    // Enhanced data validation and fallback
+    const data = hasRealData ? connectionsData : generateEnhancedSampleData();
+
+    console.log("=== Enhanced TopicMapVisualization Debug ===");
+    console.log("connectionsData:", connectionsData);
     console.log("hasRealData:", hasRealData);
-    console.log("Using data source:", hasRealData ? "REAL API DATA" : "SAMPLE DATA");
-    console.log("Final data:", data);
-    console.log("Notebooks count:", data?.notebooks?.length || 0);
-    console.log("Connections count:", data?.connections?.length || 0);
+    console.log("Final data structure:", {
+        notebooks: data?.notebooks?.length || 0,
+        connections: data?.connections?.length || 0,
+        hasNetworkIntelligence: !!data?.networkIntelligence,
+        hasSmartClusters: !!data?.smartClusters
+    });
 
-    // Generate sample data for testing
-    function generateSampleData() {
+    // Generate enhanced sample data for testing
+    function generateEnhancedSampleData() {
         const notebooks = [
-            { notebookId: '1', title: 'AI Research Notes', tags: ['AI', 'Machine Learning', 'Research'], wordCount: 1500 },
-            { notebookId: '2', title: 'Data Science Projects', tags: ['Data Science', 'Python', 'Analytics'], wordCount: 2000 },
-            { notebookId: '3', title: 'ML Model Training', tags: ['Machine Learning', 'Training', 'Models'], wordCount: 1200 },
-            { notebookId: '4', title: 'Python Programming', tags: ['Python', 'Programming', 'Code'], wordCount: 800 },
-            { notebookId: '5', title: 'Research Papers', tags: ['Research', 'Academic', 'Papers'], wordCount: 3000 },
-            { notebookId: '6', title: 'Analytics Dashboard', tags: ['Analytics', 'Visualization', 'Dashboard'], wordCount: 1000 }
+            { 
+                notebookId: '1', 
+                title: 'Machine Learning Fundamentals', 
+                tags: ['AI', 'Machine Learning', 'Python', 'Research'], 
+                wordCount: 2500,
+                updatedAt: '2024-01-15T10:00:00Z',
+                preview: 'Comprehensive guide to machine learning algorithms including supervised and unsupervised learning techniques.'
+            },
+            { 
+                notebookId: '2', 
+                title: 'Data Science Pipeline', 
+                tags: ['Data Science', 'Python', 'Analytics', 'ETL'], 
+                wordCount: 1800,
+                updatedAt: '2024-01-16T14:30:00Z',
+                preview: 'Building robust data pipelines for analytics and machine learning workflows.'
+            },
+            { 
+                notebookId: '3', 
+                title: 'Deep Learning with TensorFlow', 
+                tags: ['Deep Learning', 'TensorFlow', 'Neural Networks', 'AI'], 
+                wordCount: 3200,
+                updatedAt: '2024-01-14T09:15:00Z',
+                preview: 'Advanced deep learning concepts using TensorFlow framework for neural network implementation.'
+            },
+            { 
+                notebookId: '4', 
+                title: 'Python Programming Best Practices', 
+                tags: ['Python', 'Programming', 'Best Practices', 'Code Quality'], 
+                wordCount: 1200,
+                updatedAt: '2024-01-12T16:45:00Z',
+                preview: 'Essential Python programming patterns and best practices for clean, maintainable code.'
+            },
+            { 
+                notebookId: '5', 
+                title: 'Research Methodology in AI', 
+                tags: ['Research', 'AI', 'Methodology', 'Academic'], 
+                wordCount: 2800,
+                updatedAt: '2024-01-10T11:20:00Z',
+                preview: 'Systematic approach to conducting research in artificial intelligence and machine learning.'
+            },
+            { 
+                notebookId: '6', 
+                title: 'Data Visualization Techniques', 
+                tags: ['Visualization', 'Analytics', 'D3.js', 'Charts'], 
+                wordCount: 1500,
+                updatedAt: '2024-01-18T13:10:00Z',
+                preview: 'Creating effective data visualizations using modern web technologies and design principles.'
+            },
+            { 
+                notebookId: '7', 
+                title: 'Cloud Computing Architecture', 
+                tags: ['Cloud', 'AWS', 'Architecture', 'Scalability'], 
+                wordCount: 2200,
+                updatedAt: '2024-01-08T08:30:00Z',
+                preview: 'Designing scalable cloud architectures using AWS services and modern cloud-native patterns.'
+            }
         ];
 
         const connections = [
-            { source: '1', target: '3', type: 'tag_similarity', strength: 0.8, commonTags: ['Machine Learning'] },
-            { source: '1', target: '5', type: 'tag_similarity', strength: 0.6, commonTags: ['Research'] },
-            { source: '2', target: '4', type: 'tag_similarity', strength: 0.7, commonTags: ['Python'] },
-            { source: '2', target: '6', type: 'tag_similarity', strength: 0.5, commonTags: ['Analytics'] },
-            { source: '3', target: '1', type: 'explicit', strength: 1.0 }
+            { 
+                source: '1', target: '3', type: 'smart_similarity', strength: 0.85, 
+                strengthCategory: 'strong',
+                commonTags: ['AI', 'Machine Learning'],
+                factors: { tagSimilarity: 0.7, contentSimilarity: 0.6, temporalBonus: 0.2, wordCountBonus: 0.05 }
+            },
+            { 
+                source: '1', target: '5', type: 'smart_similarity', strength: 0.72, 
+                strengthCategory: 'strong',
+                commonTags: ['AI', 'Research'],
+                factors: { tagSimilarity: 0.5, contentSimilarity: 0.4, temporalBonus: 0.1, wordCountBonus: 0.08 }
+            },
+            { 
+                source: '2', target: '4', type: 'smart_similarity', strength: 0.68, 
+                strengthCategory: 'moderate',
+                commonTags: ['Python'],
+                factors: { tagSimilarity: 0.4, contentSimilarity: 0.5, temporalBonus: 0.15, wordCountBonus: 0.03 }
+            },
+            { 
+                source: '2', target: '6', type: 'smart_similarity', strength: 0.55, 
+                strengthCategory: 'moderate',
+                commonTags: ['Analytics'],
+                factors: { tagSimilarity: 0.3, contentSimilarity: 0.4, temporalBonus: 0.05, wordCountBonus: 0.02 }
+            },
+            { 
+                source: '1', target: '4', type: 'smart_similarity', strength: 0.45, 
+                strengthCategory: 'weak',
+                commonTags: ['Python'],
+                factors: { tagSimilarity: 0.25, contentSimilarity: 0.3, temporalBonus: 0.0, wordCountBonus: 0.01 }
+            },
+            { 
+                source: '3', target: '5', type: 'explicit', strength: 1.0,
+                strengthCategory: 'explicit',
+                commonTags: ['AI'],
+                factors: {}
+            }
         ];
 
-        return { notebooks, connections, tagGroups: {} };
+        return { 
+            notebooks, 
+            connections,
+            networkIntelligence: {
+                totalNodes: notebooks.length,
+                totalConnections: connections.length,
+                density: 0.42,
+                averageConnections: 2.1,
+                clusteringCoefficient: 0.35,
+                networkHealth: {
+                    connected: true,
+                    wellConnected: true,
+                    hasHubs: true,
+                    diverse: true
+                },
+                strengthDistribution: {
+                    strong: 2,
+                    moderate: 2,
+                    weak: 1,
+                    explicit: 1
+                },
+                tagAnalysis: {
+                    uniqueTags: 15,
+                    diversity: 0.8,
+                    mostCommon: [
+                        { tag: 'AI', count: 3 },
+                        { tag: 'Python', count: 3 },
+                        { tag: 'Research', count: 2 }
+                    ]
+                }
+            }
+        };
     }
 
     // Handle container resize
@@ -54,7 +177,7 @@ const TopicMapVisualization = ({
             if (containerRef.current) {
                 const { clientWidth, clientHeight } = containerRef.current;
                 setDimensions({
-                    width: Math.max(clientWidth, 600),
+                    width: Math.max(clientWidth, 700),
                     height: Math.max(clientHeight, 500)
                 });
             }
@@ -65,27 +188,22 @@ const TopicMapVisualization = ({
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // Process data for D3 visualization
+    // Enhanced data processing with smart filtering
     const processDataForVisualization = () => {
         if (!data.notebooks || data.notebooks.length === 0) {
-            console.log("No notebooks found in data");
             return { nodes: [], links: [] };
         }
 
-        console.log("Processing data - raw notebooks:", data.notebooks.length);
-        console.log("Sample notebook structure:", data.notebooks[0]);
-
-        // Create nodes from notebooks with filtering
         let filteredNotebooks = [...data.notebooks];
 
-        // Apply search filter
+        // Apply search filter with enhanced matching
         if (searchTerm.trim()) {
             const searchLower = searchTerm.toLowerCase();
             filteredNotebooks = filteredNotebooks.filter(notebook =>
                 (notebook.title && notebook.title.toLowerCase().includes(searchLower)) ||
-                (notebook.tags && notebook.tags.some(tag => tag.toLowerCase().includes(searchLower)))
+                (notebook.tags && notebook.tags.some(tag => tag.toLowerCase().includes(searchLower))) ||
+                (notebook.preview && notebook.preview.toLowerCase().includes(searchLower))
             );
-            console.log("After search filter:", filteredNotebooks.length);
         }
 
         // Apply category filter
@@ -95,81 +213,77 @@ const TopicMapVisualization = ({
                     tag.toLowerCase().includes(categoryFilter.toLowerCase())
                 )
             );
-            console.log("After category filter:", filteredNotebooks.length);
         }
 
-        // Create nodes with better error handling
+        // Create enhanced nodes
         const nodes = filteredNotebooks.map(notebook => {
             const tags = notebook.tags || [];
             const primaryTag = tags.length > 0 ? tags[0] : 'uncategorized';
             const wordCount = notebook.wordCount || 0;
             const title = notebook.title || `Notebook ${notebook.notebookId?.substring(0, 8) || 'Unknown'}`;
 
-            console.log(`Creating node for: ${title}, tags: [${tags.join(', ')}], wordCount: ${wordCount}`);
+            // Calculate connection count for this notebook
+            const connectionCount = (data.connections || []).filter(conn =>
+                conn.source === notebook.notebookId || conn.target === notebook.notebookId
+            ).length;
+
+            // Enhanced size calculation based on multiple factors
+            const baseSize = 25;
+            const wordSize = Math.min(40, (wordCount / 100) + 5);
+            const connectionSize = connectionCount * 3;
+            const totalSize = baseSize + wordSize + connectionSize;
 
             return {
                 id: notebook.notebookId,
                 title: title,
                 tags: tags,
                 wordCount: wordCount,
+                connectionCount: connectionCount,
                 group: primaryTag,
-                size: Math.max(30, Math.min(70, wordCount > 0 ? (wordCount / 50 + 35) : 40)), // Better size for 0 word count
-                notebook: notebook
+                size: Math.max(30, Math.min(80, totalSize)),
+                notebook: notebook,
+                updatedAt: notebook.updatedAt,
+                preview: notebook.preview || ''
             };
         });
 
-        console.log("Created nodes:", nodes.length);
-        console.log("Sample node:", nodes[0]);
-
-        // Create links from connections
+        // Create enhanced links with filtering
         const nodeIds = new Set(nodes.map(n => n.id));
-        console.log("Node IDs:", Array.from(nodeIds));
-
         const availableConnections = data.connections || [];
-        console.log("Available connections:", availableConnections.length);
-        console.log("Sample connection:", availableConnections[0]);
 
         const links = availableConnections
             .filter(conn => {
                 const hasSource = nodeIds.has(conn.source);
                 const hasTarget = nodeIds.has(conn.target);
                 const meetsThreshold = conn.strength >= minSimilarity;
+                const meetsType = connectionType === 'all' || conn.type === connectionType;
 
-                if (!hasSource) console.log(`Connection source ${conn.source} not found in nodes`);
-                if (!hasTarget) console.log(`Connection target ${conn.target} not found in nodes`);
-                if (!meetsThreshold) console.log(`Connection strength ${conn.strength} below threshold ${minSimilarity}`);
-
-                return hasSource && hasTarget && meetsThreshold;
+                return hasSource && hasTarget && meetsThreshold && meetsType;
             })
             .map(conn => ({
                 source: conn.source,
                 target: conn.target,
                 strength: conn.strength || 0.5,
                 type: conn.type || 'unknown',
+                strengthCategory: conn.strengthCategory || 'weak',
                 commonTags: conn.commonTags || [],
-                distance: Math.max(100, 250 - (conn.strength * 150))
+                factors: conn.factors || {},
+                distance: Math.max(80, 200 - (conn.strength * 120)),
+                connection: conn
             }));
-
-        console.log("Created links:", links.length);
-        console.log("Sample link:", links[0]);
 
         return { nodes, links };
     };
 
-    // D3 visualization effect
+    // Enhanced D3 visualization
     useEffect(() => {
-        console.log("Effect triggered with data:", data);
-        console.log("connectionsData prop:", connectionsData);
-
         if (!data || !data.notebooks) {
-            console.log("No data available for visualization");
             return;
         }
 
         const { nodes, links } = processDataForVisualization();
 
         if (nodes.length === 0) {
-            console.log("No nodes to render - showing empty state");
             const svg = d3.select(svgRef.current);
             svg.selectAll("*").remove();
 
@@ -185,8 +299,6 @@ const TopicMapVisualization = ({
             return;
         }
 
-        console.log("Rendering visualization with", nodes.length, "nodes and", links.length, "links");
-
         const svg = d3.select(svgRef.current);
         svg.selectAll("*").remove();
 
@@ -195,11 +307,25 @@ const TopicMapVisualization = ({
 
         svg.attr("width", width).attr("height", height);
 
-        // Add background
+        // Enhanced background with subtle gradient
+        const defs = svg.append("defs");
+        const gradient = defs.append("linearGradient")
+            .attr("id", "backgroundGradient")
+            .attr("x1", "0%").attr("y1", "0%")
+            .attr("x2", "100%").attr("y2", "100%");
+        
+        gradient.append("stop")
+            .attr("offset", "0%")
+            .attr("stop-color", "#f8fafc");
+        
+        gradient.append("stop")
+            .attr("offset", "100%")
+            .attr("stop-color", "#f1f5f9");
+
         svg.append("rect")
             .attr("width", width)
             .attr("height", height)
-            .attr("fill", "#fafafa");
+            .attr("fill", "url(#backgroundGradient)");
 
         const g = svg.append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
@@ -207,55 +333,109 @@ const TopicMapVisualization = ({
         const innerWidth = width - margin.left - margin.right;
         const innerHeight = height - margin.top - margin.bottom;
 
-        // Create color scale
+        // Enhanced color scale with more sophisticated colors
         const allTags = [...new Set(nodes.flatMap(n => n.tags))];
         const colorScale = d3.scaleOrdinal()
             .domain(allTags.concat(['uncategorized']))
             .range([
                 '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444',
                 '#8b5cf6', '#f97316', '#ec4899', '#84cc16', '#6366f1',
-                '#14b8a6', '#f43f5e', '#a855f7', '#22c55e', '#6b7280'
+                '#14b8a6', '#f43f5e', '#a855f7', '#22c55e', '#6b7280',
+                '#0ea5e9', '#8b5a2b', '#db2777', '#7c3aed', '#059669'
             ]);
 
-        console.log("Color scale domain:", colorScale.domain());
-
-        // Create force simulation
+        // Create enhanced force simulation
         const simulation = d3.forceSimulation(nodes)
             .force("link", d3.forceLink(links)
                 .id(d => d.id)
                 .distance(d => d.distance)
-                .strength(0.4)
+                .strength(d => Math.min(0.8, d.strength))
             )
             .force("charge", d3.forceManyBody()
-                .strength(-500)
+                .strength(d => -300 - (d.connectionCount * 50))
             )
             .force("center", d3.forceCenter(innerWidth / 2, innerHeight / 2))
             .force("collision", d3.forceCollide()
-                .radius(d => d.size + 20)
+                .radius(d => d.size + 15)
                 .strength(0.9)
             );
 
-        // Create links
-        const link = g.append("g")
-            .attr("class", "links")
-            .selectAll("line")
+        // Add repulsion between nodes with same tags
+        simulation.force("sameTagRepulsion", d3.forceManyBody()
+            .strength((d, i) => {
+                const sameTagNodes = nodes.filter(n => 
+                    n.id !== d.id && n.tags.some(tag => d.tags.includes(tag))
+                );
+                return sameTagNodes.length > 0 ? -100 : 0;
+            })
+        );
+
+        // Create enhanced links with different styles
+        const linkGroup = g.append("g").attr("class", "links");
+        
+        const link = linkGroup.selectAll("line")
             .data(links)
             .enter().append("line")
-            .attr("stroke", d => d.type === 'explicit' ? '#ef4444' : '#6b7280')
-            .attr("stroke-opacity", d => d.type === 'explicit' ? 0.9 : 0.6)
-            .attr("stroke-width", d => Math.max(3, d.strength * 8))
-            .style("cursor", "pointer");
+            .attr("stroke", d => {
+                if (d.type === 'explicit') return '#ef4444';
+                if (d.strengthCategory === 'strong') return '#059669';
+                if (d.strengthCategory === 'moderate') return '#3b82f6';
+                return '#9ca3af';
+            })
+            .attr("stroke-opacity", d => {
+                if (d.type === 'explicit') return 0.9;
+                return Math.max(0.3, d.strength);
+            })
+            .attr("stroke-width", d => {
+                if (d.type === 'explicit') return 4;
+                return Math.max(2, d.strength * 6);
+            })
+            .attr("stroke-dasharray", d => d.type === 'explicit' ? "0" : "5,5")
+            .style("cursor", "pointer")
+            .on("mouseover", function(event, d) {
+                setSelectedConnection(d);
+                d3.select(this)
+                    .attr("stroke-width", d => d.type === 'explicit' ? 6 : Math.max(4, d.strength * 8))
+                    .attr("stroke-opacity", 1);
+            })
+            .on("mouseout", function(event, d) {
+                setSelectedConnection(null);
+                d3.select(this)
+                    .attr("stroke-width", d => d.type === 'explicit' ? 4 : Math.max(2, d.strength * 6))
+                    .attr("stroke-opacity", d => d.type === 'explicit' ? 0.9 : Math.max(0.3, d.strength));
+            });
 
-        // Create nodes
-        const node = g.append("g")
-            .attr("class", "nodes")
-            .selectAll("circle")
+        // Create enhanced nodes with patterns
+        const nodeGroup = g.append("g").attr("class", "nodes");
+        
+        // Add patterns for different node types
+        const pattern = defs.selectAll("pattern")
+            .data(nodes.filter(d => d.connectionCount > 3))
+            .enter().append("pattern")
+            .attr("id", d => `pattern-${d.id}`)
+            .attr("patternUnits", "userSpaceOnUse")
+            .attr("width", 4)
+            .attr("height", 4);
+            
+        pattern.append("circle")
+            .attr("cx", 2)
+            .attr("cy", 2)
+            .attr("r", 1)
+            .attr("fill", "#ffffff")
+            .attr("opacity", 0.3);
+
+        const node = nodeGroup.selectAll("circle")
             .data(nodes)
             .enter().append("circle")
             .attr("r", d => d.size)
-            .attr("fill", d => colorScale(d.group))
-            .attr("stroke", "#ffffff")
-            .attr("stroke-width", 4)
+            .attr("fill", d => {
+                if (d.connectionCount > 3) {
+                    return `url(#pattern-${d.id})`;
+                }
+                return colorScale(d.group);
+            })
+            .attr("stroke", d => d.connectionCount > 3 ? "#fbbf24" : "#ffffff")
+            .attr("stroke-width", d => d.connectionCount > 3 ? 6 : 4)
             .style("cursor", "pointer")
             .style("filter", "drop-shadow(0 4px 8px rgba(0,0,0,0.25))")
             .on("mouseover", function (event, d) {
@@ -263,9 +443,25 @@ const TopicMapVisualization = ({
                 d3.select(this)
                     .transition()
                     .duration(200)
-                    .attr("r", d.size * 1.3)
-                    .attr("stroke-width", 6)
+                    .attr("r", d.size * 1.2)
+                    .attr("stroke-width", d => d.connectionCount > 3 ? 8 : 6)
                     .style("filter", "drop-shadow(0 8px 16px rgba(0,0,0,0.4))");
+                
+                // Highlight connected nodes and links
+                linkGroup.selectAll("line")
+                    .attr("stroke-opacity", l => 
+                        (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.1
+                    );
+                    
+                nodeGroup.selectAll("circle")
+                    .attr("opacity", n => {
+                        if (n.id === d.id) return 1;
+                        const isConnected = links.some(l => 
+                            (l.source.id === d.id && l.target.id === n.id) ||
+                            (l.target.id === d.id && l.source.id === n.id)
+                        );
+                        return isConnected ? 1 : 0.3;
+                    });
             })
             .on("mouseout", function (event, d) {
                 setHoveredNode(null);
@@ -273,8 +469,15 @@ const TopicMapVisualization = ({
                     .transition()
                     .duration(200)
                     .attr("r", d.size)
-                    .attr("stroke-width", 4)
+                    .attr("stroke-width", d => d.connectionCount > 3 ? 6 : 4)
                     .style("filter", "drop-shadow(0 4px 8px rgba(0,0,0,0.25))");
+                
+                // Reset highlighting
+                linkGroup.selectAll("line")
+                    .attr("stroke-opacity", d => d.type === 'explicit' ? 0.9 : Math.max(0.3, d.strength));
+                    
+                nodeGroup.selectAll("circle")
+                    .attr("opacity", 1);
             })
             .on("click", function (event, d) {
                 event.stopPropagation();
@@ -285,50 +488,58 @@ const TopicMapVisualization = ({
                 .on("drag", dragged)
                 .on("end", dragended));
 
-        // Add labels
-        const labels = g.append("g")
-            .attr("class", "labels")
-            .selectAll("text")
-            .data(nodes)
-            .enter().append("text")
-            .text(d => {
-                const title = d.title || 'Untitled';
-                return title.length > 25 ? title.substring(0, 25) + "..." : title;
-            })
-            .attr("font-size", "13px")
-            .attr("font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif")
-            .attr("fill", "#1f2937")
-            .attr("font-weight", "600")
-            .attr("text-anchor", "middle")
-            .attr("dy", d => d.size + 30)
-            .style("pointer-events", "none")
-            .style("user-select", "none")
-            .style("text-shadow", "2px 2px 4px rgba(255,255,255,0.9)");
+        // Enhanced labels with better positioning
+        const labelGroup = g.append("g").attr("class", "labels");
+        
+        if (showLabels) {
+            const labels = labelGroup.selectAll("text")
+                .data(nodes)
+                .enter().append("text")
+                .text(d => {
+                    const title = d.title || 'Untitled';
+                    return title.length > 20 ? title.substring(0, 20) + "..." : title;
+                })
+                .attr("font-size", d => Math.max(10, Math.min(14, d.size / 4)))
+                .attr("font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif")
+                .attr("fill", "#1f2937")
+                .attr("font-weight", "600")
+                .attr("text-anchor", "middle")
+                .attr("dy", d => d.size + 25)
+                .style("pointer-events", "none")
+                .style("user-select", "none")
+                .style("text-shadow", "2px 2px 4px rgba(255,255,255,0.9)")
+                .style("opacity", 0.9);
 
-        // Add word count indicators
-        const wordCountLabels = g.append("g")
-            .attr("class", "word-counts")
-            .selectAll("text")
-            .data(nodes)
-            .enter().append("text")
-            .text(d => {
-                if (d.wordCount > 1000) return `${Math.round(d.wordCount / 1000)}k`;
-                if (d.wordCount > 100) return `${Math.round(d.wordCount / 100)}00+`;
-                if (d.wordCount > 0) return d.wordCount;
-                return "0";
-            })
-            .attr("font-size", "11px")
-            .attr("font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif")
-            .attr("fill", "#ffffff")
-            .attr("font-weight", "700")
-            .attr("text-anchor", "middle")
-            .attr("dy", "4px")
-            .style("pointer-events", "none")
-            .style("text-shadow", "1px 1px 2px rgba(0,0,0,0.8)");
+            // Connection count badges for highly connected nodes
+            const badges = labelGroup.selectAll("rect")
+                .data(nodes.filter(d => d.connectionCount > 2))
+                .enter().append("g");
 
-        // Update positions on simulation tick
+            badges.append("rect")
+                .attr("x", d => -12)
+                .attr("y", d => -d.size - 15)
+                .attr("width", 24)
+                .attr("height", 16)
+                .attr("rx", 8)
+                .attr("fill", "#ef4444")
+                .style("pointer-events", "none");
+
+            badges.append("text")
+                .attr("x", 0)
+                .attr("y", d => -d.size - 7)
+                .attr("text-anchor", "middle")
+                .attr("font-size", "10px")
+                .attr("font-weight", "700")
+                .attr("fill", "#ffffff")
+                .text(d => d.connectionCount)
+                .style("pointer-events", "none");
+        }
+
+        // Simulation state tracking
+        setSimulationState('running');
+        
         simulation.on("tick", () => {
-            const padding = 80;
+            const padding = 100;
 
             node
                 .attr("cx", d => {
@@ -346,32 +557,36 @@ const TopicMapVisualization = ({
                 .attr("x2", d => d.target.x)
                 .attr("y2", d => d.target.y);
 
-            labels
-                .attr("x", d => d.x)
-                .attr("y", d => d.y);
+            if (showLabels) {
+                labelGroup.selectAll("text")
+                    .attr("x", d => d.x)
+                    .attr("y", d => d.y);
 
-            wordCountLabels
-                .attr("x", d => d.x)
-                .attr("y", d => d.y);
+                labelGroup.selectAll("g")
+                    .attr("transform", d => `translate(${d.x},${d.y})`);
+            }
         });
 
-        // Add zoom and pan
+        simulation.on("end", () => {
+            setSimulationState('stopped');
+        });
+
+        // Enhanced zoom and pan
         const zoom = d3.zoom()
-            .scaleExtent([0.2, 4])
+            .scaleExtent([0.1, 5])
             .on("zoom", (event) => {
                 g.attr("transform", event.transform);
             });
 
         svg.call(zoom);
 
+        // Control buttons
+        const controlsGroup = svg.append("g")
+            .attr("class", "controls")
+            .attr("transform", `translate(${width - 160}, 15)`);
+
         // Reset zoom button
-        svg.append("rect")
-            .attr("x", width - 120)
-            .attr("y", 15)
-            .attr("width", 100)
-            .attr("height", 35)
-            .attr("fill", "#3b82f6")
-            .attr("rx", 8)
+        const resetButton = controlsGroup.append("g")
             .style("cursor", "pointer")
             .on("click", () => {
                 svg.transition().duration(750).call(
@@ -380,15 +595,49 @@ const TopicMapVisualization = ({
                 );
             });
 
-        svg.append("text")
-            .attr("x", width - 70)
-            .attr("y", 38)
+        resetButton.append("rect")
+            .attr("width", 90)
+            .attr("height", 30)
+            .attr("fill", "#3b82f6")
+            .attr("rx", 6);
+
+        resetButton.append("text")
+            .attr("x", 45)
+            .attr("y", 20)
             .attr("text-anchor", "middle")
             .attr("fill", "white")
-            .attr("font-size", "13px")
+            .attr("font-size", "12px")
             .attr("font-weight", "600")
-            .style("pointer-events", "none")
-            .text("Reset Zoom");
+            .text("Reset View");
+
+        // Simulation control button
+        const simButton = controlsGroup.append("g")
+            .attr("transform", "translate(0, 35)")
+            .style("cursor", "pointer")
+            .on("click", () => {
+                if (simulationState === 'running') {
+                    simulation.stop();
+                    setSimulationState('stopped');
+                } else {
+                    simulation.restart();
+                    setSimulationState('running');
+                }
+            });
+
+        simButton.append("rect")
+            .attr("width", 90)
+            .attr("height", 30)
+            .attr("fill", simulationState === 'running' ? "#ef4444" : "#10b981")
+            .attr("rx", 6);
+
+        simButton.append("text")
+            .attr("x", 45)
+            .attr("y", 20)
+            .attr("text-anchor", "middle")
+            .attr("fill", "white")
+            .attr("font-size", "12px")
+            .attr("font-weight", "600")
+            .text(simulationState === 'running' ? "Pause" : "Play");
 
         // Drag functions
         function dragstarted(event, d) {
@@ -413,177 +662,87 @@ const TopicMapVisualization = ({
             simulation.stop();
         };
 
-    }, [connectionsData, data, searchTerm, categoryFilter, sortBy, minSimilarity, dimensions]);
+    }, [data, searchTerm, categoryFilter, sortBy, minSimilarity, connectionType, dimensions, showLabels]);
 
     return (
         <div ref={containerRef} style={styles.container}>
             <div style={styles.visualizationContainer}>
                 <svg ref={svgRef} style={styles.svg}></svg>
 
-                {/* Show data source indicator */}
+                {/* Enhanced data source indicator */}
                 <div style={styles.dataSourceIndicator}>
                     <span style={hasRealData ? styles.realDataText : styles.sampleDataText}>
-                        {hasRealData ? `✅ Real Data: ${data.notebooks.length} notebooks` : '📊 Sample Data'}
+                        {hasRealData ? 
+                            `✅ Smart Analysis: ${data?.notebooks?.length || 0} notebooks, ${data?.connections?.length || 0} connections` : 
+                            '📊 Demo Data - Enhanced Smart Mapping'
+                        }
                     </span>
+                    {simulationState === 'running' && (
+                        <span style={styles.simulationIndicator}>🔄 Simulation Active</span>
+                    )}
                 </div>
 
-                {/* Tooltip for hovered node */}
+                {/* Enhanced tooltip for hovered node */}
                 {hoveredNode && (
                     <div style={styles.tooltip}>
                         <h4 style={styles.tooltipTitle}>{hoveredNode.title}</h4>
-                        <p style={styles.tooltipText}>
-                            <strong>Tags:</strong> {hoveredNode.tags.length > 0 ? hoveredNode.tags.join(', ') : 'No tags'}
-                        </p>
-                        <p style={styles.tooltipText}>
-                            <strong>Words:</strong> {hoveredNode.wordCount.toLocaleString()}
-                        </p>
-                        <p style={styles.tooltipText}>
-                            <strong>Category:</strong> {hoveredNode.group}
-                        </p>
-                    </div>
-                )}
-
-                {/* Selected node details panel */}
-                {selectedNode && (
-                    <div style={styles.detailsPanel}>
-                        <div style={styles.detailsHeader}>
-                            <h3 style={styles.detailsTitle}>{selectedNode.title}</h3>
-                            <button
-                                onClick={() => setSelectedNode(null)}
-                                style={styles.closeButton}
-                                title="Close"
-                            >
-                                ×
-                            </button>
-                        </div>
-                        <div style={styles.detailsContent}>
-                            <div style={styles.detailSection}>
-                                <h4 style={styles.detailSectionTitle}>Overview</h4>
-                                <p style={styles.detailItem}>
-                                    <span style={styles.detailLabel}>Tags:</span>
-                                    <span style={styles.detailValue}>
-                                        {selectedNode.tags.length > 0 ? selectedNode.tags.join(', ') : 'No tags'}
-                                    </span>
+                        <div style={styles.tooltipSection}>
+                            <p style={styles.tooltipText}>
+                                <strong>Tags:</strong> {hoveredNode.tags.length > 0 ? hoveredNode.tags.join(', ') : 'No tags'}
+                            </p>
+                            <p style={styles.tooltipText}>
+                                <strong>Words:</strong> {hoveredNode.wordCount.toLocaleString()}
+                            </p>
+                            <p style={styles.tooltipText}>
+                                <strong>Connections:</strong> {hoveredNode.connectionCount}
+                            </p>
+                            {hoveredNode.updatedAt && (
+                                <p style={styles.tooltipText}>
+                                    <strong>Updated:</strong> {new Date(hoveredNode.updatedAt).toLocaleDateString()}
                                 </p>
-                                <p style={styles.detailItem}>
-                                    <span style={styles.detailLabel}>Word Count:</span>
-                                    <span style={styles.detailValue}>{selectedNode.wordCount.toLocaleString()}</span>
-                                </p>
-                                <p style={styles.detailItem}>
-                                    <span style={styles.detailLabel}>Primary Category:</span>
-                                    <span style={styles.detailValue}>{selectedNode.group}</span>
-                                </p>
-                            </div>
-
-                            {/* Connected notebooks */}
-                            {data.connections && (
-                                <div style={styles.detailSection}>
-                                    <h4 style={styles.detailSectionTitle}>Connected Notebooks</h4>
-                                    <div style={styles.connectionsList}>
-                                        {data.connections
-                                            .filter(conn => conn.source === selectedNode.id || conn.target === selectedNode.id)
-                                            .map((conn, index) => {
-                                                const connectedId = conn.source === selectedNode.id ? conn.target : conn.source;
-                                                const connectedNotebook = data.notebooks.find(nb => nb.notebookId === connectedId);
-                                                if (!connectedNotebook) return null;
-
-                                                return (
-                                                    <div key={index} style={styles.connectionItem}>
-                                                        <div style={styles.connectionInfo}>
-                                                            <span style={styles.connectionTitle}>{connectedNotebook.title}</span>
-                                                            <span style={styles.connectionMeta}>
-                                                                {conn.type === 'explicit' ? 'Explicit Link' : 'Tag Similarity'} •
-                                                                {Math.round(conn.strength * 100)}% match
-                                                            </span>
-                                                            {conn.commonTags && conn.commonTags.length > 0 && (
-                                                                <span style={styles.connectionTags}>
-                                                                    Common tags: {conn.commonTags.join(', ')}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <div style={styles.connectionStrength}>
-                                                            <div
-                                                                style={{
-                                                                    ...styles.strengthBar,
-                                                                    width: `${conn.strength * 100}%`,
-                                                                    backgroundColor: conn.type === 'explicit' ? '#ef4444' : '#3b82f6'
-                                                                }}
-                                                            ></div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                    </div>
-
-                                    {data.connections.filter(conn =>
-                                        conn.source === selectedNode.id || conn.target === selectedNode.id
-                                    ).length === 0 && (
-                                            <p style={styles.noConnections}>
-                                                This notebook has no connections to other notebooks.
-                                            </p>
-                                        )}
-                                </div>
                             )}
                         </div>
+                        {hoveredNode.preview && (
+                            <div style={styles.tooltipPreview}>
+                                <strong>Preview:</strong>
+                                <p>{hoveredNode.preview.substring(0, 100)}...</p>
+                            </div>
+                        )}
                     </div>
                 )}
 
-                {/* Visualization stats overlay */}
-                <div style={styles.controlsOverlay}>
-                    <div style={styles.controlItem}>
-                        <span style={styles.controlLabel}>Nodes:</span>
-                        <span style={styles.controlValue}>
-                            {processDataForVisualization().nodes.length}
-                        </span>
-                    </div>
-                    <div style={styles.controlItem}>
-                        <span style={styles.controlLabel}>Links:</span>
-                        <span style={styles.controlValue}>
-                            {processDataForVisualization().links.length}
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Legend */}
-            <div style={styles.legend}>
-                <h4 style={styles.legendTitle}>Topic Map</h4>
-                <div style={styles.legendItems}>
-                    <div style={styles.legendCategory}>
-                        <h5 style={styles.legendCategoryTitle}>Nodes</h5>
-                        <div style={styles.legendItem}>
-                            <div style={{ ...styles.legendColor, backgroundColor: '#3b82f6' }}></div>
-                            <span style={styles.legendText}>Notebooks by primary tag</span>
+                {/* Connection details tooltip */}
+                {selectedConnection && (
+                    <div style={styles.connectionTooltip}>
+                        <h4 style={styles.tooltipTitle}>Connection Details</h4>
+                        <div style={styles.tooltipSection}>
+                            <p style={styles.tooltipText}>
+                                <strong>Type:</strong> {selectedConnection.type === 'explicit' ? 'Explicit Link' : 'Smart Similarity'}
+                            </p>
+                            <p style={styles.tooltipText}>
+                                <strong>Strength:</strong> {Math.round(selectedConnection.strength * 100)}%
+                            </p>
+                            <p style={styles.tooltipText}>
+                                <strong>Category:</strong> {selectedConnection.strengthCategory}
+                            </p>
+                            {selectedConnection.commonTags.length > 0 && (
+                                <p style={styles.tooltipText}>
+                                    <strong>Common Tags:</strong> {selectedConnection.commonTags.join(', ')}
+                                </p>
+                            )}
                         </div>
-                        <div style={styles.legendItem}>
-                            <div style={{ ...styles.legendDot, width: '16px', height: '16px' }}></div>
-                            <span style={styles.legendText}>Size = word count</span>
-                        </div>
+                        {selectedConnection.factors && Object.keys(selectedConnection.factors).length > 0 && (
+                            <div style={styles.tooltipSection}>
+                                <strong>Analysis Factors:</strong>
+                                {Object.entries(selectedConnection.factors).map(([key, value]) => (
+                                    <p key={key} style={styles.factorText}>
+                                        {key}: {Math.round(value * 100)}%
+                                    </p>
+                                ))}
+                            </div>
+                        )}
                     </div>
-
-                    <div style={styles.legendCategory}>
-                        <h5 style={styles.legendCategoryTitle}>Connections</h5>
-                        <div style={styles.legendItem}>
-                            <div style={{ ...styles.legendLine, backgroundColor: '#ef4444' }}></div>
-                            <span style={styles.legendText}>Explicit Links</span>
-                        </div>
-                        <div style={styles.legendItem}>
-                            <div style={{ ...styles.legendLine, backgroundColor: '#6b7280' }}></div>
-                            <span style={styles.legendText}>Tag Similarity</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div style={styles.legendInstructions}>
-                    <p style={styles.legendNote}>
-                        <strong>How to use:</strong><br />
-                        • Drag nodes to move them<br />
-                        • Hover for quick details<br />
-                        • Click for full information<br />
-                        • Scroll to zoom in/out<br />
-                        • Use "Reset Zoom" to center
-                    </p>
-                </div>
+                )}
             </div>
         </div>
     );
@@ -592,304 +751,91 @@ const TopicMapVisualization = ({
 const styles = {
     container: {
         display: 'flex',
-        gap: '1rem',
+        flexDirection: 'column',
         height: '100%',
+        width: '100%',
         position: 'relative',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+        overflow: 'hidden'
     },
     visualizationContainer: {
         flex: 1,
         position: 'relative',
-        border: '1px solid #e5e7eb',
-        borderRadius: '12px',
-        background: '#ffffff',
-        overflow: 'hidden',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07)',
-        minHeight: '500px'
+        background: '#f8fafc',
+        borderRadius: '8px',
+        overflow: 'hidden'
     },
     svg: {
         width: '100%',
-        height: '100%',
-        display: 'block',
-        cursor: 'grab'
+        height: '100%'
     },
     dataSourceIndicator: {
         position: 'absolute',
-        top: '1rem',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        background: 'rgba(255, 255, 255, 0.95)',
-        border: '1px solid #e5e7eb',
-        borderRadius: '8px',
-        padding: '0.75rem 1rem',
-        zIndex: 15,
-        backdropFilter: 'blur(8px)'
+        top: '10px',
+        left: '10px',
+        background: 'rgba(255, 255, 255, 0.9)',
+        padding: '8px 12px',
+        borderRadius: '6px',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+        fontSize: '14px',
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'center'
     },
     realDataText: {
-        fontSize: '0.875rem',
         color: '#059669',
-        fontWeight: '600'
+        fontWeight: '500'
     },
     sampleDataText: {
-        fontSize: '0.875rem',
+        color: '#6b7280',
+        fontWeight: '500'
+    },
+    simulationIndicator: {
         color: '#3b82f6',
         fontWeight: '500'
     },
     tooltip: {
         position: 'absolute',
-        top: '1rem',
-        left: '1rem',
-        background: 'rgba(0, 0, 0, 0.9)',
-        color: 'white',
-        padding: '1rem',
+        background: 'white',
+        padding: '16px',
         borderRadius: '8px',
-        fontSize: '0.875rem',
-        pointerEvents: 'none',
-        zIndex: 20,
-        maxWidth: '280px',
-        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        maxWidth: '300px',
+        zIndex: 1000
     },
     tooltipTitle: {
-        margin: '0 0 0.75rem 0',
-        fontSize: '1rem',
+        margin: '0 0 12px 0',
+        fontSize: '16px',
         fontWeight: '600',
-        color: '#ffffff'
+        color: '#1f2937'
+    },
+    tooltipSection: {
+        marginBottom: '12px'
     },
     tooltipText: {
-        margin: '0.5rem 0',
-        fontSize: '0.875rem',
-        lineHeight: '1.4'
+        margin: '4px 0',
+        fontSize: '14px',
+        color: '#4b5563'
     },
-    detailsPanel: {
+    tooltipPreview: {
+        fontSize: '14px',
+        color: '#6b7280',
+        borderTop: '1px solid #e5e7eb',
+        paddingTop: '12px',
+        marginTop: '12px'
+    },
+    connectionTooltip: {
         position: 'absolute',
-        top: '1rem',
-        right: '1rem',
-        width: '340px',
-        maxHeight: 'calc(100% - 2rem)',
         background: 'white',
-        border: '1px solid #e5e7eb',
-        borderRadius: '12px',
-        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
-        zIndex: 20,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column'
-    },
-    detailsHeader: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '1.25rem',
-        borderBottom: '1px solid #f3f4f6',
-        background: '#fafafa'
-    },
-    detailsTitle: {
-        margin: 0,
-        fontSize: '1.125rem',
-        fontWeight: '600',
-        color: '#111827',
-        flex: 1,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        marginRight: '1rem'
-    },
-    closeButton: {
-        background: 'none',
-        border: 'none',
-        fontSize: '1.5rem',
-        color: '#6b7280',
-        cursor: 'pointer',
-        padding: '0',
-        width: '28px',
-        height: '28px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: '6px',
-        transition: 'all 0.2s ease'
-    },
-    detailsContent: {
-        padding: '1.25rem',
-        fontSize: '0.875rem',
-        lineHeight: '1.5',
-        overflow: 'auto',
-        flex: 1
-    },
-    detailSection: {
-        marginBottom: '1.5rem'
-    },
-    detailSectionTitle: {
-        fontSize: '1rem',
-        fontWeight: '600',
-        color: '#111827',
-        margin: '0 0 0.75rem 0'
-    },
-    detailItem: {
-        margin: '0.5rem 0',
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '0.5rem'
-    },
-    detailLabel: {
-        fontWeight: '600',
-        color: '#374151',
-        minWidth: '80px'
-    },
-    detailValue: {
-        color: '#6b7280',
-        flex: 1
-    },
-    connectionsList: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.75rem'
-    },
-    connectionItem: {
-        padding: '0.75rem',
-        background: '#f9fafb',
+        padding: '16px',
         borderRadius: '8px',
-        border: '1px solid #e5e7eb'
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        maxWidth: '300px',
+        zIndex: 1000
     },
-    connectionInfo: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.25rem',
-        marginBottom: '0.5rem'
-    },
-    connectionTitle: {
-        fontSize: '0.875rem',
-        fontWeight: '600',
-        color: '#111827'
-    },
-    connectionMeta: {
-        fontSize: '0.75rem',
-        color: '#6b7280'
-    },
-    connectionTags: {
-        fontSize: '0.75rem',
-        color: '#3b82f6',
-        fontStyle: 'italic'
-    },
-    connectionStrength: {
-        height: '4px',
-        background: '#e5e7eb',
-        borderRadius: '2px',
-        overflow: 'hidden'
-    },
-    strengthBar: {
-        height: '100%',
-        borderRadius: '2px',
-        transition: 'width 0.3s ease'
-    },
-    noConnections: {
-        color: '#6b7280',
-        fontStyle: 'italic',
-        fontSize: '0.875rem',
-        textAlign: 'center',
-        padding: '1rem',
-        background: '#f9fafb',
-        borderRadius: '8px'
-    },
-    controlsOverlay: {
-        position: 'absolute',
-        bottom: '1rem',
-        left: '1rem',
-        display: 'flex',
-        gap: '1rem',
-        background: 'rgba(255, 255, 255, 0.95)',
-        padding: '0.75rem 1rem',
-        borderRadius: '8px',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)',
-        backdropFilter: 'blur(8px)'
-    },
-    controlItem: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem'
-    },
-    controlLabel: {
-        fontSize: '0.75rem',
-        fontWeight: '600',
-        color: '#6b7280'
-    },
-    controlValue: {
-        fontSize: '0.875rem',
-        fontWeight: '700',
-        color: '#111827'
-    },
-    legend: {
-        width: '240px',
-        background: 'white',
-        border: '1px solid #e5e7eb',
-        borderRadius: '12px',
-        padding: '1.25rem',
-        height: 'fit-content',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.07)'
-    },
-    legendTitle: {
-        margin: '0 0 1rem 0',
-        fontSize: '1rem',
-        fontWeight: '600',
-        color: '#111827'
-    },
-    legendItems: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1rem',
-        marginBottom: '1.5rem'
-    },
-    legendCategory: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.5rem'
-    },
-    legendCategoryTitle: {
-        fontSize: '0.875rem',
-        fontWeight: '600',
-        color: '#374151',
-        margin: '0 0 0.5rem 0'
-    },
-    legendItem: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.75rem',
-        fontSize: '0.75rem',
-        color: '#6b7280'
-    },
-    legendText: {
-        fontSize: '0.75rem',
-        color: '#6b7280'
-    },
-    legendColor: {
-        width: '12px',
-        height: '12px',
-        borderRadius: '50%',
-        flexShrink: 0
-    },
-    legendDot: {
-        width: '8px',
-        height: '8px',
-        borderRadius: '50%',
-        background: '#9ca3af',
-        flexShrink: 0
-    },
-    legendLine: {
-        width: '20px',
-        height: '3px',
-        borderRadius: '2px',
-        flexShrink: 0
-    },
-    legendInstructions: {
-        borderTop: '1px solid #f3f4f6',
-        paddingTop: '1rem'
-    },
-    legendNote: {
-        fontSize: '0.75rem',
-        color: '#6b7280',
-        lineHeight: '1.4',
-        margin: 0
+    factorText: {
+        margin: '4px 0',
+        fontSize: '14px',
+        color: '#4b5563'
     }
 };
 

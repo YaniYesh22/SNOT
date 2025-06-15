@@ -209,7 +209,6 @@ export default function SettingsPage() {
             
             <div style={styles.preference}>
               <div style={styles.preferenceInfo}>
-                <h3 style={styles.preferenceTitle}>AI Features</h3>
                 <p style={styles.preferenceDescription}>Enable AI assistance for your notes</p>
               </div>
               

@@ -13,7 +13,11 @@ class NotebookService {
     this.notebookRoute = '/createNoteBook';
     this.getAllNotebooksRoute = '/getAllNotebooks';
     this.youtubeRoute = '/youtube_video';
+    this.summarizationRoute = '/batch-process';
+    this.chatRoute = '/chat';
 
+    // 🆕 ADD: Expose authService for access from components
+    this.authService = authService;
   }
 
   /**
@@ -535,40 +539,36 @@ class NotebookService {
   }
 
   /**
- * Updated getNotebook method with links support
+ * 🔄 ENHANCED: Updated getNotebook method with getSummary Lambda integration
+ * Replace your existing getNotebook method with this enhanced version
  */
 async getNotebook(notebookId, options = {}) {
   try {
     /* ---------- sanity checks ---------- */
-    if (!notebookId) {
-      throw new Error('Notebook ID is required');
-    }
-
+    if (!notebookId) throw new Error('Notebook ID is required');
     console.log(`📖 Fetching notebook: ${notebookId}`);
 
     /* ---------- auth & user ---------- */
     const authHeaders = await authService.getAuthHeaders();
-    if (!authHeaders?.Authorization) {
+    if (!authHeaders?.Authorization)
       throw new Error('Authentication required – please login');
-    }
 
     const userEmail =
       authService.getUserData()?.email?.toLowerCase() || 'guest@example.com';
 
     /* ---------- query parameters ---------- */
     const params = {};
-    if (options.chunk !== undefined && options.chunk !== null) {
-      params.chunk = options.chunk;
-    }
-    if (options.all === true) {
-      params.all = 'true';
-    }
+    if (options.chunk !== undefined && options.chunk !== null) params.chunk = options.chunk;
+    if (options.all === true) params.all = 'true';
     params.includeDownloadUrls = 'true';
+    
+    // 🆕 NEW: Add option to include summary content
+    if (options.includeSummaryContent !== false) params.includeSummaryContent = 'true';
     
     console.log('Request params:', params);
 
     /* ---------- make the call ---------- */
-    const response = await axios.get(
+    const { data: raw } = await axios.get(
       `${this.baseUrl}/getNotebook/${notebookId}`,
       {
         headers: {
@@ -580,125 +580,130 @@ async getNotebook(notebookId, options = {}) {
       }
     );
 
-    console.log('✅ Raw API response received');
-    console.log(response.data);
-
-    /* ---------- normalise the Lambda payload ---------- */
+    /* ---------- unwrap Lambda envelope ---------- */
     let data;
-    if (typeof response.data === 'string') {
-      data = JSON.parse(response.data);
-    } else if (response.data.body && typeof response.data.body === 'string') {
-      data = JSON.parse(response.data.body);
+    if (raw && raw.body && typeof raw.body === 'string') {
+      data = JSON.parse(raw.body);
+    } else if (typeof raw === 'string') {
+      data = JSON.parse(raw);
     } else {
-      data = response.data;
+      data = raw;
     }
     console.log('Parsed notebook data:', data);
 
-    if (!data.metadata) {
-      throw new Error('Invalid response format – missing metadata');
-    }
+    if (!data.metadata) throw new Error('Invalid response – missing metadata');
 
-    /* ---------- restore local tags (optional) ---------- */
+    /* ---------- restore cached tags (optional) ---------- */
     try {
       const tagCache = JSON.parse(localStorage.getItem('notebookTags') || '{}');
-      if (
-        tagCache[notebookId] &&
-        (!data.metadata.tags || !data.metadata.tags.length)
-      ) {
+      if (tagCache[notebookId] && (!data.metadata.tags || !data.metadata.tags.length)) {
         data.metadata.tags = tagCache[notebookId];
       }
     } catch (e) {
       console.warn('Tag cache read failed:', e);
     }
 
-    /* ---------- extract first chunk & files ---------- */
-    const firstChunk = data.chunks?.['0'] || '';
+    /* ---------- map files ---------- */
+    const files = (data.files || []).map(f => ({
+      id: f.fileId,
+      name: f.fileName,
+      size: f.fileSize,
+      sizeFormatted: f.fileSizeFormatted,
+      type: f.fileType,
+      extension: f.fileExtension,
+      mimeType: f.mimeType,
+      uploadedAt: f.uploadedAt,
+      isValid: f.isValidFile,
+      downloadUrl: f.downloadUrl,
+      s3Key: f.s3Key,
+      s3Url: f.s3Url
+    }));
 
-    // Map files correctly based on Lambda response structure
-    const files = (data.files || []).map(f => {
-      console.log('🔍 Mapping file:', f);
-      
-      return {
-        id: f.fileId,
-        name: f.fileName,
-        size: f.fileSize,
-        sizeFormatted: f.fileSizeFormatted,
-        type: f.fileType,
-        extension: f.fileExtension,
-        mimeType: f.mimeType,
-        lastModified: f.uploadedAt,
-        uploadedAt: f.uploadedAt,
-        isValid: f.isValidFile,
-        downloadUrl: f.downloadUrl,
-        s3Key: f.s3Key,
-        s3Url: f.s3Url
-      };
-    });
+    /* ---------- map links ---------- */
+    const links = (data.links || []).map(l => ({
+      id: l.id,
+      url: l.url,
+      title: l.title,
+      addedAt: l.addedAt,
+      type: l.type,
+      videoId: l.videoId,
+      transcriptStatus: l.transcriptStatus,
+      downloadStatus: l.downloadStatus,
+      description: l.description,
+      thumbnailUrl: l.thumbnailUrl,
+      isYouTube: l.isYouTube,
+      domain: l.domain,
+      isValid: l.isValidLink
+    }));
 
-    // 🆕 ADD THIS: Map links correctly based on Lambda response structure
-    const links = (data.links || []).map(l => {
-      console.log('🔍 Mapping link:', l);
-      
-      return {
-        id: l.id,
-        url: l.url,
-        title: l.title,
-        addedAt: l.addedAt,
-        type: l.type,
-        
-        // YouTube specific fields
-        videoId: l.videoId,
-        transcriptStatus: l.transcriptStatus,
-        downloadStatus: l.downloadStatus,
-        
-        // Metadata fields
-        description: l.description,
-        thumbnailUrl: l.thumbnailUrl,
-        
-        // Computed fields
-        isYouTube: l.isYouTube,
-        domain: l.domain,
-        isValid: l.isValidLink
-      };
-    });
+    /* ---------- 🆕 ENHANCED: map summaries with content integration ---------- */
+    const summaries = data.summaries || {};
+    const summaryTypes = data.summaryTypes || Object.keys(summaries);
+    const summaryLocations = (data.metadata && data.metadata.summary_locations) || {};
 
-    console.log(`✅ Mapped ${files.length} files and ${links.length} links`);
-    console.log('Files:', files);
-    console.log('Links:', links);
+    // 🆕 NEW: Enhanced summary processing with content fetching
+    const enhancedSummaries = await this.enhanceSummariesWithContent(
+      notebookId, 
+      summaries, 
+      summaryLocations, 
+      options.includeSummaryContent !== false
+    );
 
-    /* ---------- final "view model" ---------- */
+    /* ---------- build final view model ---------- */
     const notebook = {
+      /* ids & titles */
       notebookId: data.metadata.notebookId || notebookId,
       title: data.metadata.title || 'Untitled Notebook',
-      content: firstChunk,
+
+      /* core content */
+      content: (data.chunks && data.chunks['0']) || '',
+      allChunks: data.chunks || {},
+      chunkCount: data.metadata.chunkCount || 1,
+
+      /* meta */
       tags: data.metadata.tags || [],
+      tagsCount: data.tagsCount || (data.metadata.tags?.length ?? 0),
       connections: data.metadata.connections || [],
       preview: data.metadata.preview || '',
-      createdAt: data.metadata.createdAt || new Date().toISOString(),
-      updatedAt: data.metadata.updatedAt || new Date().toISOString(),
       createdBy: data.metadata.createdBy,
+      createdAt: data.metadata.createdAt,
+      updatedAt: data.metadata.updatedAt,
       wordCount: data.metadata.wordCount || 0,
       byteSize: data.metadata.byteSize || 0,
-      chunkCount: data.metadata.chunkCount || 1,
-      allChunks: data.chunks || {},
+
+      /* 🔄 ENHANCED: summarization with content */
+      summarizationStatus: data.metadata.summarization_status,
+      lastSummarization: data.metadata.last_summarization_date,
+      summaryTypesAvailable: data.metadata.summary_types_available || [],
+      summaryLocations,                                           // {type: s3://…}
+      summaries: enhancedSummaries.summaries,                     // 🆕 Enhanced with content
+      summariesCount: enhancedSummaries.summariesCount,           // 🆕 Updated count
+      summaryTypes,
       
-      // Files
+      // 🆕 NEW: Additional summary metadata
+      summaryContentAvailable: enhancedSummaries.contentAvailable,
+      summaryLastFetched: enhancedSummaries.lastFetched,
+
+      /* files & links */
       files,
-      filesCount: data.filesCount || files.length,
-      filesSummary: data.filesSummary || null,
-      
-      // 🆕 ADD THESE: Links
+      filesCount: data.filesCount ?? files.length,
+      filesSummary: data.filesSummary ?? null,
       links,
-      linksCount: data.linksCount || links.length,
-      linksSummary: data.linksSummary || null
+      linksCount: data.linksCount ?? links.length,
+      linksSummary: data.linksSummary ?? null
     };
 
-    console.log('✅ Notebook formatted successfully');
-    console.log('✅ Final notebook object:', notebook);
+    console.log('✅ Notebook formatted with enhanced summaries:', {
+      notebookId: notebook.notebookId,
+      title: notebook.title,
+      summariesCount: notebook.summariesCount,
+      summaryTypes: Object.keys(notebook.summaries),
+      contentAvailable: notebook.summaryContentAvailable
+    });
+
     return notebook;
   } catch (error) {
     console.error('❌ getNotebook error:', error);
-
     if (error.response) {
       const { status } = error.response;
       if (status === 401) throw new Error('Please login to access this notebook');
@@ -708,8 +713,163 @@ async getNotebook(notebookId, options = {}) {
     } else if (error.message.includes('Network Error')) {
       throw new Error('Network problem – check your connection');
     }
-
     throw error;
+  }
+}
+
+/**
+ * 🆕 NEW: Helper method to enhance summaries with content from getSummary Lambda
+ * Add this new method to your NotebookService class
+ */
+async enhanceSummariesWithContent(notebookId, summaries, summaryLocations, includeSummaryContent = true) {
+  try {
+    console.log(`🔄 Enhancing summaries for notebook ${notebookId}`, {
+      summariesCount: Object.keys(summaries).length,
+      locationsCount: Object.keys(summaryLocations).length,
+      includeSummaryContent
+    });
+
+    const enhancedSummaries = {};
+    let contentAvailable = false;
+    let successfulFetches = 0;
+
+    // Process existing summaries from main response
+    for (const [type, summaryData] of Object.entries(summaries)) {
+      enhancedSummaries[type] = {
+        // Basic metadata from main response
+        type: type,
+        ready: true,
+        generatedAt: summaryData.generatedAt || summaryData.lastModified || new Date().toISOString(),
+        url: summaryData.s3Url || summaryData.url,
+        downloadUrl: summaryData.downloadUrl,
+        fileSize: summaryData.fileSize,
+        fileSizeFormatted: summaryData.fileSizeFormatted,
+        wordCount: summaryData.wordCount,
+        
+        // Content from main response (if available)
+        content: summaryData.content || null,
+        preview: summaryData.preview || null,
+        
+        // Additional metadata
+        source: 'main_response'
+      };
+
+      // 🆕 NEW: If content not available and includeSummaryContent is true, try getSummary Lambda
+      if (!summaryData.content && includeSummaryContent) {
+        try {
+          console.log(`📄 Fetching content for ${type} summary via getSummary Lambda...`);
+          
+          const lambdaResult = await this.getSummary(notebookId, type, 'json', false);
+          
+          if (lambdaResult && lambdaResult.summary) {
+            enhancedSummaries[type] = {
+              ...enhancedSummaries[type],
+              // Enhanced content from Lambda
+              content: lambdaResult.summary.content,
+              preview: lambdaResult.summary.preview,
+              wordCount: lambdaResult.summary.wordCount || enhancedSummaries[type].wordCount,
+              readingTime: lambdaResult.summary.estimatedReadingTime,
+              characterCount: lambdaResult.summary.characterCount,
+              lastModified: lambdaResult.summary.lastModified || enhancedSummaries[type].generatedAt,
+              
+              // Lambda-specific metadata
+              source: 'lambda_enhanced',
+              fetchedAt: new Date().toISOString()
+            };
+            
+            contentAvailable = true;
+            successfulFetches++;
+            
+            console.log(`✅ Enhanced ${type} summary with Lambda content`);
+          }
+          
+        } catch (lambdaError) {
+          console.log(`⚠️ Could not fetch ${type} summary content via Lambda:`, lambdaError.message);
+          // Keep the summary without content - don't fail the whole process
+        }
+      } else if (summaryData.content) {
+        contentAvailable = true;
+      }
+    }
+
+    // 🆕 NEW: Process summary locations that might not be in main summaries
+    for (const [type, location] of Object.entries(summaryLocations)) {
+      if (!enhancedSummaries[type]) {
+        console.log(`📍 Found summary location for ${type} not in main summaries`);
+        
+        enhancedSummaries[type] = {
+          type: type,
+          ready: true,
+          url: location,
+          source: 'location_only',
+          generatedAt: new Date().toISOString() // Fallback timestamp
+        };
+
+        // Try to get content via getSummary Lambda if requested
+        if (includeSummaryContent) {
+          try {
+            console.log(`📄 Fetching ${type} summary via location and getSummary Lambda...`);
+            
+            const lambdaResult = await this.getSummary(notebookId, type, 'json', false);
+            
+            if (lambdaResult && lambdaResult.summary) {
+              enhancedSummaries[type] = {
+                ...enhancedSummaries[type],
+                content: lambdaResult.summary.content,
+                preview: lambdaResult.summary.preview,
+                wordCount: lambdaResult.summary.wordCount,
+                readingTime: lambdaResult.summary.estimatedReadingTime,
+                fileSize: lambdaResult.summary.fileSize,
+                fileSizeFormatted: lambdaResult.summary.fileSizeFormatted,
+                lastModified: lambdaResult.summary.lastModified,
+                
+                source: 'lambda_from_location',
+                fetchedAt: new Date().toISOString()
+              };
+              
+              contentAvailable = true;
+              successfulFetches++;
+              
+              console.log(`✅ Fetched ${type} summary content from location via Lambda`);
+            }
+            
+          } catch (lambdaError) {
+            console.log(`⚠️ Could not fetch ${type} summary from location:`, lambdaError.message);
+          }
+        }
+      }
+    }
+
+    const result = {
+      summaries: enhancedSummaries,
+      summariesCount: Object.keys(enhancedSummaries).length,
+      contentAvailable,
+      lastFetched: new Date().toISOString(),
+      successfulFetches,
+      totalAvailable: Object.keys(summaryLocations).length + Object.keys(summaries).length
+    };
+
+    console.log(`✅ Summary enhancement complete:`, {
+      totalSummaries: result.summariesCount,
+      contentAvailable: result.contentAvailable,
+      successfulFetches: result.successfulFetches,
+      sources: Object.values(enhancedSummaries).map(s => s.source)
+    });
+
+    return result;
+
+  } catch (error) {
+    console.error('❌ Error enhancing summaries:', error);
+    
+    // Return basic summaries without enhancement rather than failing
+    return {
+      summaries: summaries || {},
+      summariesCount: Object.keys(summaries || {}).length,
+      contentAvailable: false,
+      lastFetched: new Date().toISOString(),
+      successfulFetches: 0,
+      error: error.message
+    };
   }
 }
 
@@ -1056,6 +1216,7 @@ async getNotebook(notebookId, options = {}) {
       throw error;
     }
   }
+
   /**
   * POST a YouTube link to Lambda for download-&-transcribe.
   * Body required by Lambda:
@@ -1327,6 +1488,733 @@ async getNotebook(notebookId, options = {}) {
     } catch (error) {
       console.error('Failed to check transcription status:', error);
       throw error;
+    }
+  }
+
+  /**
+   * 🆕 Start summary generation process (non-blocking)
+   * @param {string} notebookId - ID of the notebook to summarize
+   * @param {string[]} summaryTypes - Array of summary types ['casual', 'academic', 'simple']
+   * @returns {Promise<object>} - Task information for polling
+   */
+  async startSummary(notebookId, summaryTypes) {
+    try {
+      if (!notebookId) {
+        throw new Error('Notebook ID is required');
+      }
+
+      if (!summaryTypes || summaryTypes.length === 0) {
+        throw new Error('At least one summary type is required');
+      }
+
+      console.log(`🚀 Starting summary generation for notebook: ${notebookId}`);
+      console.log(`📝 Summary types: ${summaryTypes.join(', ')}`);
+
+      // Get auth headers
+      const headers = await this.authService.getAuthHeaders();
+      if (!headers.Authorization) {
+        throw new Error('Authentication required - please login');
+      }
+
+      // Get user email
+      const userData = this.authService.getUserData();
+      const userEmail = userData?.email;
+      if (!userEmail || !userEmail.includes('@')) {
+        throw new Error('Valid user email required - please login again');
+      }
+
+      // Prepare payload for start summary endpoint
+      const payload = {
+        notebookId: notebookId,
+        summaryTypes: summaryTypes
+      };
+
+      console.log('🚀 Calling start summary endpoint with payload:', payload);
+
+      // Call the start summary endpoint
+      const response = await axios.post(
+        `${this.baseUrl}/startSummary`,
+        payload,
+        {
+          headers: {
+            'Authorization': headers.Authorization,
+            'Content-Type': 'application/json',
+            'X-User-Email': userEmail,
+            'Accept': 'application/json'
+          },
+          timeout: 30000, // 30 seconds for start request
+          withCredentials: false
+        }
+      );
+
+      console.log('✅ Summary generation started:', response.data);
+
+      return {
+        taskId: response.data.taskId,
+        status: response.data.status,
+        summaryTypes: response.data.summaryTypes,
+        estimatedTime: response.data.estimatedTime,
+        checkStatusUrl: response.data.checkStatusUrl,
+        pollInterval: response.data.pollInterval || 10, // Default 10 seconds
+        filesProcessed: response.data.filesProcessed,
+        message: response.data.message
+      };
+
+    } catch (error) {
+      console.error('❌ Error starting summary generation:', error);
+
+      if (error.response) {
+        const { status, data } = error.response;
+
+        // Handle specific error cases
+        if (status === 400) {
+          throw new Error(data.error || 'Invalid request');
+        } else if (status === 401) {
+          throw new Error('Please login to generate summaries');
+        } else if (status === 404) {
+          throw new Error('Notebook not found');
+        } else if (status === 409) {
+          // Summary already in progress
+          throw new Error(data.error || 'Summary generation already in progress');
+        } else if (status === 202) {
+          // Files still processing
+          throw new Error(data.error || data.message || 'Files are still being processed');
+        } else if (status >= 500) {
+          throw new Error('Server error - please try again in a moment');
+        }
+
+        throw new Error(data.error || data.message || `HTTP ${status} error`);
+      } else if (error.request) {
+        throw new Error('Network error - please check your connection');
+      } else {
+        throw new Error(`Failed to start summary: ${error.message}`);
+      }
+    }
+  }
+
+/**
+ * NEW: Get notebook with summary content included (convenience method)
+ * Add this new method to your NotebookService class
+ */
+async getNotebookWithSummaries(notebookId) {
+  return this.getNotebook(notebookId, { 
+    includeSummaryContent: true,
+    all: true 
+  });
+}
+
+/**
+ * NEW: Get notebook without summary content (faster loading)
+ * Add this new method to your NotebookService class  
+ */
+async getNotebookMetadataOnly(notebookId) {
+  return this.getNotebook(notebookId, { 
+    includeSummaryContent: false 
+  });
+}
+
+  /**
+ * 🆕 Check summary generation status (works with your Lambda)
+ * @param {string} notebookId - ID of the notebook
+ * @returns {Promise<object>} - Current status and progress information
+ */
+  async getSummaryStatus(notebookId) {
+    try {
+      if (!notebookId) {
+        throw new Error('Notebook ID is required');
+      }
+
+      // Get auth headers
+      const headers = await this.authService.getAuthHeaders();
+      if (!headers.Authorization) {
+        throw new Error('Authentication required - please login');
+      }
+
+      // Get user email
+      const userData = this.authService.getUserData();
+      const userEmail = userData?.email;
+      if (!userEmail || !userEmail.includes('@')) {
+        throw new Error('Valid user email required - please login again');
+      }
+
+      // Call the status check endpoint
+      const response = await axios.get(
+        `${this.baseUrl}/getSummaryStatus/${notebookId}`,
+        {
+          headers: {
+            'Authorization': headers.Authorization,
+            'Content-Type': 'application/json',
+            'X-User-Email': userEmail,
+            'Accept': 'application/json'
+          },
+          timeout: 15000, // 15 seconds for status check
+          withCredentials: false
+        }
+      );
+
+      const statusData = response.data;
+
+      console.log(`📊 Summary status for ${notebookId}:`, {
+        status: statusData.status,
+        progress: statusData.progressSummary,
+        summariesCount: statusData.summaryCount
+      });
+
+      return {
+        notebookId: statusData.notebookId,
+        status: statusData.status, // "not_started", "processing", "completed", "partial_success", "failed"
+        taskId: statusData.taskId,
+        summaryTypes: statusData.summaryTypes,
+        startedAt: statusData.startedAt,
+        completedAt: statusData.completedAt,
+        summaryCount: statusData.summaryCount,
+
+        // Progress information
+        progress: statusData.progress, // Per-type progress
+        progressSummary: statusData.progressSummary, // Overall progress counts
+        elapsedTime: statusData.elapsedTime,
+        estimatedTimeRemaining: statusData.estimatedTimeRemaining,
+
+        // Completed summaries
+        summaries: statusData.summaries, // With download URLs
+        totalSize: statusData.totalSize,
+        totalSizeFormatted: statusData.totalSizeFormatted,
+
+        // Status messages
+        message: statusData.message,
+        errors: statusData.errors,
+        error: statusData.error,
+        partialSuccess: statusData.partialSuccess,
+
+        // Notebook info
+        notebookInfo: statusData.notebookInfo
+      };
+
+    } catch (error) {
+      console.error('❌ Error checking summary status:', error);
+
+      if (error.response) {
+        const { status, data } = error.response;
+
+        if (status === 401) {
+          throw new Error('Please login to check summary status');
+        } else if (status === 404) {
+          throw new Error('Notebook not found');
+        } else if (status >= 500) {
+          throw new Error('Server error - please try again');
+        }
+
+        throw new Error(data.error || data.message || `HTTP ${status} error`);
+      } else if (error.request) {
+        throw new Error('Network error - please check your connection');
+      } else {
+        throw new Error(`Failed to check status: ${error.message}`);
+      }
+    }
+  }
+
+  /**
+   * 🆕 Poll summary status until completion
+   * @param {string} notebookId - ID of the notebook
+   * @param {function} onProgress - Callback for progress updates
+   * @param {number} pollInterval - Polling interval in seconds (default: 10)
+   * @param {number} maxAttempts - Maximum polling attempts (default: 60)
+   * @returns {Promise<object>} - Final status when completed
+   */
+  async pollSummaryStatus(notebookId, onProgress = null, pollInterval = 10, maxAttempts = 60) {
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      try {
+        const status = await this.getSummaryStatus(notebookId);
+
+        // Call progress callback if provided
+        if (onProgress && typeof onProgress === 'function') {
+          onProgress(status);
+        }
+
+        // Check if finished (success or failure)
+        if (status.status === 'completed' ||
+          status.status === 'partial_success' ||
+          status.status === 'failed') {
+          console.log(`✅ Summary polling finished with status: ${status.status}`);
+          return status;
+        }
+
+        // Still processing, wait and continue
+        if (status.status === 'processing') {
+          console.log(`⏳ Summary still processing (attempt ${attempts + 1}/${maxAttempts})...`);
+          await new Promise(resolve => setTimeout(resolve, pollInterval * 1000));
+          attempts++;
+          continue;
+        }
+
+        // Unexpected status
+        console.warn(`⚠️ Unexpected status: ${status.status}`);
+        break;
+
+      } catch (error) {
+        console.error(`❌ Polling error (attempt ${attempts + 1}):`, error.message);
+
+        // If it's a network error, retry
+        if (error.message.includes('Network error') && attempts < maxAttempts - 1) {
+          console.log(`🔄 Retrying in ${pollInterval} seconds...`);
+          await new Promise(resolve => setTimeout(resolve, pollInterval * 1000));
+          attempts++;
+          continue;
+        }
+
+        // Other errors or max retries reached
+        throw error;
+      }
+    }
+
+    throw new Error(`Summary polling timeout after ${maxAttempts * pollInterval} seconds`);
+  }
+
+  /**
+ * 🔄 UPDATED: Enhanced generateSummary method that uses new progress system
+ * This maintains backward compatibility while using the new progress endpoints
+ * @param {string} notebookId - ID of the notebook to summarize
+ * @param {string} summaryType - Type of summary ('casual', 'academic', 'simple')
+ * @param {function} onProgress - Optional progress callback
+ * @returns {Promise<object>} - Final summarization result in old format
+ */
+  async generateSummary(notebookId, summaryType, onProgress = null) {
+    try {
+      console.log(`🚀 Starting enhanced summary generation: ${summaryType}`);
+
+      // Step 1: Start the summary generation
+      const startResult = await this.startSummary(notebookId, [summaryType]);
+      console.log(`✅ Summary started with task ID: ${startResult.taskId}`);
+
+      // Step 2: Poll for completion with progress updates
+      const finalStatus = await this.pollSummaryStatus(
+        notebookId,
+        onProgress,
+        startResult.pollInterval,
+        60 // 10 minutes max polling
+      );
+
+      // Step 3: Return result in expected format for backward compatibility
+      if (finalStatus.status === 'completed' || finalStatus.status === 'partial_success') {
+        return {
+          overall_success: true,
+          summary_locations: finalStatus.summaries ?
+            Object.fromEntries(
+              Object.entries(finalStatus.summaries).map(([type, data]) => [type, data.s3Url])
+            ) : {},
+          ready_for_chat: { ready: true },
+          workflow_results: {
+            summarization: {
+              success: true,
+              completed_types: Object.keys(finalStatus.summaries || {}),
+              task_id: finalStatus.taskId,
+              elapsed_time: finalStatus.elapsedTime
+            }
+          },
+          message: finalStatus.message,
+          finalStatus: finalStatus
+        };
+      } else {
+        return {
+          overall_success: false,
+          workflow_results: {
+            summarization: {
+              error: finalStatus.error || finalStatus.message || 'Summary generation failed',
+              status: finalStatus.status,
+              task_id: finalStatus.taskId
+            }
+          },
+          error: finalStatus.error || finalStatus.message,
+          finalStatus: finalStatus
+        };
+      }
+
+    } catch (error) {
+      console.error('❌ Enhanced summary generation failed:', error);
+
+      return {
+        overall_success: false,
+        workflow_results: {
+          summarization: { error: error.message }
+        },
+        error: error.message
+      };
+    }
+  }
+
+  /**
+ * 🆕 ADD: Get specific summary using Lambda endpoint
+ * @param {string} notebookId - ID of the notebook
+ * @param {string} summaryType - Type of summary ('casual', 'academic', 'simple')
+ * @param {string} format - Response format ('json', 'html', 'plain')
+ * @param {boolean} includeMetadata - Whether to include metadata analysis
+ * @returns {Promise<object>} - Summary data
+ */
+async getSummary(notebookId, summaryType, format = 'json', includeMetadata = true) {
+  try {
+    if (!notebookId) {
+      throw new Error('Notebook ID is required');
+    }
+
+    if (!summaryType) {
+      throw new Error('Summary type is required');
+    }
+
+    console.log(`📄 Getting ${summaryType} summary for notebook: ${notebookId}`);
+
+    // Get auth headers
+    const headers = await this.authService.getAuthHeaders();
+    if (!headers.Authorization) {
+      throw new Error('Authentication required - please login');
+    }
+
+    // Get user email
+    const userData = this.authService.getUserData();
+    const userEmail = userData?.email;
+    if (!userEmail || !userEmail.includes('@')) {
+      throw new Error('Valid user email required - please login again');
+    }
+
+    // Build query parameters
+    const queryParams = new URLSearchParams();
+    if (format !== 'json') queryParams.append('format', format);
+    if (!includeMetadata) queryParams.append('include_metadata', 'false');
+
+    const queryString = queryParams.toString();
+    const url = `${this.baseUrl}/getSummary/${notebookId}/${summaryType}${queryString ? `?${queryString}` : ''}`;
+
+    console.log('📄 Calling getSummary endpoint:', url);
+
+    // Make the API call
+    const response = await axios.get(url, {
+      headers: {
+        'Authorization': headers.Authorization,
+        'Content-Type': 'application/json',
+        'X-User-Email': userEmail,
+        'Accept': format === 'json' ? 'application/json' : format === 'html' ? 'text/html' : 'text/plain'
+      },
+      timeout: 30000, // 30 seconds
+      withCredentials: false
+    });
+
+    console.log('✅ getSummary response received:', {
+      status: response.status,
+      contentType: response.headers['content-type'],
+      dataType: typeof response.data
+    });
+
+    // Handle different response formats
+    if (format === 'html' || format === 'plain') {
+      // For HTML/plain text, return the raw content
+      return {
+        content: response.data,
+        format: format,
+        notebookId: notebookId,
+        summaryType: summaryType
+      };
+    } else {
+      // For JSON, return the structured data
+      return response.data;
+    }
+
+  } catch (error) {
+    console.error('❌ Error getting summary:', error);
+
+    if (error.response) {
+      const { status, data } = error.response;
+
+      if (status === 401) {
+        throw new Error('Please login to access summaries');
+      } else if (status === 403) {
+        throw new Error('You don\'t have permission to access this summary');
+      } else if (status === 404) {
+        const errorData = typeof data === 'string' ? { message: data } : data;
+        const availableTypes = errorData.available_types || [];
+        const suggestion = availableTypes.length > 0 
+          ? `Available types: ${availableTypes.join(', ')}`
+          : 'No summaries available for this notebook';
+        throw new Error(`Summary not found. ${suggestion}`);
+      } else if (status >= 500) {
+        throw new Error('Server error - please try again in a moment');
+      }
+
+      const errorMsg = (typeof data === 'string' ? data : data?.message) || `HTTP ${status} error`;
+      throw new Error(errorMsg);
+    } else if (error.request) {
+      throw new Error('Network error - please check your connection');
+    } else {
+      throw new Error(`Failed to get summary: ${error.message}`);
+    }
+  }
+}
+
+/**
+ * 🆕 ADD: Get all summaries for a notebook using Lambda endpoint
+ * @param {string} notebookId - ID of the notebook
+ * @param {string} format - Response format ('json', 'html', 'plain')
+ * @param {boolean} includeMetadata - Whether to include metadata analysis
+ * @returns {Promise<object>} - All summaries data
+ */
+async getAllSummaries(notebookId, format = 'json', includeMetadata = true) {
+  try {
+    if (!notebookId) {
+      throw new Error('Notebook ID is required');
+    }
+
+    console.log(`📄 Getting all summaries for notebook: ${notebookId}`);
+
+    // Get auth headers
+    const headers = await this.authService.getAuthHeaders();
+    if (!headers.Authorization) {
+      throw new Error('Authentication required - please login');
+    }
+
+    // Get user email
+    const userData = this.authService.getUserData();
+    const userEmail = userData?.email;
+    if (!userEmail || !userEmail.includes('@')) {
+      throw new Error('Valid user email required - please login again');
+    }
+
+    // Build query parameters
+    const queryParams = new URLSearchParams();
+    if (format !== 'json') queryParams.append('format', format);
+    if (!includeMetadata) queryParams.append('include_metadata', 'false');
+
+    const queryString = queryParams.toString();
+    const url = `${this.baseUrl}/getSummary/${notebookId}${queryString ? `?${queryString}` : ''}`;
+
+    console.log('📄 Calling getAllSummaries endpoint:', url);
+
+    // Make the API call
+    const response = await axios.get(url, {
+      headers: {
+        'Authorization': headers.Authorization,
+        'Content-Type': 'application/json',
+        'X-User-Email': userEmail,
+        'Accept': format === 'json' ? 'application/json' : format === 'html' ? 'text/html' : 'text/plain'
+      },
+      timeout: 30000, // 30 seconds
+      withCredentials: false
+    });
+
+    console.log('✅ getAllSummaries response received:', {
+      status: response.status,
+      summaryCount: response.data?.totalCount || 'unknown'
+    });
+
+    // Handle different response formats
+    if (format === 'html' || format === 'plain') {
+      // For HTML/plain text, return the raw content
+      return {
+        content: response.data,
+        format: format,
+        notebookId: notebookId
+      };
+    } else {
+      // For JSON, return the structured data
+      return response.data;
+    }
+
+  } catch (error) {
+    console.error('❌ Error getting all summaries:', error);
+
+    if (error.response) {
+      const { status, data } = error.response;
+
+      if (status === 401) {
+        throw new Error('Please login to access summaries');
+      } else if (status === 403) {
+        throw new Error('You don\'t have permission to access summaries for this notebook');
+      } else if (status === 404) {
+        throw new Error('No summaries found for this notebook. Generate summaries first.');
+      } else if (status >= 500) {
+        throw new Error('Server error - please try again in a moment');
+      }
+
+      const errorMsg = (typeof data === 'string' ? data : data?.message) || `HTTP ${status} error`;
+      throw new Error(errorMsg);
+    } else if (error.request) {
+      throw new Error('Network error - please check your connection');
+    } else {
+      throw new Error(`Failed to get summaries: ${error.message}`);
+    }
+  }
+}
+
+/**
+ * 🔄 UPDATED: Update your existing fetchSummaryFromS3 method
+ * Replace your existing fetchSummaryFromS3 method with this enhanced version
+ */
+async fetchSummaryFromS3(summaryUrl, notebookId = null, summaryType = null) {
+  try {
+    console.log(`📄 Fetching summary content from: ${summaryUrl}`);
+
+    // 🆕 NEW: If we have notebookId and summaryType, try Lambda first
+    if (notebookId && summaryType) {
+      try {
+        console.log('🚀 Trying getSummary Lambda first...');
+        const lambdaResult = await this.getSummary(notebookId, summaryType, 'json');
+        
+        if (lambdaResult && lambdaResult.summary && lambdaResult.summary.content) {
+          console.log('✅ Got summary content from Lambda');
+          return lambdaResult.summary.content;
+        }
+      } catch (lambdaError) {
+        console.log('⚠️ Lambda getSummary failed, falling back to direct S3 fetch:', lambdaError.message);
+        // Continue to direct S3 fetch below
+      }
+    }
+
+    // Fallback: Direct fetch from the URL (works for presigned URLs)
+    const response = await axios.get(summaryUrl, {
+      timeout: 30000,
+      responseType: 'text'
+    });
+
+    console.log(`✅ Summary content fetched successfully (${response.data.length} characters)`);
+    return response.data;
+
+  } catch (error) {
+    console.error(`❌ Error fetching summary content:`, error);
+
+    if (error.response) {
+      if (error.response.status === 403) {
+        throw new Error('Access denied - summary URL may have expired');
+      } else if (error.response.status === 404) {
+        throw new Error('Summary not found');
+      }
+    }
+
+    throw new Error(`Failed to fetch summary: ${error.message}`);
+  }
+}
+
+  /**
+   * 🆕 ADD: Send a chat message to the AI and get a response with conversation history
+   * @param {string} notebookId - ID of the notebook
+   * @param {string} message - The message/question to send
+   * @param {Array} conversationHistory - Previous conversation messages
+   * @param {string} conversationId - Optional conversation ID for tracking
+   * @param {number} maxChunks - Maximum number of chunks to retrieve (default: 5)
+   * @returns {Promise<object>} - Enhanced chat response with sources and metadata
+   */
+  async sendChatMessage(notebookId, message, conversationHistory = [], conversationId = null, maxChunks = 5) {
+    try {
+      if (!notebookId) {
+        throw new Error('Notebook ID is required');
+      }
+
+      if (!message || !message.trim()) {
+        throw new Error('Message is required');
+      }
+
+      console.log(`🤖 Sending chat message for notebook: ${notebookId}`);
+
+      // Get auth headers
+      const headers = await authService.getAuthHeaders();
+
+      // Validate we have an auth token
+      if (!headers.Authorization) {
+        throw new Error('Authentication required - please login');
+      }
+
+      // Get user email
+      const userData = authService.getUserData();
+      const userEmail = userData?.email;
+
+      if (!userEmail || !userEmail.includes('@')) {
+        throw new Error('Valid user email required - please login again');
+      }
+
+      // Prepare the payload for the enhanced chat lambda
+      const payload = {
+        bucket: "smart-notebook-media", // Your default bucket
+        email: userEmail,
+        notebook_uuid: notebookId,
+        question: message.trim(),
+        conversation_history: conversationHistory,
+        conversation_id: conversationId,
+        max_chunks: maxChunks,
+        include_sources: true
+      };
+
+      console.log('🤖 Calling enhanced chat service with payload:', {
+        ...payload,
+        conversation_history_length: conversationHistory.length
+      });
+
+      // Make the API call to the chat lambda
+      const response = await axios.post(
+        `${this.baseUrl}${this.chatRoute}`,
+        payload,
+        {
+          headers: {
+            'Authorization': headers.Authorization,
+            'Content-Type': 'application/json',
+            'X-User-Email': userEmail,
+            'Accept': 'application/json'
+          },
+          timeout: 120000, // 2 minute timeout for chat with conversation history
+          withCredentials: false
+        }
+      );
+
+      console.log('✅ Enhanced chat service response:', response.data);
+
+      // Return enhanced response with all metadata
+      return {
+        answer: response.data.answer,
+        sources: response.data.sources || [],
+        chunks_found: response.data.chunks_found || 0,
+        search_method: response.data.search_method || 'unknown',
+        conversation_id: response.data.conversation_id,
+        total_chunks_in_db: response.data.total_chunks_in_db,
+        processing_info: response.data.processing_info,
+        timestamp: response.data.timestamp
+      };
+
+    } catch (error) {
+      console.error('❌ Error in enhanced sendChatMessage:', error);
+
+      // Enhanced error handling
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+
+        // Handle specific error cases
+        if (error.response.status === 400) {
+          const errorData = error.response.data;
+          if (errorData.error === 'no_vector_db') {
+            throw new Error('No vector database found. Please process your files first by generating a summary.');
+          }
+          throw new Error(errorData.message || 'Bad request');
+        } else if (error.response.status === 401) {
+          throw new Error('Please login to use chat');
+        } else if (error.response.status === 403) {
+          throw new Error('You don\'t have permission to chat with this notebook');
+        } else if (error.response.status === 404) {
+          throw new Error('Notebook not found or chat service unavailable');
+        } else if (error.response.status === 429) {
+          throw new Error('Too many requests - please wait a moment and try again');
+        } else if (error.response.status >= 500) {
+          throw new Error('Server error during chat - please try again in a moment');
+        }
+
+        // Try to extract error message from response
+        const errorMsg = error.response.data?.message ||
+          error.response.data?.error ||
+          `HTTP ${error.response.status}: ${error.response.statusText}`;
+        throw new Error(errorMsg);
+      } else if (error.request) {
+        console.error('No response received:', error.request);
+        throw new Error('Network error - please check your internet connection and try again');
+      } else {
+        console.error('Error setting up request:', error.message);
+        throw new Error(`Failed to send chat message: ${error.message}`);
+      }
     }
   }
 }
