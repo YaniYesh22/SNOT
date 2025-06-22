@@ -91,33 +91,34 @@ export default function NotebookDetailPage() {
     return availableSummaries.length > 0;
   };
 
+  // 🔧 UPDATED: getChatState function to always enable chat
   const getChatState = () => {
     const sourcesAvailable = hasContentSources();
     const summariesAvailable = hasSummariesForChat();
-    
+
     if (summariesAvailable) {
       return {
         state: 'available',
         title: 'AI Assistant',
         placeholder: 'Ask me anything...',
         note: null,
-        disabled: false
+        disabled: false // ✅ Chat enabled with summaries
       };
     } else if (sourcesAvailable) {
       return {
-        state: 'needs_summary',
-        title: 'Generate a summary to start chatting',
-        placeholder: 'Generate a summary to start chatting...',
-        note: 'Generate a summary to start chatting with your sources!',
-        disabled: true
+        state: 'ready_with_sources',
+        title: 'AI Assistant',
+        placeholder: 'Ask me anything about your sources...',
+        note: 'Chat with your uploaded files and links! Generate summaries for enhanced responses.',
+        disabled: false // ✅ Chat enabled with sources (no summaries needed)
       };
     } else {
       return {
-        state: 'needs_sources',
-        title: 'Add sources and generate a summary to chat',
-        placeholder: 'Add sources first...',
-        note: 'Upload files or add links, then generate a summary to start chatting!',
-        disabled: true
+        state: 'ready_no_sources',
+        title: 'AI Assistant',
+        placeholder: 'Ask me anything...',
+        note: 'Upload files or add links for more context, or just start chatting!',
+        disabled: false // ✅ Chat enabled even without sources
       };
     }
   };
@@ -323,50 +324,50 @@ export default function NotebookDetailPage() {
   };
 
   // 🔧 FIX: Update viewSummary to handle content-only summaries
-const viewSummary = async (summaryType, summaryUrl) => {
-  try {
-    const summaryData = generatedSummaries[summaryType];
-    
-    if (!summaryData) {
-      console.error(`❌ No summary data found for ${summaryType}`);
-      return;
-    }
+  const viewSummary = async (summaryType, summaryUrl) => {
+    try {
+      const summaryData = generatedSummaries[summaryType];
 
-    // 🔧 FIXED: Check if we already have content cached
-    const hasContent = summaryData.content && summaryData.content.length > 0;
-    
-    if (hasContent) {
-      // ✅ Content is already available, show modal immediately
-      console.log(`✅ Using cached content for ${summaryType} summary modal`);
-      toggleSummaryView(summaryType);
-      return;
-    }
-
-    // ✅ Need to fetch content from URL
-    const isRealUrl = summaryUrl && 
-                     !summaryUrl.startsWith('#') &&
-                     (summaryUrl.startsWith('http') || summaryUrl.startsWith('s3://'));
-    
-    if (isRealUrl) {
-      console.log(`🔄 Fetching content for ${summaryType} modal from URL: ${summaryUrl}`);
-      await fetchSummaryContent(summaryUrl, summaryType);
-      toggleSummaryView(summaryType);
-    } else if (summaryUrl.startsWith('#content-')) {
-      // Handle placeholder URLs
-      if (summaryData.content) {
-        console.log(`✅ Using content for placeholder URL ${summaryType}`);
-        toggleSummaryView(summaryType);
-      } else {
-        console.error(`❌ Placeholder URL but no content for ${summaryType}`);
+      if (!summaryData) {
+        console.error(`❌ No summary data found for ${summaryType}`);
+        return;
       }
-    } else {
-      console.error(`❌ Invalid URL for ${summaryType}: ${summaryUrl}`);
-    }
 
-  } catch (error) {
-    console.error(`❌ Error viewing summary ${summaryType}:`, error);
-  }
-};
+      // 🔧 FIXED: Check if we already have content cached
+      const hasContent = summaryData.content && summaryData.content.length > 0;
+
+      if (hasContent) {
+        // ✅ Content is already available, show modal immediately
+        console.log(`✅ Using cached content for ${summaryType} summary modal`);
+        toggleSummaryView(summaryType);
+        return;
+      }
+
+      // ✅ Need to fetch content from URL
+      const isRealUrl = summaryUrl &&
+        !summaryUrl.startsWith('#') &&
+        (summaryUrl.startsWith('http') || summaryUrl.startsWith('s3://'));
+
+      if (isRealUrl) {
+        console.log(`🔄 Fetching content for ${summaryType} modal from URL: ${summaryUrl}`);
+        await fetchSummaryContent(summaryUrl, summaryType);
+        toggleSummaryView(summaryType);
+      } else if (summaryUrl.startsWith('#content-')) {
+        // Handle placeholder URLs
+        if (summaryData.content) {
+          console.log(`✅ Using content for placeholder URL ${summaryType}`);
+          toggleSummaryView(summaryType);
+        } else {
+          console.error(`❌ Placeholder URL but no content for ${summaryType}`);
+        }
+      } else {
+        console.error(`❌ Invalid URL for ${summaryType}: ${summaryUrl}`);
+      }
+
+    } catch (error) {
+      console.error(`❌ Error viewing summary ${summaryType}:`, error);
+    }
+  };
 
   // 🆕 NEW: Get summary preview for listing
   const getSummaryPreview = async (notebookId, summaryType) => {
@@ -428,58 +429,58 @@ const viewSummary = async (summaryType, summaryUrl) => {
   };
 
   // 🔧 FIX: Update openSummaryPage to handle content-only summaries
-const openSummaryPage = async (summaryType, summaryUrl) => {
-  try {
-    const summaryData = generatedSummaries[summaryType];
-    
-    if (!summaryData) {
-      console.error(`❌ No summary data found for ${summaryType}`);
-      return;
-    }
+  const openSummaryPage = async (summaryType, summaryUrl) => {
+    try {
+      const summaryData = generatedSummaries[summaryType];
 
-    // 🔧 FIXED: Check if we already have content or need to fetch
-    const hasContent = summaryData.content && summaryData.content.length > 0;
-    const isContentPlaceholder = summaryUrl.startsWith('#content-');
-    
-    if (hasContent) {
-      // ✅ Content is already available, show immediately
-      console.log(`✅ Using cached content for ${summaryType} summary`);
-      setCurrentSummaryPage(summaryType);
-      setShowSummaryPage(true);
-      return;
-    }
-    
-    if (isContentPlaceholder) {
-      // ✅ URL is placeholder but we should have content - check again
-      if (summaryData.content) {
-        console.log(`✅ Found content for placeholder URL ${summaryType}`);
+      if (!summaryData) {
+        console.error(`❌ No summary data found for ${summaryType}`);
+        return;
+      }
+
+      // 🔧 FIXED: Check if we already have content or need to fetch
+      const hasContent = summaryData.content && summaryData.content.length > 0;
+      const isContentPlaceholder = summaryUrl.startsWith('#content-');
+
+      if (hasContent) {
+        // ✅ Content is already available, show immediately
+        console.log(`✅ Using cached content for ${summaryType} summary`);
         setCurrentSummaryPage(summaryType);
         setShowSummaryPage(true);
         return;
-      } else {
-        console.error(`❌ Placeholder URL ${summaryUrl} but no content available for ${summaryType}`);
-        return;
       }
-    }
 
-    // ✅ Need to fetch content from real URL
-    const isRealUrl = summaryUrl && 
-                     !summaryUrl.startsWith('#') &&
-                     (summaryUrl.startsWith('http') || summaryUrl.startsWith('s3://'));
-    
-    if (isRealUrl) {
-      console.log(`🔄 Fetching content for ${summaryType} from URL: ${summaryUrl}`);
-      await fetchSummaryContent(summaryUrl, summaryType);
-      setCurrentSummaryPage(summaryType);
-      setShowSummaryPage(true);
-    } else {
-      console.error(`❌ Invalid URL for ${summaryType}: ${summaryUrl}`);
-    }
+      if (isContentPlaceholder) {
+        // ✅ URL is placeholder but we should have content - check again
+        if (summaryData.content) {
+          console.log(`✅ Found content for placeholder URL ${summaryType}`);
+          setCurrentSummaryPage(summaryType);
+          setShowSummaryPage(true);
+          return;
+        } else {
+          console.error(`❌ Placeholder URL ${summaryUrl} but no content available for ${summaryType}`);
+          return;
+        }
+      }
 
-  } catch (error) {
-    console.error(`❌ Error opening summary page for ${summaryType}:`, error);
-  }
-};
+      // ✅ Need to fetch content from real URL
+      const isRealUrl = summaryUrl &&
+        !summaryUrl.startsWith('#') &&
+        (summaryUrl.startsWith('http') || summaryUrl.startsWith('s3://'));
+
+      if (isRealUrl) {
+        console.log(`🔄 Fetching content for ${summaryType} from URL: ${summaryUrl}`);
+        await fetchSummaryContent(summaryUrl, summaryType);
+        setCurrentSummaryPage(summaryType);
+        setShowSummaryPage(true);
+      } else {
+        console.error(`❌ Invalid URL for ${summaryType}: ${summaryUrl}`);
+      }
+
+    } catch (error) {
+      console.error(`❌ Error opening summary page for ${summaryType}:`, error);
+    }
+  };
 
   // Function to close summary page and return to main notebook view
   const closeSummaryPage = () => {
@@ -538,61 +539,61 @@ const openSummaryPage = async (summaryType, summaryUrl) => {
   };
 
   // 🔄 FIXED: Updated handleSummarize function 
-const handleSummarize = async (summaryType) => {
-  setShowSummaryDropdown(false);
-  setIsGeneratingSummary(true);
-  setSummaryProgress(null);
-  setSummaryStartTime(new Date());
-  setSummaryTaskId(null);
-
-  try {
-    console.log(`Starting ${summaryType} summary with progress tracking...`);
-
-    // Step 1: Start the summary generation using your new Lambda endpoint
-    const startResult = await notebookService.startSummary(notebook.notebookId, [summaryType]);
-
-    console.log(`✅ Summary started:`, startResult);
-    setSummaryTaskId(startResult.taskId);
-
-    // REMOVED: No longer add chat message when summary starts
-    // addChatMessage(
-    //   `Starting ${summaryType} summary generation... This will take ${startResult.estimatedTime || '2-8 minutes'}.`,
-    //   'system',
-    //   'summary',
-    //   {
-    //     summaryType: summaryType,
-    //     taskId: startResult.taskId,
-    //     estimatedTime: startResult.estimatedTime
-    //   }
-    // );
-
-    // Step 2: Start polling for progress
-    setIsPollingProgress(true);
-    startProgressPolling(notebook.notebookId, summaryType, startResult.pollInterval || 10);
-
-  } catch (error) {
-    console.error('❌ Error starting summary:', error);
-
-    // Handle specific error cases
-    let errorMessage = 'Failed to start summary generation';
-
-    if (error.message.includes('already in progress')) {
-      errorMessage = 'Summary generation is already in progress. Please wait for it to complete.';
-    } else if (error.message.includes('still being processed')) {
-      errorMessage = 'Files are still being processed. Please wait and try again in a moment.';
-    } else if (error.message.includes('login')) {
-      errorMessage = 'Please login to generate summaries.';
-    } else if (error.message) {
-      errorMessage = error.message;
-    }
-
-    addChatMessage(`❌ ${errorMessage}`, 'system', 'error');
-
-    setIsGeneratingSummary(false);
+  const handleSummarize = async (summaryType) => {
+    setShowSummaryDropdown(false);
+    setIsGeneratingSummary(true);
     setSummaryProgress(null);
-    setIsPollingProgress(false);
-  }
-};
+    setSummaryStartTime(new Date());
+    setSummaryTaskId(null);
+
+    try {
+      console.log(`Starting ${summaryType} summary with progress tracking...`);
+
+      // Step 1: Start the summary generation using your new Lambda endpoint
+      const startResult = await notebookService.startSummary(notebook.notebookId, [summaryType]);
+
+      console.log(`✅ Summary started:`, startResult);
+      setSummaryTaskId(startResult.taskId);
+
+      // REMOVED: No longer add chat message when summary starts
+      // addChatMessage(
+      //   `Starting ${summaryType} summary generation... This will take ${startResult.estimatedTime || '2-8 minutes'}.`,
+      //   'system',
+      //   'summary',
+      //   {
+      //     summaryType: summaryType,
+      //     taskId: startResult.taskId,
+      //     estimatedTime: startResult.estimatedTime
+      //   }
+      // );
+
+      // Step 2: Start polling for progress
+      setIsPollingProgress(true);
+      startProgressPolling(notebook.notebookId, summaryType, startResult.pollInterval || 10);
+
+    } catch (error) {
+      console.error('❌ Error starting summary:', error);
+
+      // Handle specific error cases
+      let errorMessage = 'Failed to start summary generation';
+
+      if (error.message.includes('already in progress')) {
+        errorMessage = 'Summary generation is already in progress. Please wait for it to complete.';
+      } else if (error.message.includes('still being processed')) {
+        errorMessage = 'Files are still being processed. Please wait and try again in a moment.';
+      } else if (error.message.includes('login')) {
+        errorMessage = 'Please login to generate summaries.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      addChatMessage(`❌ ${errorMessage}`, 'system', 'error');
+
+      setIsGeneratingSummary(false);
+      setSummaryProgress(null);
+      setIsPollingProgress(false);
+    }
+  };
 
   // 🔄 FIXED: Enhanced startProgressPolling function with better interval management
   const startProgressPolling = (notebookId, summaryType, pollInterval) => {
@@ -703,361 +704,361 @@ const handleSummarize = async (summaryType) => {
   };
 
   // 🔧 FIX: Update handleSummaryCompletion to save ALL summaries after merge
-const handleSummaryCompletion = (progress, summaryType) => {
-  console.log('🎉 HANDLING COMPLETION:', {
-    timestamp: new Date().toISOString(),
-    status: progress.status,
-    summaryType,
-    hasSummaries: !!progress.summaries,
-    summariesCount: Object.keys(progress.summaries || {}).length,
-    currentGeneratedCount: Object.keys(generatedSummaries).length,
-    currentTypes: Object.keys(generatedSummaries)
-  });
-  
-  // 🔄 FIXED: Ensure polling is completely stopped (defensive programming)
-  if (isPollingProgress || summaryProgressInterval) {
-    console.log('🛑 Defensive polling stop in completion handler');
-    stopProgressPolling();
-  }
-  
-  if (progress.status === 'completed') {
-    // 🔄 FIXED: Properly update generatedSummaries state to show in UI immediately
-    if (progress.summaries && Object.keys(progress.summaries).length > 0) {
-      const updatedSummaries = {};
-      Object.entries(progress.summaries).forEach(([type, data]) => {
-        console.log(`📄 Processing summary: ${type}`, {
-          hasUrl: !!data.s3Url,
-          hasDownloadUrl: !!data.downloadUrl,
-          hasContent: !!data.content,
-          s3Url: data.s3Url,
-          downloadUrl: data.downloadUrl
-        });
-        
-        // 🔧 FIX: Handle both URL-based and content-based summaries
-        const realUrl = data.s3Url || data.downloadUrl;
-        const hasContent = data.content && typeof data.content === 'string' && data.content.length > 0;
-        
-        if ((realUrl && 
-            realUrl !== 'undefined' && 
-            realUrl !== 'null' && 
+  const handleSummaryCompletion = (progress, summaryType) => {
+    console.log('🎉 HANDLING COMPLETION:', {
+      timestamp: new Date().toISOString(),
+      status: progress.status,
+      summaryType,
+      hasSummaries: !!progress.summaries,
+      summariesCount: Object.keys(progress.summaries || {}).length,
+      currentGeneratedCount: Object.keys(generatedSummaries).length,
+      currentTypes: Object.keys(generatedSummaries)
+    });
+
+    // 🔄 FIXED: Ensure polling is completely stopped (defensive programming)
+    if (isPollingProgress || summaryProgressInterval) {
+      console.log('🛑 Defensive polling stop in completion handler');
+      stopProgressPolling();
+    }
+
+    if (progress.status === 'completed') {
+      // 🔄 FIXED: Properly update generatedSummaries state to show in UI immediately
+      if (progress.summaries && Object.keys(progress.summaries).length > 0) {
+        const updatedSummaries = {};
+        Object.entries(progress.summaries).forEach(([type, data]) => {
+          console.log(`📄 Processing summary: ${type}`, {
+            hasUrl: !!data.s3Url,
+            hasDownloadUrl: !!data.downloadUrl,
+            hasContent: !!data.content,
+            s3Url: data.s3Url,
+            downloadUrl: data.downloadUrl
+          });
+
+          // 🔧 FIX: Handle both URL-based and content-based summaries
+          const realUrl = data.s3Url || data.downloadUrl;
+          const hasContent = data.content && typeof data.content === 'string' && data.content.length > 0;
+
+          if ((realUrl &&
+            realUrl !== 'undefined' &&
+            realUrl !== 'null' &&
             !realUrl.startsWith('#') &&
             (realUrl.startsWith('http') || realUrl.startsWith('s3://'))) || hasContent) {
-          
-          updatedSummaries[type] = {
-            url: realUrl || `#content-${type}`,
-            ready: true,
-            generatedAt: data.generatedAt || new Date().toISOString(),
-            downloadUrl: data.downloadUrl || data.s3Url,
-            fileSize: data.fileSize,
-            fileSizeFormatted: data.fileSizeFormatted,
-            wordCount: data.wordCount,
-            characterCount: data.characterCount,
-            readingTime: data.readingTime,
-            content: data.content || null,
-            hasContent: hasContent,
-            preview: data.preview || null,
-            source: 'completion_handler'
-          };
-          
-          console.log(`✅ Added summary ${type}:`, {
-            url: updatedSummaries[type].url,
-            hasContent: hasContent,
-            contentLength: data.content?.length || 0
+
+            updatedSummaries[type] = {
+              url: realUrl || `#content-${type}`,
+              ready: true,
+              generatedAt: data.generatedAt || new Date().toISOString(),
+              downloadUrl: data.downloadUrl || data.s3Url,
+              fileSize: data.fileSize,
+              fileSizeFormatted: data.fileSizeFormatted,
+              wordCount: data.wordCount,
+              characterCount: data.characterCount,
+              readingTime: data.readingTime,
+              content: data.content || null,
+              hasContent: hasContent,
+              preview: data.preview || null,
+              source: 'completion_handler'
+            };
+
+            console.log(`✅ Added summary ${type}:`, {
+              url: updatedSummaries[type].url,
+              hasContent: hasContent,
+              contentLength: data.content?.length || 0
+            });
+          } else {
+            console.warn(`⚠️ Skipping ${type} summary - no valid URL or content:`, {
+              s3Url: data.s3Url,
+              downloadUrl: data.downloadUrl,
+              hasContent: hasContent,
+              realUrl
+            });
+          }
+        });
+
+        console.log('🔄 About to MERGE summaries by type:', {
+          existingTypes: Object.keys(generatedSummaries),
+          newTypes: Object.keys(updatedSummaries),
+          will_merge_not_replace: true
+        });
+
+        // 🔄 FIXED: MERGE summaries by type instead of replacing all
+        if (Object.keys(updatedSummaries).length > 0) {
+          setGeneratedSummaries(prev => {
+            // ✅ MERGE: Keep existing summaries and add/update new ones by type
+            const mergedSummaries = { ...prev, ...updatedSummaries };
+
+            console.log('✅ generatedSummaries MERGED by type!', {
+              previousTypes: Object.keys(prev),
+              newTypes: Object.keys(updatedSummaries),
+              finalTypes: Object.keys(mergedSummaries),
+              totalCount: Object.keys(mergedSummaries).length
+            });
+
+            // 🔧 FIX: Save to backend AFTER state merge with ALL summaries
+            setTimeout(() => {
+              console.log('💾 Saving ALL merged summaries to backend:', {
+                allTypes: Object.keys(mergedSummaries),
+                count: Object.keys(mergedSummaries).length
+              });
+              saveSummariesToBackendWithData(mergedSummaries);
+            }, 200); // Increased delay to ensure state update completes
+
+            return mergedSummaries;
           });
+
+          // 🆕 NEW: Also update the notebook metadata to persist summaries
+          setNotebook(prev => {
+            const existingSummaryTypes = Object.keys(generatedSummaries);
+            const newSummaryTypes = Object.keys(updatedSummaries);
+            const allTypes = [...new Set([...existingSummaryTypes, ...newSummaryTypes])];
+
+            return {
+              ...prev,
+              summaryTypesAvailable: allTypes,
+              lastSummarization: new Date().toISOString()
+            };
+          });
+
+          console.log('📝 Updated notebook metadata with merged summary types');
         } else {
-          console.warn(`⚠️ Skipping ${type} summary - no valid URL or content:`, {
-            s3Url: data.s3Url,
-            downloadUrl: data.downloadUrl,
-            hasContent: hasContent,
-            realUrl
+          console.warn('⚠️ No valid summaries to merge!');
+        }
+      } else {
+        console.log('⚠️ No summaries in progress data');
+      }
+
+      // 🔄 UPDATED: Don't add chat messages, just log completion
+      const elapsedMsg = progress.elapsedTime ? ` (completed in ${progress.elapsedTime})` : '';
+      console.log(`✨ ${summaryType.charAt(0).toUpperCase() + summaryType.slice(1)} summary completed successfully!${elapsedMsg}`);
+
+    } else if (progress.status === 'partial_success') {
+      // Handle partial success similarly...
+      console.log(`⚠️ Summary partially completed: ${progress.message || ''}`);
+
+    } else if (progress.status === 'failed') {
+      const errorMsg = progress.error || progress.message || 'Summary generation failed';
+      console.error(`❌ Summary generation failed: ${errorMsg}`);
+    }
+
+    console.log('🏁 Completion handling finished');
+  };
+
+  // 🔧 NEW: Enhanced save function that accepts specific summary data
+  const saveSummariesToBackendWithData = async (summariesToSave) => {
+    if (Object.keys(summariesToSave).length > 0 && notebook.notebookId) {
+      try {
+        console.log('💾 Saving specific summaries to backend...', {
+          notebookId: notebook.notebookId,
+          summaryTypes: Object.keys(summariesToSave),
+          summariesCount: Object.keys(summariesToSave).length,
+          summariesData: Object.entries(summariesToSave).map(([type, data]) => ({
+            type,
+            hasContent: !!data.content,
+            hasUrl: !!data.url,
+            source: data.source
+          }))
+        });
+
+        // 🆕 ENHANCED: Prepare summary data for backend storage
+        const summaryUpdateData = {
+          summaryData: summariesToSave,  // Use provided summaries
+          summaryTypesAvailable: Object.keys(summariesToSave),
+          lastSummarization: new Date().toISOString(),
+          summariesCount: Object.keys(summariesToSave).length
+        };
+
+        console.log('📤 Sending summary data to backend:', {
+          summaryTypes: Object.keys(summariesToSave),
+          count: Object.keys(summariesToSave).length,
+          dataKeys: Object.keys(summaryUpdateData)
+        });
+
+        // Use a separate endpoint for summary metadata if available
+        if (notebookService.updateNotebookSummaries) {
+          await notebookService.updateNotebookSummaries(notebook.notebookId, summaryUpdateData);
+        } else {
+          // Fallback to regular update
+          await notebookService.updateNotebook(notebook.notebookId, {
+            title: notebook.title,
+            chunkNumber: 0,
+            chunkContent: content,
+            links: links,
+            ...summaryUpdateData
           });
         }
-      });
-      
-      console.log('🔄 About to MERGE summaries by type:', {
-        existingTypes: Object.keys(generatedSummaries),
-        newTypes: Object.keys(updatedSummaries),
-        will_merge_not_replace: true
-      });
-      
-      // 🔄 FIXED: MERGE summaries by type instead of replacing all
-      if (Object.keys(updatedSummaries).length > 0) {
-        setGeneratedSummaries(prev => {
-          // ✅ MERGE: Keep existing summaries and add/update new ones by type
-          const mergedSummaries = { ...prev, ...updatedSummaries };
-          
-          console.log('✅ generatedSummaries MERGED by type!', {
-            previousTypes: Object.keys(prev),
-            newTypes: Object.keys(updatedSummaries),
-            finalTypes: Object.keys(mergedSummaries),
-            totalCount: Object.keys(mergedSummaries).length
-          });
-          
-          // 🔧 FIX: Save to backend AFTER state merge with ALL summaries
-          setTimeout(() => {
-            console.log('💾 Saving ALL merged summaries to backend:', {
-              allTypes: Object.keys(mergedSummaries),
-              count: Object.keys(mergedSummaries).length
-            });
-            saveSummariesToBackendWithData(mergedSummaries);
-          }, 200); // Increased delay to ensure state update completes
-          
-          return mergedSummaries;
-        });
-        
-        // 🆕 NEW: Also update the notebook metadata to persist summaries
-        setNotebook(prev => {
-          const existingSummaryTypes = Object.keys(generatedSummaries);
-          const newSummaryTypes = Object.keys(updatedSummaries);
-          const allTypes = [...new Set([...existingSummaryTypes, ...newSummaryTypes])];
-          
-          return {
-            ...prev,
-            summaryTypesAvailable: allTypes,
-            lastSummarization: new Date().toISOString()
-          };
-        });
-        
-        console.log('📝 Updated notebook metadata with merged summary types');
-      } else {
-        console.warn('⚠️ No valid summaries to merge!');
-      }
-    } else {
-      console.log('⚠️ No summaries in progress data');
-    }
-    
-    // 🔄 UPDATED: Don't add chat messages, just log completion
-    const elapsedMsg = progress.elapsedTime ? ` (completed in ${progress.elapsedTime})` : '';
-    console.log(`✨ ${summaryType.charAt(0).toUpperCase() + summaryType.slice(1)} summary completed successfully!${elapsedMsg}`);
-    
-  } else if (progress.status === 'partial_success') {
-    // Handle partial success similarly...
-    console.log(`⚠️ Summary partially completed: ${progress.message || ''}`);
-    
-  } else if (progress.status === 'failed') {
-    const errorMsg = progress.error || progress.message || 'Summary generation failed';
-    console.error(`❌ Summary generation failed: ${errorMsg}`);
-  }
-  
-  console.log('🏁 Completion handling finished');
-};
 
-// 🔧 NEW: Enhanced save function that accepts specific summary data
-const saveSummariesToBackendWithData = async (summariesToSave) => {
-  if (Object.keys(summariesToSave).length > 0 && notebook.notebookId) {
-    try {
-      console.log('💾 Saving specific summaries to backend...', {
-        notebookId: notebook.notebookId,
-        summaryTypes: Object.keys(summariesToSave),
-        summariesCount: Object.keys(summariesToSave).length,
-        summariesData: Object.entries(summariesToSave).map(([type, data]) => ({
-          type,
-          hasContent: !!data.content,
-          hasUrl: !!data.url,
-          source: data.source
-        }))
-      });
-      
-      // 🆕 ENHANCED: Prepare summary data for backend storage
-      const summaryUpdateData = {
-        summaryData: summariesToSave,  // Use provided summaries
-        summaryTypesAvailable: Object.keys(summariesToSave),
-        lastSummarization: new Date().toISOString(),
-        summariesCount: Object.keys(summariesToSave).length
-      };
-      
-      console.log('📤 Sending summary data to backend:', {
-        summaryTypes: Object.keys(summariesToSave),
-        count: Object.keys(summariesToSave).length,
-        dataKeys: Object.keys(summaryUpdateData)
-      });
-      
-      // Use a separate endpoint for summary metadata if available
-      if (notebookService.updateNotebookSummaries) {
-        await notebookService.updateNotebookSummaries(notebook.notebookId, summaryUpdateData);
-      } else {
-        // Fallback to regular update
-        await notebookService.updateNotebook(notebook.notebookId, {
-          title: notebook.title,
-          chunkNumber: 0,
-          chunkContent: content,
-          links: links,
-          ...summaryUpdateData
+        console.log('✅ Successfully saved specific summaries to backend:', {
+          savedTypes: Object.keys(summariesToSave),
+          count: Object.keys(summariesToSave).length
         });
-      }
-      
-      console.log('✅ Successfully saved specific summaries to backend:', {
-        savedTypes: Object.keys(summariesToSave),
-        count: Object.keys(summariesToSave).length
-      });
-      
-    } catch (error) {
-      console.error('❌ Failed to save specific summaries to backend:', error);
-    }
-  }
-};
 
-// 🔧 FIX: Updated renderGeneratedSummariesSection to handle content-only summaries
-const renderGeneratedSummariesSection = () => {
-  console.log('🔍 Rendering summaries section, generatedSummaries:', generatedSummaries);
-  
-  const availableSummaries = Object.entries(generatedSummaries).filter(([type, data]) => {
-    // ✅ FIXED: Accept summaries that either have a valid URL OR have content
-    const hasValidUrl = data.url && 
-                       typeof data.url === 'string' && 
-                       data.url !== 'undefined' &&
-                       data.url !== 'null' && 
-                       !data.url.startsWith('#') &&
-                       (data.url.startsWith('http') || data.url.startsWith('s3://'));
-    
-    const hasContent = data.content && 
-                      typeof data.content === 'string' && 
-                      data.content.length > 0;
-    
-    const hasContentPlaceholder = data.url && 
-                                 typeof data.url === 'string' && 
-                                 data.url.startsWith('#content-');
-    
-    const isReady = data.ready === true;
-    
-    // ✅ ACCEPT if: ready AND (has valid URL OR has content OR has content placeholder)
-    const passes = isReady && (hasValidUrl || hasContent || hasContentPlaceholder);
-    
-    console.log(`🔍 Summary ${type}:`, {
-      ready: isReady,
-      hasValidUrl: hasValidUrl,
-      hasContent: hasContent,
-      hasContentPlaceholder: hasContentPlaceholder,
-      url: data.url,
-      contentLength: data.content?.length || 0,
-      passes: passes
+      } catch (error) {
+        console.error('❌ Failed to save specific summaries to backend:', error);
+      }
+    }
+  };
+
+  // 🔧 FIX: Updated renderGeneratedSummariesSection to handle content-only summaries
+  const renderGeneratedSummariesSection = () => {
+    console.log('🔍 Rendering summaries section, generatedSummaries:', generatedSummaries);
+
+    const availableSummaries = Object.entries(generatedSummaries).filter(([type, data]) => {
+      // ✅ FIXED: Accept summaries that either have a valid URL OR have content
+      const hasValidUrl = data.url &&
+        typeof data.url === 'string' &&
+        data.url !== 'undefined' &&
+        data.url !== 'null' &&
+        !data.url.startsWith('#') &&
+        (data.url.startsWith('http') || data.url.startsWith('s3://'));
+
+      const hasContent = data.content &&
+        typeof data.content === 'string' &&
+        data.content.length > 0;
+
+      const hasContentPlaceholder = data.url &&
+        typeof data.url === 'string' &&
+        data.url.startsWith('#content-');
+
+      const isReady = data.ready === true;
+
+      // ✅ ACCEPT if: ready AND (has valid URL OR has content OR has content placeholder)
+      const passes = isReady && (hasValidUrl || hasContent || hasContentPlaceholder);
+
+      console.log(`🔍 Summary ${type}:`, {
+        ready: isReady,
+        hasValidUrl: hasValidUrl,
+        hasContent: hasContent,
+        hasContentPlaceholder: hasContentPlaceholder,
+        url: data.url,
+        contentLength: data.content?.length || 0,
+        passes: passes
+      });
+
+      return passes;
     });
-    
-    return passes;
-  });
 
-  if (availableSummaries.length === 0) {
-    console.log('⚠️ No available summaries to display');
-    return null;
-  }
+    if (availableSummaries.length === 0) {
+      console.log('⚠️ No available summaries to display');
+      return null;
+    }
 
-  return (
-    <div style={styles.summariesSection}>
-      <div style={styles.summariesHeader}>
-        <h3 style={styles.summariesTitle}>
-          Generated Summaries
-        </h3>
-        <div style={styles.summariesCount}>
-          {availableSummaries.length}
+    return (
+      <div style={styles.summariesSection}>
+        <div style={styles.summariesHeader}>
+          <h3 style={styles.summariesTitle}>
+            Generated Summaries
+          </h3>
+          <div style={styles.summariesCount}>
+            {availableSummaries.length}
+          </div>
+        </div>
+
+        <div style={styles.summariesGrid}>
+          {availableSummaries.map(([summaryType, summaryData]) => {
+            const metadataItems = [];
+
+            if (summaryData.generatedAt) {
+              metadataItems.push({
+                icon: '📅',
+                label: 'Generated',
+                value: new Date(summaryData.generatedAt).toLocaleDateString()
+              });
+            }
+            if (summaryData.fileSizeFormatted) {
+              metadataItems.push({
+                icon: '📦',
+                label: 'Size',
+                value: summaryData.fileSizeFormatted
+              });
+            }
+            if (summaryData.wordCount) {
+              metadataItems.push({
+                icon: '📝',
+                label: 'Words',
+                value: summaryData.wordCount.toLocaleString()
+              });
+            }
+            if (summaryData.readingTime) {
+              metadataItems.push({
+                icon: '⏱️',
+                label: 'Reading',
+                value: summaryData.readingTime
+              });
+            }
+
+            // 🔧 FIXED: Handle click for both URL-based and content-based summaries
+            const handleSummaryClick = () => {
+              const hasRealUrl = summaryData.url &&
+                !summaryData.url.startsWith('#') &&
+                (summaryData.url.startsWith('http') || summaryData.url.startsWith('s3://'));
+
+              if (hasRealUrl) {
+                // Use the real URL
+                openSummaryPage(summaryType, summaryData.url);
+              } else if (summaryData.content) {
+                // Use content directly with a placeholder URL
+                openSummaryPage(summaryType, `#content-${summaryType}`);
+              } else {
+                console.warn(`⚠️ Cannot open summary ${summaryType} - no URL or content available`);
+              }
+            };
+
+            return (
+              <div
+                key={summaryType}
+                style={styles.summaryCard}
+                onClick={handleSummaryClick}
+                className="modern-summary-card"
+              >
+                {/* Header with icon and type */}
+                <div style={styles.summaryCardHeader}>
+                  <div style={styles.summaryTypeIcon}>
+                    {summaryType === 'casual' ? '💬' :
+                      summaryType === 'academic' ? '🎓' :
+                        summaryType === 'simple' ? '✨' : '📄'}
+                  </div>
+                  <div style={styles.summaryCardTitle}>
+                    <div style={styles.summaryTypeName}>
+                      {getFormattedSummaryName(summaryType)}
+                    </div>
+                    <div style={styles.summaryStatus}>
+                      <div style={styles.statusDot}></div>
+                      {summaryData.hasContent ? 'Ready with Content' : 'Ready'}
+                    </div>
+                  </div>
+                  <div style={styles.summaryCardAction}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Metadata */}
+                {metadataItems.length > 0 && (
+                  <div style={styles.summaryMetadata}>
+                    {metadataItems.map((item, index) => (
+                      <div key={index} style={styles.metadataItem}>
+                        <span style={styles.metadataIcon}>{item.icon}</span>
+                        <span style={styles.metadataLabel}>{item.label}:</span>
+                        <span style={styles.metadataValue}>{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Progress bar for visual appeal */}
+                <div style={styles.summaryProgress}>
+                  <div style={styles.progressBar}>
+                    <div style={styles.progressFill}></div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
-      
-      <div style={styles.summariesGrid}>
-        {availableSummaries.map(([summaryType, summaryData]) => {
-          const metadataItems = [];
-          
-          if (summaryData.generatedAt) {
-            metadataItems.push({
-              icon: '📅',
-              label: 'Generated',
-              value: new Date(summaryData.generatedAt).toLocaleDateString()
-            });
-          }
-          if (summaryData.fileSizeFormatted) {
-            metadataItems.push({
-              icon: '📦',
-              label: 'Size',
-              value: summaryData.fileSizeFormatted
-            });
-          }
-          if (summaryData.wordCount) {
-            metadataItems.push({
-              icon: '📝',
-              label: 'Words',
-              value: summaryData.wordCount.toLocaleString()
-            });
-          }
-          if (summaryData.readingTime) {
-            metadataItems.push({
-              icon: '⏱️',
-              label: 'Reading',
-              value: summaryData.readingTime
-            });
-          }
-          
-          // 🔧 FIXED: Handle click for both URL-based and content-based summaries
-          const handleSummaryClick = () => {
-            const hasRealUrl = summaryData.url && 
-                              !summaryData.url.startsWith('#') &&
-                              (summaryData.url.startsWith('http') || summaryData.url.startsWith('s3://'));
-            
-            if (hasRealUrl) {
-              // Use the real URL
-              openSummaryPage(summaryType, summaryData.url);
-            } else if (summaryData.content) {
-              // Use content directly with a placeholder URL
-              openSummaryPage(summaryType, `#content-${summaryType}`);
-            } else {
-              console.warn(`⚠️ Cannot open summary ${summaryType} - no URL or content available`);
-            }
-          };
-          
-          return (
-            <div 
-              key={summaryType}
-              style={styles.summaryCard}
-              onClick={handleSummaryClick}
-              className="modern-summary-card"
-            >
-              {/* Header with icon and type */}
-              <div style={styles.summaryCardHeader}>
-                <div style={styles.summaryTypeIcon}>
-                  {summaryType === 'casual' ? '💬' : 
-                   summaryType === 'academic' ? '🎓' : 
-                   summaryType === 'simple' ? '✨' : '📄'}
-                </div>
-                <div style={styles.summaryCardTitle}>
-                  <div style={styles.summaryTypeName}>
-                    {getFormattedSummaryName(summaryType)}
-                  </div>
-                  <div style={styles.summaryStatus}>
-                    <div style={styles.statusDot}></div>
-                    {summaryData.hasContent ? 'Ready with Content' : 'Ready'}
-                  </div>
-                </div>
-                <div style={styles.summaryCardAction}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Metadata */}
-              {metadataItems.length > 0 && (
-                <div style={styles.summaryMetadata}>
-                  {metadataItems.map((item, index) => (
-                    <div key={index} style={styles.metadataItem}>
-                      <span style={styles.metadataIcon}>{item.icon}</span>
-                      <span style={styles.metadataLabel}>{item.label}:</span>
-                      <span style={styles.metadataValue}>{item.value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Progress bar for visual appeal */}
-              <div style={styles.summaryProgress}>
-                <div style={styles.progressBar}>
-                  <div style={styles.progressFill}></div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
+    );
+  };
 
   // Progress bar component
   const renderSummaryProgress = () => {
@@ -1236,7 +1237,7 @@ const renderGeneratedSummariesSection = () => {
               )}
 
               {/* Clear chat button - only show if chat has messages and summaries available */}
-              {chatMessages.length > 0 && summariesAvailable && (
+              {chatMessages.length > 0 && (
                 <button onClick={clearConversation} style={styles.clearChatButton} className="clear-chat-button">
                   Clear Conversation
                 </button>
@@ -1245,7 +1246,7 @@ const renderGeneratedSummariesSection = () => {
           </div>
 
           {/* Chat Messages - only show if summaries available */}
-          {summariesAvailable && chatMessages.length > 0 && (
+          {chatMessages.length > 0 && (
             <div style={styles.chatMessages} ref={chatContainerRef}>
               {chatMessages.map((message) => (
                 <div key={message.id} style={styles.chatMessage}>
@@ -1302,12 +1303,9 @@ const renderGeneratedSummariesSection = () => {
                 value={chatMessage}
                 onChange={(e) => setChatMessage(e.target.value)}
                 placeholder={chatState.placeholder}
-                style={{
-                  ...styles.chatInput,
-                  ...(chatState.disabled ? styles.chatInputDisabled : {})
-                }}
-                disabled={chatState.disabled || isChatLoading}
-                readOnly={chatState.disabled}
+                // 🔧 REPLACE WITH THIS:
+                style={styles.chatInput}
+                disabled={isChatLoading}
               />
               <button
                 type="submit"
@@ -1315,7 +1313,7 @@ const renderGeneratedSummariesSection = () => {
                   ...styles.chatSendButton,
                   ...((!chatMessage.trim() || isChatLoading || chatState.disabled) ? styles.chatSendButtonDisabled : {})
                 }}
-                disabled={!chatMessage.trim() || isChatLoading || chatState.disabled}
+                disabled={!chatMessage.trim() || isChatLoading}
               >
                 {isChatLoading ? (
                   <div style={styles.buttonSpinner}></div>
@@ -1442,573 +1440,573 @@ const renderGeneratedSummariesSection = () => {
   };
 
   // 🔧 SIMPLIFIED: loadNotebookData compatible with Lambda response
-useEffect(() => {
-  const loadNotebookData = async () => {
-    if (!initialNotebookId || initialNotebookId === 'temp-loading') {
-      setNotebook({
-        notebookId: null,
-        title: 'New Notebook',
-        content: '',
-        createdAt: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
-        files: [],
-        links: []
-      });
-      setIsLoading(false);
-      return;
-    }
+  useEffect(() => {
+    const loadNotebookData = async () => {
+      if (!initialNotebookId || initialNotebookId === 'temp-loading') {
+        setNotebook({
+          notebookId: null,
+          title: 'New Notebook',
+          content: '',
+          createdAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+          files: [],
+          links: []
+        });
+        setIsLoading(false);
+        return;
+      }
 
-    try {
-      setIsLoading(true);
-      console.log('📖 Loading notebook:', initialNotebookId);
-
-      // 🔧 SIMPLIFIED: Use the fixed getNotebookWithSummaries method
-      let notebookData;
       try {
-        notebookData = await notebookService.getNotebookWithSummaries(initialNotebookId);
-      } catch (enhancedError) {
-        console.warn('⚠️ Enhanced fetch failed, using basic getNotebook');
-        notebookData = await notebookService.getNotebook(initialNotebookId);
-      }
+        setIsLoading(true);
+        console.log('📖 Loading notebook:', initialNotebookId);
 
-      if (notebookData) {
-        // 🔧 SIMPLIFIED: Direct mapping from Lambda response
-        const formattedNotebook = {
-          notebookId: notebookData.notebookId || initialNotebookId,
-          title: notebookData.title || 'Untitled Notebook',
-          content: notebookData.content || '',
-          createdAt: notebookData.createdAt || new Date().toISOString(),
-          lastUpdated: notebookData.updatedAt || new Date().toISOString(),
-          files: notebookData.files || [],
-          links: notebookData.links || [],
-          createdBy: notebookData.createdBy,
-          wordCount: notebookData.wordCount || 0,
-          tags: notebookData.tags || [],
-          connections: notebookData.connections || [],
-          filesCount: notebookData.filesCount || 0,
-          filesSummary: notebookData.filesSummary,
-          linksCount: notebookData.linksCount || 0,
-          linksSummary: notebookData.linksSummary,
-          
-          // 🔧 SIMPLIFIED: Summary data directly from Lambda
-          summaryTypesAvailable: Object.keys(notebookData.summaries || {}),
-          summaryTypes: notebookData.summaryTypes || [],
-          lastSummarization: notebookData.lastSummarization,
-          summarizationStatus: notebookData.summarizationStatus,
-          hasSummaries: notebookData.hasSummaries || false
-        };
-
-        // 🔧 SIMPLIFIED: Use summaries directly from getNotebook response
-        const initialSummaries = notebookData.summaries || {};
-
-        console.log('✅ Notebook loaded with summaries:', {
-          title: formattedNotebook.title,
-          summariesCount: Object.keys(initialSummaries).length,
-          summaryTypes: Object.keys(initialSummaries),
-          hasSummaries: formattedNotebook.hasSummaries
-        });
-
-        // Update states
-        setGeneratedSummaries(initialSummaries);
-        setNotebook(formattedNotebook);
-        setContent(formattedNotebook.content);
-        setFiles(formattedNotebook.files);
-        setLinks(formattedNotebook.links);
-
-        console.log('✅ Notebook loaded:', {
-          title: formattedNotebook.title,
-          summariesCount: Object.keys(initialSummaries).length,
-          summaryTypes: Object.keys(initialSummaries)
-        });
-      }
-    } catch (error) {
-      console.error('❌ Failed to load notebook:', error.message);
-      
-      // 🔧 SIMPLIFIED: localStorage recovery
-      if (initialNotebookId) {
+        // 🔧 SIMPLIFIED: Use the fixed getNotebookWithSummaries method
+        let notebookData;
         try {
-          console.log('🔄 Attempting localStorage recovery...');
-          const savedNotebooks = localStorage.getItem('notebooks');
-          if (savedNotebooks) {
-            const notebooksArray = JSON.parse(savedNotebooks);
-            const savedNotebook = notebooksArray.find(nb => 
-              nb.notebookId === initialNotebookId || nb.id === initialNotebookId
-            );
-            
-            if (savedNotebook) {
-              console.log('✅ Recovered from localStorage');
-              setNotebook(savedNotebook);
-              setContent(savedNotebook.content || '');
-              setFiles(savedNotebook.files || []);
-              setLinks(savedNotebook.links || []);
-              
-              // Recover summaries if available
-              if (savedNotebook.generatedSummaries) {
-                setGeneratedSummaries(savedNotebook.generatedSummaries);
-                console.log('✅ Recovered summaries from localStorage:', Object.keys(savedNotebook.generatedSummaries));
+          notebookData = await notebookService.getNotebookWithSummaries(initialNotebookId);
+        } catch (enhancedError) {
+          console.warn('⚠️ Enhanced fetch failed, using basic getNotebook');
+          notebookData = await notebookService.getNotebook(initialNotebookId);
+        }
+
+        if (notebookData) {
+          // 🔧 SIMPLIFIED: Direct mapping from Lambda response
+          const formattedNotebook = {
+            notebookId: notebookData.notebookId || initialNotebookId,
+            title: notebookData.title || 'Untitled Notebook',
+            content: notebookData.content || '',
+            createdAt: notebookData.createdAt || new Date().toISOString(),
+            lastUpdated: notebookData.updatedAt || new Date().toISOString(),
+            files: notebookData.files || [],
+            links: notebookData.links || [],
+            createdBy: notebookData.createdBy,
+            wordCount: notebookData.wordCount || 0,
+            tags: notebookData.tags || [],
+            connections: notebookData.connections || [],
+            filesCount: notebookData.filesCount || 0,
+            filesSummary: notebookData.filesSummary,
+            linksCount: notebookData.linksCount || 0,
+            linksSummary: notebookData.linksSummary,
+
+            // 🔧 SIMPLIFIED: Summary data directly from Lambda
+            summaryTypesAvailable: Object.keys(notebookData.summaries || {}),
+            summaryTypes: notebookData.summaryTypes || [],
+            lastSummarization: notebookData.lastSummarization,
+            summarizationStatus: notebookData.summarizationStatus,
+            hasSummaries: notebookData.hasSummaries || false
+          };
+
+          // 🔧 SIMPLIFIED: Use summaries directly from getNotebook response
+          const initialSummaries = notebookData.summaries || {};
+
+          console.log('✅ Notebook loaded with summaries:', {
+            title: formattedNotebook.title,
+            summariesCount: Object.keys(initialSummaries).length,
+            summaryTypes: Object.keys(initialSummaries),
+            hasSummaries: formattedNotebook.hasSummaries
+          });
+
+          // Update states
+          setGeneratedSummaries(initialSummaries);
+          setNotebook(formattedNotebook);
+          setContent(formattedNotebook.content);
+          setFiles(formattedNotebook.files);
+          setLinks(formattedNotebook.links);
+
+          console.log('✅ Notebook loaded:', {
+            title: formattedNotebook.title,
+            summariesCount: Object.keys(initialSummaries).length,
+            summaryTypes: Object.keys(initialSummaries)
+          });
+        }
+      } catch (error) {
+        console.error('❌ Failed to load notebook:', error.message);
+
+        // 🔧 SIMPLIFIED: localStorage recovery
+        if (initialNotebookId) {
+          try {
+            console.log('🔄 Attempting localStorage recovery...');
+            const savedNotebooks = localStorage.getItem('notebooks');
+            if (savedNotebooks) {
+              const notebooksArray = JSON.parse(savedNotebooks);
+              const savedNotebook = notebooksArray.find(nb =>
+                nb.notebookId === initialNotebookId || nb.id === initialNotebookId
+              );
+
+              if (savedNotebook) {
+                console.log('✅ Recovered from localStorage');
+                setNotebook(savedNotebook);
+                setContent(savedNotebook.content || '');
+                setFiles(savedNotebook.files || []);
+                setLinks(savedNotebook.links || []);
+
+                // Recover summaries if available
+                if (savedNotebook.generatedSummaries) {
+                  setGeneratedSummaries(savedNotebook.generatedSummaries);
+                  console.log('✅ Recovered summaries from localStorage:', Object.keys(savedNotebook.generatedSummaries));
+                }
               }
             }
+          } catch (recoveryError) {
+            console.error('❌ localStorage recovery failed:', recoveryError.message);
           }
-        } catch (recoveryError) {
-          console.error('❌ localStorage recovery failed:', recoveryError.message);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadNotebookData();
+  }, [initialNotebookId]);
+
+  // 🆕 ENHANCED: Auto-save function that preserves all summary types
+  useEffect(() => {
+    // Auto-save generated summaries to localStorage and backend
+    const saveSummaryData = async () => {
+      if (Object.keys(generatedSummaries).length > 0 && notebook.notebookId && notebook.notebookId !== 'temp-loading') {
+        try {
+          console.log('💾 Auto-saving ALL summary types...', {
+            notebookId: notebook.notebookId,
+            summariesCount: Object.keys(generatedSummaries).length,
+            summaryTypes: Object.keys(generatedSummaries)
+          });
+
+          // 1. Save to localStorage (immediate backup) with ALL summaries
+          const savedNotebooks = localStorage.getItem('notebooks');
+          let notebooksArray = [];
+
+          if (savedNotebooks) {
+            notebooksArray = JSON.parse(savedNotebooks);
+          }
+
+          const notebookIndex = notebooksArray.findIndex(nb =>
+            nb.notebookId === notebook.notebookId || nb.id === notebook.notebookId
+          );
+
+          const updatedNotebookData = {
+            ...notebook,
+            generatedSummaries: generatedSummaries,  // ALL summary types
+            summaryTypesAvailable: Object.keys(generatedSummaries),
+            lastSummarization: new Date().toISOString()
+          };
+
+          if (notebookIndex >= 0) {
+            // 🔧 MERGE summaries instead of replacing
+            const existingNotebook = notebooksArray[notebookIndex];
+            const existingSummaries = existingNotebook.generatedSummaries || {};
+
+            notebooksArray[notebookIndex] = {
+              ...updatedNotebookData,
+              generatedSummaries: { ...existingSummaries, ...generatedSummaries }  // MERGE
+            };
+          } else {
+            notebooksArray.push(updatedNotebookData);
+          }
+
+          localStorage.setItem('notebooks', JSON.stringify(notebooksArray));
+          console.log('✅ Saved ALL summary types to localStorage:', {
+            types: Object.keys(generatedSummaries),
+            count: Object.keys(generatedSummaries).length
+          });
+
+          // 2. Save to backend (if available) with ALL summaries
+          try {
+            const updateData = {
+              title: notebook.title,
+              chunkNumber: 0,
+              chunkContent: content,
+              links: links,
+              summaryData: generatedSummaries,  // Include ALL summary data
+              summaryTypesAvailable: Object.keys(generatedSummaries)
+            };
+
+            await notebookService.updateNotebook(notebook.notebookId, updateData);
+            console.log('✅ Saved ALL summary types to backend');
+
+          } catch (backendError) {
+            console.warn('⚠️ Failed to save to backend:', backendError.message);
+            // Don't fail if backend save fails - localStorage backup exists
+          }
+
+        } catch (error) {
+          console.error('❌ Error saving summary data:', error);
         }
       }
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
 
-  loadNotebookData();
-}, [initialNotebookId]);
+    // Debounce the save operation
+    const timeoutId = setTimeout(saveSummaryData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [generatedSummaries, notebook.notebookId]); // Trigger when summaries change
 
-// 🆕 ENHANCED: Auto-save function that preserves all summary types
-useEffect(() => {
-  // Auto-save generated summaries to localStorage and backend
-  const saveSummaryData = async () => {
-    if (Object.keys(generatedSummaries).length > 0 && notebook.notebookId && notebook.notebookId !== 'temp-loading') {
+  // 🆕 ENHANCED: Update saveSummariesToBackend to save all summary types
+  const saveSummariesToBackend = async () => {
+    if (Object.keys(generatedSummaries).length > 0 && notebook.notebookId) {
       try {
-        console.log('💾 Auto-saving ALL summary types...', {
+        console.log('💾 Saving ALL summary types to backend...', {
           notebookId: notebook.notebookId,
-          summariesCount: Object.keys(generatedSummaries).length,
-          summaryTypes: Object.keys(generatedSummaries)
+          summaryTypes: Object.keys(generatedSummaries),
+          summariesCount: Object.keys(generatedSummaries).length
         });
-        
-        // 1. Save to localStorage (immediate backup) with ALL summaries
-        const savedNotebooks = localStorage.getItem('notebooks');
-        let notebooksArray = [];
-        
-        if (savedNotebooks) {
-          notebooksArray = JSON.parse(savedNotebooks);
-        }
-        
-        const notebookIndex = notebooksArray.findIndex(nb => 
-          nb.notebookId === notebook.notebookId || nb.id === notebook.notebookId
-        );
-        
-        const updatedNotebookData = {
-          ...notebook,
-          generatedSummaries: generatedSummaries,  // ALL summary types
+
+        // 🆕 ENHANCED: Prepare summary data for backend storage
+        const summaryUpdateData = {
+          summaryData: generatedSummaries,  // All summary types
           summaryTypesAvailable: Object.keys(generatedSummaries),
-          lastSummarization: new Date().toISOString()
+          lastSummarization: new Date().toISOString(),
+          summariesCount: Object.keys(generatedSummaries).length
         };
-        
-        if (notebookIndex >= 0) {
-          // 🔧 MERGE summaries instead of replacing
-          const existingNotebook = notebooksArray[notebookIndex];
-          const existingSummaries = existingNotebook.generatedSummaries || {};
-          
-          notebooksArray[notebookIndex] = {
-            ...updatedNotebookData,
-            generatedSummaries: { ...existingSummaries, ...generatedSummaries }  // MERGE
-          };
+
+        console.log('📤 Sending summary data to backend:', summaryUpdateData);
+
+        // Use a separate endpoint for summary metadata if available
+        if (notebookService.updateNotebookSummaries) {
+          await notebookService.updateNotebookSummaries(notebook.notebookId, summaryUpdateData);
         } else {
-          notebooksArray.push(updatedNotebookData);
-        }
-        
-        localStorage.setItem('notebooks', JSON.stringify(notebooksArray));
-        console.log('✅ Saved ALL summary types to localStorage:', {
-          types: Object.keys(generatedSummaries),
-          count: Object.keys(generatedSummaries).length
-        });
-        
-        // 2. Save to backend (if available) with ALL summaries
-        try {
-          const updateData = {
+          // Fallback to regular update
+          await notebookService.updateNotebook(notebook.notebookId, {
             title: notebook.title,
             chunkNumber: 0,
             chunkContent: content,
             links: links,
-            summaryData: generatedSummaries,  // Include ALL summary data
-            summaryTypesAvailable: Object.keys(generatedSummaries)
-          };
-          
-          await notebookService.updateNotebook(notebook.notebookId, updateData);
-          console.log('✅ Saved ALL summary types to backend');
-          
-        } catch (backendError) {
-          console.warn('⚠️ Failed to save to backend:', backendError.message);
-          // Don't fail if backend save fails - localStorage backup exists
+            ...summaryUpdateData
+          });
         }
-        
+
+        console.log('✅ Successfully saved ALL summary types to backend:', {
+          savedTypes: Object.keys(generatedSummaries),
+          count: Object.keys(generatedSummaries).length
+        });
+
       } catch (error) {
-        console.error('❌ Error saving summary data:', error);
+        console.error('❌ Failed to save summaries to backend:', error);
       }
     }
   };
-  
-  // Debounce the save operation
-  const timeoutId = setTimeout(saveSummaryData, 1000);
-  return () => clearTimeout(timeoutId);
-}, [generatedSummaries, notebook.notebookId]); // Trigger when summaries change
-
-// 🆕 ENHANCED: Update saveSummariesToBackend to save all summary types
-const saveSummariesToBackend = async () => {
-  if (Object.keys(generatedSummaries).length > 0 && notebook.notebookId) {
-    try {
-      console.log('💾 Saving ALL summary types to backend...', {
-        notebookId: notebook.notebookId,
-        summaryTypes: Object.keys(generatedSummaries),
-        summariesCount: Object.keys(generatedSummaries).length
-      });
-      
-      // 🆕 ENHANCED: Prepare summary data for backend storage
-      const summaryUpdateData = {
-        summaryData: generatedSummaries,  // All summary types
-        summaryTypesAvailable: Object.keys(generatedSummaries),
-        lastSummarization: new Date().toISOString(),
-        summariesCount: Object.keys(generatedSummaries).length
-      };
-      
-      console.log('📤 Sending summary data to backend:', summaryUpdateData);
-      
-      // Use a separate endpoint for summary metadata if available
-      if (notebookService.updateNotebookSummaries) {
-        await notebookService.updateNotebookSummaries(notebook.notebookId, summaryUpdateData);
-      } else {
-        // Fallback to regular update
-        await notebookService.updateNotebook(notebook.notebookId, {
-          title: notebook.title,
-          chunkNumber: 0,
-          chunkContent: content,
-          links: links,
-          ...summaryUpdateData
-        });
-      }
-      
-      console.log('✅ Successfully saved ALL summary types to backend:', {
-        savedTypes: Object.keys(generatedSummaries),
-        count: Object.keys(generatedSummaries).length
-      });
-      
-    } catch (error) {
-      console.error('❌ Failed to save summaries to backend:', error);
-    }
-  }
-};
 
   // 🔄 ENHANCED: Update your handleSave function to include summary data
-const handleSave = async () => {
-  setIsSaving(true);
+  const handleSave = async () => {
+    setIsSaving(true);
 
-  try {
-    const currentNotebookId = notebook.notebookId;
+    try {
+      const currentNotebookId = notebook.notebookId;
 
-    if (!currentNotebookId || currentNotebookId === 'temp-loading') {
+      if (!currentNotebookId || currentNotebookId === 'temp-loading') {
+        setIsSaving(false);
+        return;
+      }
+
+      const updatedNotebook = {
+        ...notebook,
+        notebookId: currentNotebookId,
+        title: notebook.title,
+        content: content,
+        lastUpdated: new Date().toISOString(),
+        files: files,
+        links: links,
+        // 🆕 NEW: Include summary data
+        summaryTypesAvailable: Object.keys(generatedSummaries),
+        lastSummarization: Object.keys(generatedSummaries).length > 0 ? new Date().toISOString() : notebook.lastSummarization
+      };
+
+      setNotebook(updatedNotebook);
+
+      // 🆕 ENHANCED: Include summary data in update
+      const updateData = {
+        title: updatedNotebook.title,
+        chunkNumber: 0,
+        chunkContent: content,
+        links: links,
+        // 🆕 NEW: Summary metadata
+        summaryData: generatedSummaries,
+        summaryTypesAvailable: Object.keys(generatedSummaries),
+        lastSummarization: updatedNotebook.lastSummarization
+      };
+
+      try {
+        console.log('💾 Saving notebook with summary data:', {
+          notebookId: currentNotebookId,
+          summariesCount: Object.keys(generatedSummaries).length,
+          summaryTypes: Object.keys(generatedSummaries)
+        });
+
+        await notebookService.updateNotebook(currentNotebookId, updateData);
+        console.log('✅ Successfully saved notebook with summaries to backend');
+      } catch (apiError) {
+        console.error("❌ Error saving to API:", apiError);
+      }
+
+      // localStorage backup logic (enhanced)
+      const savedNotebooks = localStorage.getItem('notebooks');
+      let notebooksArray = [];
+
+      if (savedNotebooks) {
+        notebooksArray = JSON.parse(savedNotebooks);
+        const idToCheck = currentNotebookId;
+        let notebookIndex = notebooksArray.findIndex(nb => nb.id === idToCheck);
+
+        if (notebookIndex === -1) {
+          notebookIndex = notebooksArray.findIndex(nb => nb.notebookId === idToCheck);
+        }
+
+        if (notebookIndex >= 0) {
+          notebooksArray[notebookIndex] = {
+            ...updatedNotebook,
+            id: idToCheck,
+            notebookId: idToCheck,
+            // 🆕 NEW: Include summary data in localStorage
+            generatedSummaries: generatedSummaries
+          };
+        } else {
+          notebooksArray.push({
+            ...updatedNotebook,
+            id: idToCheck,
+            notebookId: idToCheck,
+            // 🆕 NEW: Include summary data in localStorage
+            generatedSummaries: generatedSummaries
+          });
+        }
+      } else {
+        const idToStore = currentNotebookId;
+        notebooksArray = [{
+          ...updatedNotebook,
+          id: idToStore,
+          notebookId: idToStore,
+          // 🆕 NEW: Include summary data in localStorage
+          generatedSummaries: generatedSummaries
+        }];
+      }
+
+      localStorage.setItem('notebooks', JSON.stringify(notebooksArray));
+      console.log('✅ Saved notebook with summaries to localStorage');
+
+      setLastSaved(new Date());
+
+      setTimeout(() => {
+        setIsSaving(false);
+      }, 500);
+    } catch (error) {
+      console.error("❌ Error saving notebook:", error);
       setIsSaving(false);
+    }
+  };
+
+  // 🔍 DEBUG: Add this to your NotebookDetailPage component
+  window.debugCurrentSummaryFormat = async () => {
+    const notebookId = notebook?.notebookId;
+
+    if (!notebookId) {
+      console.error('❌ No notebook loaded');
       return;
     }
 
-    const updatedNotebook = {
-      ...notebook,
-      notebookId: currentNotebookId,
-      title: notebook.title,
-      content: content,
-      lastUpdated: new Date().toISOString(),
-      files: files,
-      links: links,
-      // 🆕 NEW: Include summary data
-      summaryTypesAvailable: Object.keys(generatedSummaries),
-      lastSummarization: Object.keys(generatedSummaries).length > 0 ? new Date().toISOString() : notebook.lastSummarization
-    };
-
-    setNotebook(updatedNotebook);
-
-    // 🆕 ENHANCED: Include summary data in update
-    const updateData = {
-      title: updatedNotebook.title,
-      chunkNumber: 0,
-      chunkContent: content,
-      links: links,
-      // 🆕 NEW: Summary metadata
-      summaryData: generatedSummaries,
-      summaryTypesAvailable: Object.keys(generatedSummaries),
-      lastSummarization: updatedNotebook.lastSummarization
-    };
-
     try {
-      console.log('💾 Saving notebook with summary data:', {
-        notebookId: currentNotebookId,
-        summariesCount: Object.keys(generatedSummaries).length,
-        summaryTypes: Object.keys(generatedSummaries)
+      console.log('🔍 DEBUGGING CURRENT SUMMARY FORMAT:');
+
+      // Get raw response from current getNotebook
+      const response = await notebookService.getNotebook(notebookId, {
+        includeSummaryContent: true
       });
-      
-      await notebookService.updateNotebook(currentNotebookId, updateData);
-      console.log('✅ Successfully saved notebook with summaries to backend');
-    } catch (apiError) {
-      console.error("❌ Error saving to API:", apiError);
-    }
 
-    // localStorage backup logic (enhanced)
-    const savedNotebooks = localStorage.getItem('notebooks');
-    let notebooksArray = [];
+      console.log('📡 Current getNotebook response:', response);
 
-    if (savedNotebooks) {
-      notebooksArray = JSON.parse(savedNotebooks);
-      const idToCheck = currentNotebookId;
-      let notebookIndex = notebooksArray.findIndex(nb => nb.id === idToCheck);
+      // Check what we got
+      console.log('📋 Summary Analysis:');
+      console.log('  - summariesCount:', response.summariesCount);
+      console.log('  - summaryTypes:', response.summaryTypes);
+      console.log('  - hasSummaries:', response.hasSummaries);
+      console.log('  - summaries object:', response.summaries);
 
-      if (notebookIndex === -1) {
-        notebookIndex = notebooksArray.findIndex(nb => nb.notebookId === idToCheck);
-      }
+      if (response.summaries && Object.keys(response.summaries).length > 0) {
+        console.log('📄 Individual summaries:');
+        for (const [type, data] of Object.entries(response.summaries)) {
+          console.log(`  ${type}:`, {
+            hasUrl: !!data.url,
+            url: data.url,
+            hasContent: data.hasContent,
+            contentLength: data.content?.length || 0,
+            ready: data.ready,
+            source: data.source
+          });
+        }
 
-      if (notebookIndex >= 0) {
-        notebooksArray[notebookIndex] = {
-          ...updatedNotebook,
-          id: idToCheck,
-          notebookId: idToCheck,
-          // 🆕 NEW: Include summary data in localStorage
-          generatedSummaries: generatedSummaries
-        };
-      } else {
-        notebooksArray.push({
-          ...updatedNotebook,
-          id: idToCheck,
-          notebookId: idToCheck,
-          // 🆕 NEW: Include summary data in localStorage
-          generatedSummaries: generatedSummaries
-        });
-      }
-    } else {
-      const idToStore = currentNotebookId;
-      notebooksArray = [{
-        ...updatedNotebook,
-        id: idToStore,
-        notebookId: idToStore,
-        // 🆕 NEW: Include summary data in localStorage
-        generatedSummaries: generatedSummaries
-      }];
-    }
-
-    localStorage.setItem('notebooks', JSON.stringify(notebooksArray));
-    console.log('✅ Saved notebook with summaries to localStorage');
-    
-    setLastSaved(new Date());
-
-    setTimeout(() => {
-      setIsSaving(false);
-    }, 500);
-  } catch (error) {
-    console.error("❌ Error saving notebook:", error);
-    setIsSaving(false);
-  }
-};
-
-// 🔍 DEBUG: Add this to your NotebookDetailPage component
-window.debugCurrentSummaryFormat = async () => {
-  const notebookId = notebook?.notebookId;
-  
-  if (!notebookId) {
-    console.error('❌ No notebook loaded');
-    return;
-  }
-  
-  try {
-    console.log('🔍 DEBUGGING CURRENT SUMMARY FORMAT:');
-    
-    // Get raw response from current getNotebook
-    const response = await notebookService.getNotebook(notebookId, {
-      includeSummaryContent: true
-    });
-    
-    console.log('📡 Current getNotebook response:', response);
-    
-    // Check what we got
-    console.log('📋 Summary Analysis:');
-    console.log('  - summariesCount:', response.summariesCount);
-    console.log('  - summaryTypes:', response.summaryTypes);
-    console.log('  - hasSummaries:', response.hasSummaries);
-    console.log('  - summaries object:', response.summaries);
-    
-    if (response.summaries && Object.keys(response.summaries).length > 0) {
-      console.log('📄 Individual summaries:');
-      for (const [type, data] of Object.entries(response.summaries)) {
-        console.log(`  ${type}:`, {
-          hasUrl: !!data.url,
-          url: data.url,
-          hasContent: data.hasContent,
-          contentLength: data.content?.length || 0,
-          ready: data.ready,
-          source: data.source
-        });
-      }
-      
-      // Test fetching content for summaries without content
-      console.log('🔄 Testing content fetching...');
-      for (const [type, data] of Object.entries(response.summaries)) {
-        if (data.url && data.url.startsWith('s3://') && !data.hasContent) {
-          try {
-            console.log(`📥 Trying to fetch content for ${type}...`);
-            const content = await notebookService.fetchSummaryFromS3(data.url, notebookId, type);
-            console.log(`✅ Fetched ${type} content: ${content.length} characters`);
-          } catch (fetchError) {
-            console.log(`❌ Failed to fetch ${type} content:`, fetchError.message);
+        // Test fetching content for summaries without content
+        console.log('🔄 Testing content fetching...');
+        for (const [type, data] of Object.entries(response.summaries)) {
+          if (data.url && data.url.startsWith('s3://') && !data.hasContent) {
+            try {
+              console.log(`📥 Trying to fetch content for ${type}...`);
+              const content = await notebookService.fetchSummaryFromS3(data.url, notebookId, type);
+              console.log(`✅ Fetched ${type} content: ${content.length} characters`);
+            } catch (fetchError) {
+              console.log(`❌ Failed to fetch ${type} content:`, fetchError.message);
+            }
           }
         }
+      } else {
+        console.log('📄 No summaries found in processed response');
       }
-    } else {
-      console.log('📄 No summaries found in processed response');
-    }
-    
-    // Check React state
-    console.log('⚛️ Current React State:');
-    console.log('  - generatedSummaries:', generatedSummaries);
-    console.log('  - generatedSummaries count:', Object.keys(generatedSummaries || {}).length);
-    
-    return {
-      notebookResponse: response,
-      reactState: generatedSummaries,
-      hasSummariesInResponse: response.summariesCount > 0,
-      hasSummariesInReact: Object.keys(generatedSummaries || {}).length > 0
-    };
-    
-  } catch (error) {
-    console.error('❌ Debug error:', error);
-    return { error: error.message };
-  }
-};
 
-// 🔧 QUICK FIX: Force update summaries from notebook response
-window.forceUpdateSummaries = async () => {
-  const notebookId = notebook?.notebookId;
-  
-  if (!notebookId) {
-    console.error('❌ No notebook loaded');
-    return;
-  }
-  
-  try {
-    console.log('🔄 Force updating summaries...');
-    
-    const freshNotebook = await notebookService.getNotebook(notebookId, {
-      includeSummaryContent: true
-    });
-    
-    if (freshNotebook.summaries && Object.keys(freshNotebook.summaries).length > 0) {
-      console.log('✅ Found summaries, updating React state:', Object.keys(freshNotebook.summaries));
-      setGeneratedSummaries(freshNotebook.summaries);
-      
-      // Also update notebook state
-      setNotebook(prev => ({
-        ...prev,
-        hasSummaries: true,
-        summariesCount: freshNotebook.summariesCount,
-        summaryTypes: Object.keys(freshNotebook.summaries)
-      }));
-      
-      console.log('✅ React state updated with summaries');
-      return freshNotebook.summaries;
-    } else {
-      console.log('⚠️ No summaries found in fresh notebook response');
-      return {};
-    }
-    
-  } catch (error) {
-    console.error('❌ Force update failed:', error);
-  }
-};
+      // Check React state
+      console.log('⚛️ Current React State:');
+      console.log('  - generatedSummaries:', generatedSummaries);
+      console.log('  - generatedSummaries count:', Object.keys(generatedSummaries || {}).length);
 
-// 🔧 UTILITY: Force refresh summaries from backend
-window.forceRefreshSummaries = async () => {
-  if (!notebook?.notebookId) {
-    console.error('❌ No notebook loaded');
-    return;
-  }
-  
-  try {
-    console.log('🔄 Force refreshing summaries from backend...');
-    const reloadedNotebook = await notebookService.getNotebook(notebook.notebookId, {
-      includeSummaryContent: true
-    });
-    
-    console.log('✅ Reloaded notebook summaries:', {
-      summariesCount: reloadedNotebook.summariesCount,
-      summaryTypes: Object.keys(reloadedNotebook.summaries || {}),
-      summaries: reloadedNotebook.summaries
-    });
-    
-    // Update the state with reloaded summaries
-    if (reloadedNotebook.summaries) {
-      setGeneratedSummaries(reloadedNotebook.summaries);
-      console.log('✅ Updated React state with reloaded summaries');
-    }
-    
-    return reloadedNotebook.summaries;
-  } catch (error) {
-    console.error('❌ Force refresh failed:', error);
-  }
-};
+      return {
+        notebookResponse: response,
+        reactState: generatedSummaries,
+        hasSummariesInResponse: response.summariesCount > 0,
+        hasSummariesInReact: Object.keys(generatedSummaries || {}).length > 0
+      };
 
-// 🔍 DEBUG: Add this function to help troubleshoot summary persistence
-window.debugSummaryState = () => {
-  console.log('🔍 SUMMARY STATE DEBUG REPORT:', {
-    timestamp: new Date().toISOString(),
-    
-    // Current React state
-    reactState: {
-      notebookId: notebook?.notebookId,
-      title: notebook?.title,
-      summaryTypesAvailable: notebook?.summaryTypesAvailable,
-      generatedSummariesCount: Object.keys(generatedSummaries || {}).length,
-      generatedSummariesTypes: Object.keys(generatedSummaries || {}),
-      generatedSummariesDetails: generatedSummaries
-    },
-    
-    // LocalStorage state
-    localStorage: (() => {
-      try {
-        const saved = localStorage.getItem('notebooks');
-        if (saved) {
-          const notebooks = JSON.parse(saved);
-          const current = notebooks.find(nb => 
-            nb.notebookId === notebook?.notebookId || nb.id === notebook?.notebookId
-          );
-          return {
-            hasNotebook: !!current,
-            hasSummaries: !!(current?.generatedSummaries),
-            summariesCount: Object.keys(current?.generatedSummaries || {}).length,
-            summaryTypes: Object.keys(current?.generatedSummaries || {}),
-            summariesDetails: current?.generatedSummaries
-          };
+    } catch (error) {
+      console.error('❌ Debug error:', error);
+      return { error: error.message };
+    }
+  };
+
+  // 🔧 QUICK FIX: Force update summaries from notebook response
+  window.forceUpdateSummaries = async () => {
+    const notebookId = notebook?.notebookId;
+
+    if (!notebookId) {
+      console.error('❌ No notebook loaded');
+      return;
+    }
+
+    try {
+      console.log('🔄 Force updating summaries...');
+
+      const freshNotebook = await notebookService.getNotebook(notebookId, {
+        includeSummaryContent: true
+      });
+
+      if (freshNotebook.summaries && Object.keys(freshNotebook.summaries).length > 0) {
+        console.log('✅ Found summaries, updating React state:', Object.keys(freshNotebook.summaries));
+        setGeneratedSummaries(freshNotebook.summaries);
+
+        // Also update notebook state
+        setNotebook(prev => ({
+          ...prev,
+          hasSummaries: true,
+          summariesCount: freshNotebook.summariesCount,
+          summaryTypes: Object.keys(freshNotebook.summaries)
+        }));
+
+        console.log('✅ React state updated with summaries');
+        return freshNotebook.summaries;
+      } else {
+        console.log('⚠️ No summaries found in fresh notebook response');
+        return {};
+      }
+
+    } catch (error) {
+      console.error('❌ Force update failed:', error);
+    }
+  };
+
+  // 🔧 UTILITY: Force refresh summaries from backend
+  window.forceRefreshSummaries = async () => {
+    if (!notebook?.notebookId) {
+      console.error('❌ No notebook loaded');
+      return;
+    }
+
+    try {
+      console.log('🔄 Force refreshing summaries from backend...');
+      const reloadedNotebook = await notebookService.getNotebook(notebook.notebookId, {
+        includeSummaryContent: true
+      });
+
+      console.log('✅ Reloaded notebook summaries:', {
+        summariesCount: reloadedNotebook.summariesCount,
+        summaryTypes: Object.keys(reloadedNotebook.summaries || {}),
+        summaries: reloadedNotebook.summaries
+      });
+
+      // Update the state with reloaded summaries
+      if (reloadedNotebook.summaries) {
+        setGeneratedSummaries(reloadedNotebook.summaries);
+        console.log('✅ Updated React state with reloaded summaries');
+      }
+
+      return reloadedNotebook.summaries;
+    } catch (error) {
+      console.error('❌ Force refresh failed:', error);
+    }
+  };
+
+  // 🔍 DEBUG: Add this function to help troubleshoot summary persistence
+  window.debugSummaryState = () => {
+    console.log('🔍 SUMMARY STATE DEBUG REPORT:', {
+      timestamp: new Date().toISOString(),
+
+      // Current React state
+      reactState: {
+        notebookId: notebook?.notebookId,
+        title: notebook?.title,
+        summaryTypesAvailable: notebook?.summaryTypesAvailable,
+        generatedSummariesCount: Object.keys(generatedSummaries || {}).length,
+        generatedSummariesTypes: Object.keys(generatedSummaries || {}),
+        generatedSummariesDetails: generatedSummaries
+      },
+
+      // LocalStorage state
+      localStorage: (() => {
+        try {
+          const saved = localStorage.getItem('notebooks');
+          if (saved) {
+            const notebooks = JSON.parse(saved);
+            const current = notebooks.find(nb =>
+              nb.notebookId === notebook?.notebookId || nb.id === notebook?.notebookId
+            );
+            return {
+              hasNotebook: !!current,
+              hasSummaries: !!(current?.generatedSummaries),
+              summariesCount: Object.keys(current?.generatedSummaries || {}).length,
+              summaryTypes: Object.keys(current?.generatedSummaries || {}),
+              summariesDetails: current?.generatedSummaries
+            };
+          }
+          return { hasData: false };
+        } catch (e) {
+          return { error: e.message };
         }
-        return { hasData: false };
-      } catch (e) {
-        return { error: e.message };
-      }
-    })(),
-    
-    // Check if notebook service method exists
-    notebookService: {
-      hasGetNotebook: typeof notebookService?.getNotebook === 'function',
-      hasGetNotebookWithSummaries: typeof notebookService?.getNotebookWithSummaries === 'function',
-      hasEnhanceSummariesWithContent: typeof notebookService?.enhanceSummariesWithContent === 'function'
-    }
-  });
-};
+      })(),
 
-// 🔧 UTILITY: Test function to manually reload summaries
-window.testSummaryReload = async () => {
-  if (!notebook?.notebookId) {
-    console.error('❌ No notebook loaded');
-    return;
-  }
-  
-  try {
-    console.log('🔄 Testing summary reload...');
-    const reloadedNotebook = await notebookService.getNotebook(notebook.notebookId, {
-      includeSummaryContent: true
+      // Check if notebook service method exists
+      notebookService: {
+        hasGetNotebook: typeof notebookService?.getNotebook === 'function',
+        hasGetNotebookWithSummaries: typeof notebookService?.getNotebookWithSummaries === 'function',
+        hasEnhanceSummariesWithContent: typeof notebookService?.enhanceSummariesWithContent === 'function'
+      }
     });
-    
-    console.log('✅ Reloaded notebook:', {
-      summariesCount: reloadedNotebook.summariesCount,
-      summaryTypes: Object.keys(reloadedNotebook.summaries || {}),
-      summaries: reloadedNotebook.summaries
-    });
-    
-    return reloadedNotebook;
-  } catch (error) {
-    console.error('❌ Reload test failed:', error);
-  }
-};
+  };
+
+  // 🔧 UTILITY: Test function to manually reload summaries
+  window.testSummaryReload = async () => {
+    if (!notebook?.notebookId) {
+      console.error('❌ No notebook loaded');
+      return;
+    }
+
+    try {
+      console.log('🔄 Testing summary reload...');
+      const reloadedNotebook = await notebookService.getNotebook(notebook.notebookId, {
+        includeSummaryContent: true
+      });
+
+      console.log('✅ Reloaded notebook:', {
+        summariesCount: reloadedNotebook.summariesCount,
+        summaryTypes: Object.keys(reloadedNotebook.summaries || {}),
+        summaries: reloadedNotebook.summaries
+      });
+
+      return reloadedNotebook;
+    } catch (error) {
+      console.error('❌ Reload test failed:', error);
+    }
+  };
 
   const handleBack = () => {
     navigate('/dashboard');
@@ -2321,18 +2319,12 @@ window.testSummaryReload = async () => {
     });
   };
 
-  // 🔄 UPDATED: Enhanced chat submit handler with availability check
+  // 🔧 UPDATED: Enhanced chat submit handler without availability restrictions
   const handleChatSubmit = async (e) => {
     e.preventDefault();
     if (!chatMessage.trim()) return;
 
-    // 🆕 NEW: Check if chat is available
-    const chatState = getChatState();
-    if (chatState.disabled) {
-      console.log('🚫 Chat blocked:', chatState.state);
-      return; // Silently block chat if not available
-    }
-
+    // 🔧 REMOVED: No more availability checks - chat is always enabled
     const userMessage = chatMessage.trim();
     setChatMessage('');
     setIsChatLoading(true);
@@ -2368,8 +2360,8 @@ window.testSummaryReload = async () => {
       let errorMsg = 'Sorry, I encountered an error. ';
       if (error.message.includes('login')) {
         errorMsg += 'Please make sure you\'re logged in.';
-      } else if (error.message.includes('vector database')) {
-        errorMsg += 'Please process your files first by generating a summary.';
+      } else if (error.message.includes('vector database') || error.message.includes('no_vector_db')) {
+        errorMsg += 'I can still help with general questions, but for specific answers about your content, try uploading files or generating summaries first.';
       } else {
         errorMsg += 'Please try again in a moment.';
       }
@@ -3576,13 +3568,13 @@ const styles = {
 
   // Right sidebar
   rightSidebar: {
-  width: '320px',
-  background: 'white',
-  borderLeft: '1px solid #e5e7eb',
-  display: 'flex',
-  flexDirection: 'column',
-  overflowY: 'auto'  // ✅ This allows vertical scrolling
-},
+    width: '320px',
+    background: 'white',
+    borderLeft: '1px solid #e5e7eb',
+    display: 'flex',
+    flexDirection: 'column',
+    overflowY: 'auto'  // ✅ This allows vertical scrolling
+  },
 
   // Notes section
   notesSection: {
@@ -3647,12 +3639,12 @@ const styles = {
 
   // 🎨 MODERN: Generated Summaries Section - UPDATED
   summariesSection: {
-  padding: '1.5rem',
-  borderTop: '1px solid #e5e7eb',
-  flex: '0 0 auto',  // ✅ Changed from flex: 1 to allow natural height
-  background: 'linear-gradient(135deg, #fafafa 0%, #f8fafc 100%)',
-  minHeight: 'fit-content'  // ✅ Added to ensure it fits content
-},
+    padding: '1.5rem',
+    borderTop: '1px solid #e5e7eb',
+    flex: '0 0 auto',  // ✅ Changed from flex: 1 to allow natural height
+    background: 'linear-gradient(135deg, #fafafa 0%, #f8fafc 100%)',
+    minHeight: 'fit-content'  // ✅ Added to ensure it fits content
+  },
   summariesHeader: {
     display: 'flex',
     alignItems: 'center',
