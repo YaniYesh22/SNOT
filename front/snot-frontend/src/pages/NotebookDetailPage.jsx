@@ -1113,8 +1113,8 @@ const renderGeneratedSummariesSection = () => {
                 </span>
                 <span style={{
                   ...styles.progressTypeStatus,
-                  color: typeProgress.status === 'completed' ? '#10b981' :
-                    typeProgress.status === 'generating' ? '#3b82f6' : '#6b7280'
+                  color: typeProgress.status === 'completed' ? ' #10b981' :
+                    typeProgress.status === 'generating' ? ' #3b82f6' : ' #6b7280'
                 }}>
                   {typeProgress.status === 'completed' ? '✓ Done' :
                     typeProgress.status === 'generating' ? '⚡ Generating...' :
@@ -1441,7 +1441,7 @@ const renderGeneratedSummariesSection = () => {
     return { validFiles, errors };
   };
 
-  // 🔄 UPDATED: Replace your notebook loading useEffect with this enhanced version
+  // 🔧 SIMPLIFIED: loadNotebookData compatible with Lambda response
 useEffect(() => {
   const loadNotebookData = async () => {
     if (!initialNotebookId || initialNotebookId === 'temp-loading') {
@@ -1460,33 +1460,19 @@ useEffect(() => {
 
     try {
       setIsLoading(true);
+      console.log('📖 Loading notebook:', initialNotebookId);
 
-      console.log('🔍 Fetching enhanced notebook data for:', initialNotebookId);
-
-      // 🆕 ENHANCED: Call getNotebook with summary content options
+      // 🔧 SIMPLIFIED: Use the fixed getNotebookWithSummaries method
       let notebookData;
       try {
-        // Try enhanced method first
-        if (notebookService.getNotebookWithSummaries) {
-          notebookData = await notebookService.getNotebookWithSummaries(initialNotebookId);
-        } else {
-          // Fallback to regular getNotebook with enhanced options
-          notebookData = await notebookService.getNotebook(initialNotebookId, {
-            includeSummaryContent: true,
-            includeDownloadUrls: true,
-            all: false
-          });
-        }
+        notebookData = await notebookService.getNotebookWithSummaries(initialNotebookId);
       } catch (enhancedError) {
-        console.warn('⚠️ Enhanced fetch failed, trying basic getNotebook:', enhancedError.message);
-        // Final fallback to basic getNotebook
+        console.warn('⚠️ Enhanced fetch failed, using basic getNotebook');
         notebookData = await notebookService.getNotebook(initialNotebookId);
       }
 
-      console.log('📋 Enhanced notebook data received:', notebookData);
-
       if (notebookData) {
-        /* ---------- core notebook object ---------- */
+        // 🔧 SIMPLIFIED: Direct mapping from Lambda response
         const formattedNotebook = {
           notebookId: notebookData.notebookId || initialNotebookId,
           title: notebookData.title || 'Untitled Notebook',
@@ -1504,207 +1490,41 @@ useEffect(() => {
           linksCount: notebookData.linksCount || 0,
           linksSummary: notebookData.linksSummary,
           
-          // 🆕 ENHANCED: Summary metadata from backend
-          summaryTypesAvailable: [],  // Will be populated below
-          summaryTypes: [],
+          // 🔧 SIMPLIFIED: Summary data directly from Lambda
+          summaryTypesAvailable: Object.keys(notebookData.summaries || {}),
+          summaryTypes: notebookData.summaryTypes || [],
           lastSummarization: notebookData.lastSummarization,
-          summarizationStatus: notebookData.summarizationStatus
+          summarizationStatus: notebookData.summarizationStatus,
+          hasSummaries: notebookData.hasSummaries || false
         };
 
-        console.log('✅ Formatted notebook:', formattedNotebook);
+        // 🔧 SIMPLIFIED: Use summaries directly from getNotebook response
+        const initialSummaries = notebookData.summaries || {};
 
-        /* ---------- 🆕 ENHANCED: Process summaries from enhanced API response ---------- */
-        const initialSummaries = {};
-        
-        // Method 1: Enhanced summaries from getNotebook
-        if (notebookData.summaries && Object.keys(notebookData.summaries).length > 0) {
-          console.log('📄 Processing enhanced summaries from API...', {
-            summariesCount: Object.keys(notebookData.summaries).length,
-            contentAvailable: notebookData.summaryContentAvailable,
-            lastFetched: notebookData.summaryLastFetched
-          });
-          
-          Object.entries(notebookData.summaries).forEach(([type, summaryData]) => {
-            console.log(`🔍 Processing enhanced summary ${type}:`, summaryData);
-            
-            // 🔧 FIXED: Accept summaries that either have a valid URL OR have content
-            const hasValidUrl = summaryData.url && 
-                               summaryData.url !== 'undefined' && 
-                               summaryData.url !== 'null' && 
-                               !summaryData.url.startsWith('#') &&
-                               (summaryData.url.startsWith('http') || summaryData.url.startsWith('s3://'));
-            
-            const hasContentPlaceholder = summaryData.url && 
-                                         typeof summaryData.url === 'string' && 
-                                         summaryData.url.startsWith('#content-');
-            
-            const hasContent = summaryData.content && 
-                              typeof summaryData.content === 'string' && 
-                              summaryData.content.length > 0;
-            
-            const isReady = summaryData.ready === true;
-            
-            // ✅ ACCEPT if: ready AND (has valid URL OR has content OR has content placeholder)
-            if (isReady && (hasValidUrl || hasContent || hasContentPlaceholder)) {
-              initialSummaries[type] = {
-                // Use the URL as-is (including placeholder URLs like #content-simple)
-                url: summaryData.url || `#content-${type}`,
-                ready: true,
-                generatedAt: summaryData.generatedAt || summaryData.lastModified || new Date().toISOString(),
-                
-                // Include all available data
-                downloadUrl: summaryData.downloadUrl || summaryData.url,
-                content: summaryData.content || null,
-                hasContent: !!summaryData.content,
-                preview: summaryData.preview || null,
-                
-                // Metadata
-                fileSize: summaryData.fileSize,
-                fileSizeFormatted: summaryData.fileSizeFormatted,
-                wordCount: summaryData.wordCount,
-                characterCount: summaryData.characterCount,
-                readingTime: summaryData.readingTime,
-                
-                // Source tracking
-                source: summaryData.source || 'enhanced_api',
-                fetchedAt: summaryData.fetchedAt || new Date().toISOString()
-              };
-              
-              console.log(`✅ Added enhanced summary ${type}:`, {
-                hasUrl: hasValidUrl,
-                hasContent: hasContent,
-                hasContentPlaceholder: hasContentPlaceholder,
-                urlUsed: summaryData.url || `#content-${type}`,
-                contentLength: summaryData.content?.length || 0
-              });
-            } else {
-              console.warn(`⚠️ Skipping enhanced ${type} summary:`, {
-                ready: isReady,
-                hasValidUrl: hasValidUrl,
-                hasContent: hasContent,
-                hasContentPlaceholder: hasContentPlaceholder,
-                url: summaryData.url,
-                contentLength: summaryData.content?.length || 0
-              });
-            }
-          });
+        console.log('✅ Notebook loaded with summaries:', {
+          title: formattedNotebook.title,
+          summariesCount: Object.keys(initialSummaries).length,
+          summaryTypes: Object.keys(initialSummaries),
+          hasSummaries: formattedNotebook.hasSummaries
+        });
 
-          console.log('📄 Loaded enhanced summaries:', {
-            count: Object.keys(initialSummaries).length,
-            types: Object.keys(initialSummaries),
-            withContent: Object.values(initialSummaries).filter(s => s.hasContent).length
-          });
-        }
-        
-        // Method 2: Legacy summaryLocations fallback
-        else if (notebookData.summaryLocations && Object.keys(notebookData.summaryLocations).length > 0) {
-          console.log('📄 Processing legacy summary locations...');
-          
-          Object.entries(notebookData.summaryLocations).forEach(([type, url]) => {
-            if (url && 
-                url !== 'undefined' && 
-                url !== 'null' && 
-                !url.startsWith('#') &&
-                (url.startsWith('http') || url.startsWith('s3://'))) {
-              
-              initialSummaries[type] = {
-                url,
-                ready: true,
-                generatedAt: notebookData.lastSummarization || notebookData.updatedAt || new Date().toISOString(),
-                downloadUrl: url,
-                content: null,
-                hasContent: false,
-                source: 'legacy_location'
-              };
-              
-              console.log(`✅ Added legacy summary ${type} with URL: ${url}`);
-            } else {
-              console.warn(`⚠️ Skipping legacy ${type} summary - invalid URL: ${url}`);
-            }
-          });
-          
-          console.log('📄 Loaded legacy summary locations:', initialSummaries);
-        }
-        
-        // Method 3: Check localStorage as final fallback
-        else {
-          console.log('📄 No API summaries found, checking localStorage...');
-          try {
-            const savedNotebooks = localStorage.getItem('notebooks');
-            if (savedNotebooks) {
-              const notebooksArray = JSON.parse(savedNotebooks);
-              const savedNotebook = notebooksArray.find(nb => 
-                nb.notebookId === initialNotebookId || nb.id === initialNotebookId
-              );
-              
-              if (savedNotebook && savedNotebook.generatedSummaries) {
-                Object.entries(savedNotebook.generatedSummaries).forEach(([type, data]) => {
-                  // 🔧 FIXED: Also accept content-only summaries from localStorage
-                  const hasValidUrl = data.url && 
-                                     data.url !== 'undefined' && 
-                                     data.url !== 'null' && 
-                                     !data.url.startsWith('#') &&
-                                     (data.url.startsWith('http') || data.url.startsWith('s3://'));
-                  
-                  const hasContent = data.content && 
-                                    typeof data.content === 'string' && 
-                                    data.content.length > 0;
-                  
-                  const hasContentPlaceholder = data.url && 
-                                               typeof data.url === 'string' && 
-                                               data.url.startsWith('#content-');
-                  
-                  if (hasValidUrl || hasContent || hasContentPlaceholder) {
-                    initialSummaries[type] = {
-                      ...data,
-                      url: data.url || `#content-${type}`,
-                      source: 'localStorage_fallback'
-                    };
-                    
-                    console.log(`✅ Restored summary ${type} from localStorage`);
-                  }
-                });
-                
-                console.log('📄 Loaded summaries from localStorage:', {
-                  count: Object.keys(initialSummaries).length,
-                  types: Object.keys(initialSummaries)
-                });
-              }
-            }
-          } catch (error) {
-            console.warn('⚠️ Error reading from localStorage:', error);
-          }
-        }
-
-        // Update states with validated summaries
+        // Update states
         setGeneratedSummaries(initialSummaries);
-        
-        // 🆕 NEW: Update notebook metadata with actual summary types
-        if (Object.keys(initialSummaries).length > 0) {
-          formattedNotebook.summaryTypesAvailable = Object.keys(initialSummaries);
-          formattedNotebook.summaryTypes = Object.keys(initialSummaries);
-          console.log('📝 Updated summaryTypesAvailable:', Object.keys(initialSummaries));
-        }
-
-        /* ---------- write state ---------- */
         setNotebook(formattedNotebook);
         setContent(formattedNotebook.content);
         setFiles(formattedNotebook.files);
         setLinks(formattedNotebook.links);
-        
-        // 🆕 NEW: Log final state for debugging
-        console.log('🎯 Final notebook state:', {
-          notebookId: formattedNotebook.notebookId,
+
+        console.log('✅ Notebook loaded:', {
           title: formattedNotebook.title,
           summariesCount: Object.keys(initialSummaries).length,
-          summaryTypes: Object.keys(initialSummaries),
-          summaryTypesAvailable: formattedNotebook.summaryTypesAvailable
+          summaryTypes: Object.keys(initialSummaries)
         });
       }
     } catch (error) {
-      console.error('❌ Error loading notebook:', error);
+      console.error('❌ Failed to load notebook:', error.message);
       
-      // 🆕 NEW: Try localStorage recovery on error
+      // 🔧 SIMPLIFIED: localStorage recovery
       if (initialNotebookId) {
         try {
           console.log('🔄 Attempting localStorage recovery...');
@@ -1716,18 +1536,21 @@ useEffect(() => {
             );
             
             if (savedNotebook) {
-              console.log('✅ Recovered notebook from localStorage');
+              console.log('✅ Recovered from localStorage');
               setNotebook(savedNotebook);
               setContent(savedNotebook.content || '');
               setFiles(savedNotebook.files || []);
               setLinks(savedNotebook.links || []);
+              
+              // Recover summaries if available
               if (savedNotebook.generatedSummaries) {
                 setGeneratedSummaries(savedNotebook.generatedSummaries);
+                console.log('✅ Recovered summaries from localStorage:', Object.keys(savedNotebook.generatedSummaries));
               }
             }
           }
         } catch (recoveryError) {
-          console.error('❌ localStorage recovery failed:', recoveryError);
+          console.error('❌ localStorage recovery failed:', recoveryError.message);
         }
       }
     } finally {
@@ -1970,82 +1793,118 @@ const handleSave = async () => {
   }
 };
 
-// 🔍 DEBUG: Add this function to verify summary type persistence
-window.debugSummaryTypes = () => {
-  console.log('🔍 SUMMARY TYPES DEBUG REPORT:', {
-    timestamp: new Date().toISOString(),
+// 🔍 DEBUG: Add this to your NotebookDetailPage component
+window.debugCurrentSummaryFormat = async () => {
+  const notebookId = notebook?.notebookId;
+  
+  if (!notebookId) {
+    console.error('❌ No notebook loaded');
+    return;
+  }
+  
+  try {
+    console.log('🔍 DEBUGGING CURRENT SUMMARY FORMAT:');
     
-    // Current React state
-    reactState: {
-      generatedSummariesCount: Object.keys(generatedSummaries || {}).length,
-      generatedSummariesTypes: Object.keys(generatedSummaries || {}),
-      generatedSummariesDetails: Object.entries(generatedSummaries || {}).map(([type, data]) => ({
-        type,
-        hasContent: !!data.content,
-        hasUrl: !!data.url,
-        url: data.url,
-        contentLength: data.content?.length || 0,
-        generatedAt: data.generatedAt,
-        source: data.source
-      }))
-    },
+    // Get raw response from current getNotebook
+    const response = await notebookService.getNotebook(notebookId, {
+      includeSummaryContent: true
+    });
     
-    // Notebook state
-    notebookState: {
-      summaryTypesAvailable: notebook?.summaryTypesAvailable || [],
-      lastSummarization: notebook?.lastSummarization
-    },
+    console.log('📡 Current getNotebook response:', response);
     
-    // LocalStorage state
-    localStorage: (() => {
-      try {
-        const saved = localStorage.getItem('notebooks');
-        if (saved) {
-          const notebooks = JSON.parse(saved);
-          const current = notebooks.find(nb => 
-            nb.notebookId === notebook?.notebookId || nb.id === notebook?.notebookId
-          );
-          if (current) {
-            return {
-              hasNotebook: true,
-              hasSummaries: !!(current?.generatedSummaries),
-              summariesCount: Object.keys(current?.generatedSummaries || {}).length,
-              summaryTypes: Object.keys(current?.generatedSummaries || {}),
-              summariesDetails: Object.entries(current?.generatedSummaries || {}).map(([type, data]) => ({
-                type,
-                hasContent: !!data.content,
-                hasUrl: !!data.url,
-                source: data.source
-              }))
-            };
+    // Check what we got
+    console.log('📋 Summary Analysis:');
+    console.log('  - summariesCount:', response.summariesCount);
+    console.log('  - summaryTypes:', response.summaryTypes);
+    console.log('  - hasSummaries:', response.hasSummaries);
+    console.log('  - summaries object:', response.summaries);
+    
+    if (response.summaries && Object.keys(response.summaries).length > 0) {
+      console.log('📄 Individual summaries:');
+      for (const [type, data] of Object.entries(response.summaries)) {
+        console.log(`  ${type}:`, {
+          hasUrl: !!data.url,
+          url: data.url,
+          hasContent: data.hasContent,
+          contentLength: data.content?.length || 0,
+          ready: data.ready,
+          source: data.source
+        });
+      }
+      
+      // Test fetching content for summaries without content
+      console.log('🔄 Testing content fetching...');
+      for (const [type, data] of Object.entries(response.summaries)) {
+        if (data.url && data.url.startsWith('s3://') && !data.hasContent) {
+          try {
+            console.log(`📥 Trying to fetch content for ${type}...`);
+            const content = await notebookService.fetchSummaryFromS3(data.url, notebookId, type);
+            console.log(`✅ Fetched ${type} content: ${content.length} characters`);
+          } catch (fetchError) {
+            console.log(`❌ Failed to fetch ${type} content:`, fetchError.message);
           }
         }
-        return { hasNotebook: false };
-      } catch (e) {
-        return { error: e.message };
       }
-    })()
-  });
+    } else {
+      console.log('📄 No summaries found in processed response');
+    }
+    
+    // Check React state
+    console.log('⚛️ Current React State:');
+    console.log('  - generatedSummaries:', generatedSummaries);
+    console.log('  - generatedSummaries count:', Object.keys(generatedSummaries || {}).length);
+    
+    return {
+      notebookResponse: response,
+      reactState: generatedSummaries,
+      hasSummariesInResponse: response.summariesCount > 0,
+      hasSummariesInReact: Object.keys(generatedSummaries || {}).length > 0
+    };
+    
+  } catch (error) {
+    console.error('❌ Debug error:', error);
+    return { error: error.message };
+  }
+};
+
+// 🔧 QUICK FIX: Force update summaries from notebook response
+window.forceUpdateSummaries = async () => {
+  const notebookId = notebook?.notebookId;
   
-  // Return summary for easy access
-  return {
-    reactSummaries: Object.keys(generatedSummaries || {}),
-    localStorageSummaries: (() => {
-      try {
-        const saved = localStorage.getItem('notebooks');
-        if (saved) {
-          const notebooks = JSON.parse(saved);
-          const current = notebooks.find(nb => 
-            nb.notebookId === notebook?.notebookId || nb.id === notebook?.notebookId
-          );
-          return Object.keys(current?.generatedSummaries || {});
-        }
-        return [];
-      } catch (e) {
-        return [];
-      }
-    })()
-  };
+  if (!notebookId) {
+    console.error('❌ No notebook loaded');
+    return;
+  }
+  
+  try {
+    console.log('🔄 Force updating summaries...');
+    
+    const freshNotebook = await notebookService.getNotebook(notebookId, {
+      includeSummaryContent: true
+    });
+    
+    if (freshNotebook.summaries && Object.keys(freshNotebook.summaries).length > 0) {
+      console.log('✅ Found summaries, updating React state:', Object.keys(freshNotebook.summaries));
+      setGeneratedSummaries(freshNotebook.summaries);
+      
+      // Also update notebook state
+      setNotebook(prev => ({
+        ...prev,
+        hasSummaries: true,
+        summariesCount: freshNotebook.summariesCount,
+        summaryTypes: Object.keys(freshNotebook.summaries)
+      }));
+      
+      console.log('✅ React state updated with summaries');
+      return freshNotebook.summaries;
+    } else {
+      console.log('⚠️ No summaries found in fresh notebook response');
+      return {};
+    }
+    
+  } catch (error) {
+    console.error('❌ Force update failed:', error);
+  }
 };
 
 // 🔧 UTILITY: Force refresh summaries from backend
