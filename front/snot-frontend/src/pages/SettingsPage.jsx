@@ -184,7 +184,7 @@ export default function SettingsPage() {
             </form>
           </section>
           
-          {/* Preferences Section */}
+          {/* Preferences Section
           <section style={styles.section}>
             <h2 style={styles.sectionTitle}>Preferences</h2>
             
@@ -223,7 +223,7 @@ export default function SettingsPage() {
                 </label>
               </div>
             </div>
-          </section>
+          </section> */}
         </div>
         
         {message.text && (

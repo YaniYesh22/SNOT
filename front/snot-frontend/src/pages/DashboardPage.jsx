@@ -398,7 +398,7 @@ const handleCardClick = (notebook) => {
                   Welcome back, {userName} 
                   <span style={styles.waveEmoji}>👋</span>
                 </h1>
-                <p style={styles.welcomeSubtitle}>Ready to capture your ideas?</p>
+                <p style={styles.welcomeSubtitle}>Ready to Learn?</p>
               </div>
             </header>
 

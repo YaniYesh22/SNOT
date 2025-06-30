@@ -1,3 +1,4 @@
+import { timeout } from 'd3';
 import authService from './AuthService';
 import axios from 'axios';
 
@@ -1593,15 +1594,11 @@ async enhanceSummariesWithContent(notebookId, summaries = {}, summaryLocations =
     }
   }
 
-  /**
-  * POST a YouTube link to Lambda for download-&-transcribe.
-  * Body required by Lambda:
-  * {
-  *   youtube_url : "https://…",
-  *   format      : "mp3",
-  *   notebook_id : "uuid-…",
-  *   user_email  : "someone@example.com"
-  * }
+/**
+  * POST a YouTube link for transcript extraction and processing.
+  * Simplified workflow:
+  * 1. Extract transcript from local endpoint
+  * 2. Send transcript to Lambda for processing
   */
   async addYouTubeLink(notebookId, youtubeUrl, format = 'mp3', quality = '720p') {
     if (!notebookId) throw new Error('notebookId is required');
@@ -1614,258 +1611,491 @@ async enhanceSummariesWithContent(notebookId, summaries = {}, summaryLocations =
     if (!userEmail?.includes('@')) throw new Error('Valid e-mail required');
 
     try {
-      console.log('=== Starting YouTube Download & Transcription ===');
+      console.log('=== Starting YouTube Transcript Extraction ===');
       console.log(`URL: ${youtubeUrl}`);
-      console.log(`Format: ${format}, Quality: ${quality}`);
       console.log(`Notebook: ${notebookId}, User: ${userEmail}`);
 
-      // Step 1: Start download
-      console.log('Step 1: Starting download...');
-      const downloadResult = await this.startYouTubeDownload(
-        youtubeUrl, format, quality, notebookId, userEmail, authHeaders
+      // Step 1: Extract transcript from local endpoint
+      console.log('Step 1: Extracting transcript...');
+      const transcriptData = await this.extractTranscript(youtubeUrl);
+
+      // Step 2: Send transcript to Lambda for processing
+      console.log('Step 2: Sending transcript to Lambda...');
+      const lambdaResult = await this.sendTranscriptToLambda(
+        transcriptData, 
+        notebookId, 
+        userEmail, 
+        authHeaders
       );
 
-      // Step 2: Wait for download completion
-      console.log('Step 2: Waiting for download completion...');
-      const downloadedFile = await this.waitForDownloadCompletion(
-        downloadResult.task_id, authHeaders
-      );
-
-      // Step 3: Start transcription
-      console.log('Step 3: Starting transcription...');
-      const transcriptionResult = await this.startTranscription(
-        downloadedFile.download_url, notebookId, userEmail, authHeaders
-      );
-
-      console.log('=== SUCCESS: YouTube processing completed ===');
+      console.log('=== SUCCESS: YouTube transcript processed ===');
       return {
         status: 'success',
-        message: 'YouTube video downloaded and transcribed successfully',
-        download_result: downloadedFile,
-        transcription_result: transcriptionResult
+        message: 'YouTube transcript extracted and processed successfully',
+        transcript_data: transcriptData,
+        lambda_result: lambdaResult
       };
 
     } catch (err) {
-      console.error('=== YouTube processing error ===', err);
+      console.error('=== YouTube transcript processing error ===', err);
       const apiMsg = err.response?.data || err.message;
       console.error('Error details:', apiMsg);
       throw err;
     }
   }
-  async startYouTubeDownload(youtubeUrl, format, quality, notebookId, userEmail, authHeaders) {
-    const downloadPayload = {
-      url: youtubeUrl,
-      format: format,
-      quality: quality,
-      notebook_id: notebookId,
-      user_email: userEmail
-    };
 
-    const headers = {
-      ...authHeaders,
-      'Content-Type': 'application/json',
-      'X-User-Email': userEmail
+  async extractTranscript(youtubeUrl) {
+    const payload = {
+      youtube_url: youtubeUrl,
+      timeout: 120000 // 2 minutes timeout for transcript extraction
     };
 
     try {
-      console.log('Sending download request...');
+      console.log('Calling local transcript extraction endpoint...');
       const response = await axios.post(
-        'http://ec2-3-68-76-19.eu-central-1.compute.amazonaws.com:8000/download/notebook',
-        downloadPayload,
+        'http://ec2-3-68-76-19.eu-central-1.compute.amazonaws.com:5000/extract',
+        payload,
         {
-          headers,
-          timeout: 30000, // 30 seconds for initial request
-          validateStatus: (status) => status < 500 // Accept 200-499
-        }
-      );
-
-      console.log('Download API response:', response.data);
-
-      if (!response.data.task_id) {
-        throw new Error('No task_id returned from download API');
-      }
-
-      return response.data;
-
-    } catch (error) {
-      console.error('Download start failed:', error);
-      throw new Error(`Failed to start download: ${error.message}`);
-    }
-  }
-
-  async waitForDownloadCompletion(taskId, authHeaders, maxAttempts = 60, intervalSeconds = 5) {
-    console.log(`Waiting for task completion: ${taskId}`);
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        console.log(`Checking status (attempt ${attempt}/${maxAttempts})...`);
-
-        const response = await axios.get(
-          `http://ec2-3-68-76-19.eu-central-1.compute.amazonaws.com:8000/status/${taskId}`,
-          {
-            headers: authHeaders,
-            timeout: 15000, // 15 seconds
-            validateStatus: (status) => status < 500
-          }
-        );
-
-        const statusData = response.data;
-        console.log(`Status: ${statusData.status}`, statusData);
-
-        if (statusData.status === 'completed') {
-          if (!statusData.download_url) {
-            throw new Error('Download completed but no download_url provided');
-          }
-
-          console.log('✅ Download completed!');
-          console.log(`S3 URL: ${statusData.download_url}`);
-          return statusData;
-        }
-
-        if (statusData.status === 'failed') {
-          throw new Error(`Download failed: ${statusData.message || 'Unknown error'}`);
-        }
-
-        if (statusData.status === 'error') {
-          throw new Error(`Download error: ${statusData.message || 'Unknown error'}`);
-        }
-
-        // Still in progress, wait and retry
-        console.log(`Status: ${statusData.status} - waiting ${intervalSeconds}s...`);
-        await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
-
-      } catch (error) {
-        if (error.response?.status === 404) {
-          throw new Error(`Task ${taskId} not found`);
-        }
-
-        if (attempt === maxAttempts) {
-          throw new Error(`Download did not complete after ${maxAttempts} attempts: ${error.message}`);
-        }
-
-        console.log(`Attempt ${attempt} failed, retrying...`, error.message);
-        await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
-      }
-    }
-
-    throw new Error(`Download timeout after ${maxAttempts * intervalSeconds} seconds`);
-  }
-
-  async startTranscription(s3Url, notebookId, userEmail, authHeaders) {
-    // Convert HTTPS S3 URL to S3 URI format
-    const s3Uri = this.convertHttpsToS3Uri(s3Url);
-
-    const transcriptionPayload = {
-      s3_path: s3Uri, // Now in s3://bucket/key format
-      notebook_id: notebookId,
-      user_email: userEmail,
-      transcribe_language: 'en-US',
-      job_name_prefix: 'youtube-transcribe'
-    };
-
-    const headers = {
-      ...authHeaders,
-      'Content-Type': 'application/json',
-      'X-User-Email': userEmail
-    };
-
-    try {
-      console.log('Sending transcription request...');
-      console.log('Original URL:', s3Url);
-      console.log('Converted S3 URI:', s3Uri);
-      console.log('Payload:', transcriptionPayload);
-
-      const response = await axios.post(
-        `${this.baseUrl}/youtube_video`,
-        transcriptionPayload,
-        {
-          headers,
-          timeout: 900000, // 15 minutes for transcription
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 120000, // 2 minutes timeout for transcript extraction
           validateStatus: (status) => status < 500
         }
       );
 
-      console.log('Transcription API response:', response.data);
+      console.log('Transcript extraction response:', response.data);
 
-      if (response.data.status === 'error') {
-        throw new Error(response.data.error || 'Transcription failed');
+      if (!response.data.success) {
+        throw new Error('Transcript extraction failed');
+      }
+
+      if (!response.data.transcript) {
+        throw new Error('No transcript returned from extraction service');
       }
 
       return response.data;
 
     } catch (error) {
-      console.error('Transcription failed:', error);
-      throw new Error(`Failed to transcribe: ${error.message}`);
+      console.error('Transcript extraction failed:', error);
+      
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error('Local transcript service is not running (localhost:5000)');
+      }
+      
+      throw new Error(`Failed to extract transcript: ${error.message}`);
     }
   }
 
-  // Add this helper method to convert HTTPS S3 URL to S3 URI
-  convertHttpsToS3Uri(httpsUrl) {
-    try {
-      console.log('Converting HTTPS URL to S3 URI:', httpsUrl);
-
-      // Parse the URL
-      const url = new URL(httpsUrl);
-
-      // Extract bucket name and key from different S3 URL formats
-      let bucket, key;
-
-      if (url.hostname.includes('.s3.amazonaws.com')) {
-        // Format: https://bucket-name.s3.amazonaws.com/path/to/file
-        bucket = url.hostname.split('.s3.amazonaws.com')[0];
-        key = url.pathname.substring(1); // Remove leading slash
-      } else if (url.hostname.includes('.s3.')) {
-        // Format: https://bucket-name.s3.region.amazonaws.com/path/to/file
-        bucket = url.hostname.split('.s3.')[0];
-        key = url.pathname.substring(1); // Remove leading slash
-      } else if (url.hostname === 's3.amazonaws.com') {
-        // Format: https://s3.amazonaws.com/bucket-name/path/to/file
-        const pathParts = url.pathname.substring(1).split('/');
-        bucket = pathParts[0];
-        key = pathParts.slice(1).join('/');
-      } else {
-        throw new Error('Unrecognized S3 URL format');
+  async sendTranscriptToLambda(transcriptData, notebookId, userEmail, authHeaders) {
+    // Prepare payload for Lambda
+    const lambdaPayload = {
+      transcript: transcriptData.transcript,
+      video_id: transcriptData.video_id,
+      notebook_id: notebookId,
+      user_email: userEmail,
+      auto_process: true,
+      metadata: {
+        // You can extract these from YouTube API or set defaults
+        title: `YouTube Video ${transcriptData.video_id}`,
+        duration: "00:00:00", // Default, could be extracted if needed
+        channel: "Unknown Channel", // Default, could be extracted if needed
+        upload_date: new Date().toISOString().split('T')[0],
+        views: 0, // Default, could be extracted if needed
+        likes: 0, // Default, could be extracted if needed
+        processing_time: transcriptData.processing_time,
+        transcript_length: transcriptData.transcript_length
       }
+    };
 
-      if (!bucket || !key) {
-        throw new Error('Could not extract bucket and key from URL');
-      }
+    const headers = {
+      ...authHeaders,
+      'Content-Type': 'application/json',
+      'X-User-Email': userEmail
+    };
 
-      const s3Uri = `s3://${bucket}/${key}`;
-      console.log(`Converted: ${httpsUrl} → ${s3Uri}`);
-
-      return s3Uri;
-
-    } catch (error) {
-      console.error('Failed to convert HTTPS URL to S3 URI:', error);
-      throw new Error(`Invalid S3 URL format: ${error.message}`);
-    }
-  }
-
-  // Optional: Add a method to check transcription status separately
-  async checkTranscriptionStatus(jobName) {
     try {
-      const authHeaders = await authService.getAuthHeaders();
-      const userEmail = authService.getUserData()?.email;
+      console.log('Sending transcript to Lambda...');
+      console.log('Lambda payload:', {
+        ...lambdaPayload,
+        transcript: `${lambdaPayload.transcript.substring(0, 100)}...` // Log only first 100 chars
+      });
 
       const response = await axios.post(
-        `${this.baseUrl}/transcription-status`, // If you create a separate endpoint
-        { job_name: jobName },
+        `${this.baseUrl}/put_transcript`, // Your Lambda endpoint
+        lambdaPayload,
         {
-          headers: {
-            ...authHeaders,
-            'Content-Type': 'application/json',
-            'X-User-Email': userEmail
-          }
+          headers,
+          timeout: 300000, // 5 minutes for Lambda processing
+          validateStatus: (status) => status < 500
         }
       );
 
+      console.log('Lambda response:', response.data);
+
+      if (response.data.status === 'error') {
+        throw new Error(response.data.error || 'Lambda processing failed');
+      }
+
       return response.data;
+
     } catch (error) {
-      console.error('Failed to check transcription status:', error);
-      throw error;
+      console.error('Lambda processing failed:', error);
+      throw new Error(`Failed to process transcript in Lambda: ${error.message}`);
     }
   }
+
+  // Optional: Enhanced version that fetches YouTube metadata
+  async addYouTubeLinkWithMetadata(notebookId, youtubeUrl, format = 'mp3', quality = '720p') {
+    if (!notebookId) throw new Error('notebookId is required');
+    if (!youtubeUrl) throw new Error('youtubeUrl is required');
+
+    const authHeaders = await authService.getAuthHeaders();
+    const userEmail = authService.getUserData()?.email;
+    if (!authHeaders?.Authorization) throw new Error('Login required');
+    if (!userEmail?.includes('@')) throw new Error('Valid e-mail required');
+
+    try {
+      console.log('=== Starting YouTube Transcript Extraction with Metadata ===');
+
+      // Step 1: Extract transcript
+      const transcriptData = await this.extractTranscript(youtubeUrl);
+
+      // Step 2: Optionally fetch YouTube metadata (if you have YouTube API access)
+      let metadata = {
+        title: `YouTube Video ${transcriptData.video_id}`,
+        duration: "00:00:00",
+        channel: "Unknown Channel",
+        upload_date: new Date().toISOString().split('T')[0],
+        views: 0,
+        likes: 0,
+        processing_time: transcriptData.processing_time,
+        transcript_length: transcriptData.transcript_length
+      };
+
+      // If you want to fetch real metadata, uncomment and implement:
+      // try {
+      //   const youtubeMetadata = await this.fetchYouTubeMetadata(transcriptData.video_id);
+      //   metadata = { ...metadata, ...youtubeMetadata };
+      // } catch (metaError) {
+      //   console.warn('Could not fetch YouTube metadata, using defaults:', metaError.message);
+      // }
+
+      // Step 3: Send to Lambda with enhanced metadata
+      const enhancedTranscriptData = {
+        ...transcriptData,
+        metadata
+      };
+
+      const lambdaResult = await this.sendTranscriptToLambda(
+        enhancedTranscriptData,
+        notebookId,
+        userEmail,
+        authHeaders
+      );
+
+      console.log('=== SUCCESS: YouTube transcript processed with metadata ===');
+      return {
+        status: 'success',
+        message: 'YouTube transcript extracted and processed successfully',
+        transcript_data: enhancedTranscriptData,
+        lambda_result: lambdaResult
+      };
+
+    } catch (err) {
+      console.error('=== YouTube transcript processing error ===', err);
+      throw err;
+    }
+  }
+
+  // Helper method to extract video ID from YouTube URL
+  extractVideoId(youtubeUrl) {
+    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    const match = youtubeUrl.match(regex);
+    return match ? match[1] : null;
+  }
+
+  // Optional: Method to fetch YouTube metadata (requires YouTube Data API)
+  // async fetchYouTubeMetadata(videoId) {
+  //   // Implement YouTube Data API call here if needed
+  //   // This would require API key and proper setup
+  //   throw new Error('YouTube metadata fetching not implemented');
+  // }
+
+
+  // /**
+  // * POST a YouTube link to Lambda for download-&-transcribe.
+  // * Body required by Lambda:
+  // * {
+  // *   youtube_url : "https://…",
+  // *   format      : "mp3",
+  // *   notebook_id : "uuid-…",
+  // *   user_email  : "someone@example.com"
+  // * }
+  // */
+  // async addYouTubeLink(notebookId, youtubeUrl, format = 'mp3', quality = '720p') {
+  //   if (!notebookId) throw new Error('notebookId is required');
+  //   if (!youtubeUrl) throw new Error('youtubeUrl is required');
+
+  //   /* ---------- auth ---------- */
+  //   const authHeaders = await authService.getAuthHeaders();
+  //   const userEmail = authService.getUserData()?.email;
+  //   if (!authHeaders?.Authorization) throw new Error('Login required');
+  //   if (!userEmail?.includes('@')) throw new Error('Valid e-mail required');
+
+  //   try {
+  //     console.log('=== Starting YouTube Download & Transcription ===');
+  //     console.log(`URL: ${youtubeUrl}`);
+  //     console.log(`Format: ${format}, Quality: ${quality}`);
+  //     console.log(`Notebook: ${notebookId}, User: ${userEmail}`);
+
+  //     // Step 1: Start download
+  //     console.log('Step 1: Starting download...');
+  //     const downloadResult = await this.startYouTubeDownload(
+  //       youtubeUrl, format, quality, notebookId, userEmail, authHeaders
+  //     );
+
+  //     // Step 2: Wait for download completion
+  //     console.log('Step 2: Waiting for download completion...');
+  //     const downloadedFile = await this.waitForDownloadCompletion(
+  //       downloadResult.task_id, authHeaders
+  //     );
+
+  //     // Step 3: Start transcription
+  //     console.log('Step 3: Starting transcription...');
+  //     const transcriptionResult = await this.startTranscription(
+  //       downloadedFile.download_url, notebookId, userEmail, authHeaders
+  //     );
+
+  //     console.log('=== SUCCESS: YouTube processing completed ===');
+  //     return {
+  //       status: 'success',
+  //       message: 'YouTube video downloaded and transcribed successfully',
+  //       download_result: downloadedFile,
+  //       transcription_result: transcriptionResult
+  //     };
+
+  //   } catch (err) {
+  //     console.error('=== YouTube processing error ===', err);
+  //     const apiMsg = err.response?.data || err.message;
+  //     console.error('Error details:', apiMsg);
+  //     throw err;
+  //   }
+  // }
+  // async startYouTubeDownload(youtubeUrl, format, quality, notebookId, userEmail, authHeaders) {
+  //   const downloadPayload = {
+  //     url: youtubeUrl,
+  //     format: format,
+  //     quality: quality,
+  //     notebook_id: notebookId,
+  //     user_email: userEmail
+  //   };
+
+  //   const headers = {
+  //     ...authHeaders,
+  //     'Content-Type': 'application/json',
+  //     'X-User-Email': userEmail
+  //   };
+
+  //   try {
+  //     console.log('Sending download request...');
+  //     const response = await axios.post(
+  //       'http://ec2-3-68-76-19.eu-central-1.compute.amazonaws.com:8000/download/notebook',
+  //       downloadPayload,
+  //       {
+  //         headers,
+  //         timeout: 30000, // 30 seconds for initial request
+  //         validateStatus: (status) => status < 500 // Accept 200-499
+  //       }
+  //     );
+
+  //     console.log('Download API response:', response.data);
+
+  //     if (!response.data.task_id) {
+  //       throw new Error('No task_id returned from download API');
+  //     }
+
+  //     return response.data;
+
+  //   } catch (error) {
+  //     console.error('Download start failed:', error);
+  //     throw new Error(`Failed to start download: ${error.message}`);
+  //   }
+  // }
+
+  // async waitForDownloadCompletion(taskId, authHeaders, maxAttempts = 60, intervalSeconds = 5) {
+  //   console.log(`Waiting for task completion: ${taskId}`);
+
+  //   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  //     try {
+  //       console.log(`Checking status (attempt ${attempt}/${maxAttempts})...`);
+
+  //       const response = await axios.get(
+  //         `http://ec2-3-68-76-19.eu-central-1.compute.amazonaws.com:8000/status/${taskId}`,
+  //         {
+  //           headers: authHeaders,
+  //           timeout: 15000, // 15 seconds
+  //           validateStatus: (status) => status < 500
+  //         }
+  //       );
+
+  //       const statusData = response.data;
+  //       console.log(`Status: ${statusData.status}`, statusData);
+
+  //       if (statusData.status === 'completed') {
+  //         if (!statusData.download_url) {
+  //           throw new Error('Download completed but no download_url provided');
+  //         }
+
+  //         console.log('✅ Download completed!');
+  //         console.log(`S3 URL: ${statusData.download_url}`);
+  //         return statusData;
+  //       }
+
+  //       if (statusData.status === 'failed') {
+  //         throw new Error(`Download failed: ${statusData.message || 'Unknown error'}`);
+  //       }
+
+  //       if (statusData.status === 'error') {
+  //         throw new Error(`Download error: ${statusData.message || 'Unknown error'}`);
+  //       }
+
+  //       // Still in progress, wait and retry
+  //       console.log(`Status: ${statusData.status} - waiting ${intervalSeconds}s...`);
+  //       await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+
+  //     } catch (error) {
+  //       if (error.response?.status === 404) {
+  //         throw new Error(`Task ${taskId} not found`);
+  //       }
+
+  //       if (attempt === maxAttempts) {
+  //         throw new Error(`Download did not complete after ${maxAttempts} attempts: ${error.message}`);
+  //       }
+
+  //       console.log(`Attempt ${attempt} failed, retrying...`, error.message);
+  //       await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+  //     }
+  //   }
+
+  //   throw new Error(`Download timeout after ${maxAttempts * intervalSeconds} seconds`);
+  // }
+
+  // async startTranscription(s3Url, notebookId, userEmail, authHeaders) {
+  //   // Convert HTTPS S3 URL to S3 URI format
+  //   const s3Uri = this.convertHttpsToS3Uri(s3Url);
+
+  //   const transcriptionPayload = {
+  //     s3_path: s3Uri, // Now in s3://bucket/key format
+  //     notebook_id: notebookId,
+  //     user_email: userEmail,
+  //     transcribe_language: 'en-US',
+  //     job_name_prefix: 'youtube-transcribe'
+  //   };
+
+  //   const headers = {
+  //     ...authHeaders,
+  //     'Content-Type': 'application/json',
+  //     'X-User-Email': userEmail
+  //   };
+
+  //   try {
+  //     console.log('Sending transcription request...');
+  //     console.log('Original URL:', s3Url);
+  //     console.log('Converted S3 URI:', s3Uri);
+  //     console.log('Payload:', transcriptionPayload);
+
+  //     const response = await axios.post(
+  //       `${this.baseUrl}/youtube_video`,
+  //       transcriptionPayload,
+  //       {
+  //         headers,
+  //         timeout: 900000, // 15 minutes for transcription
+  //         validateStatus: (status) => status < 500
+  //       }
+  //     );
+
+  //     console.log('Transcription API response:', response.data);
+
+  //     if (response.data.status === 'error') {
+  //       throw new Error(response.data.error || 'Transcription failed');
+  //     }
+
+  //     return response.data;
+
+  //   } catch (error) {
+  //     console.error('Transcription failed:', error);
+  //     throw new Error(`Failed to transcribe: ${error.message}`);
+  //   }
+  // }
+
+  // // Add this helper method to convert HTTPS S3 URL to S3 URI
+  // convertHttpsToS3Uri(httpsUrl) {
+  //   try {
+  //     console.log('Converting HTTPS URL to S3 URI:', httpsUrl);
+
+  //     // Parse the URL
+  //     const url = new URL(httpsUrl);
+
+  //     // Extract bucket name and key from different S3 URL formats
+  //     let bucket, key;
+
+  //     if (url.hostname.includes('.s3.amazonaws.com')) {
+  //       // Format: https://bucket-name.s3.amazonaws.com/path/to/file
+  //       bucket = url.hostname.split('.s3.amazonaws.com')[0];
+  //       key = url.pathname.substring(1); // Remove leading slash
+  //     } else if (url.hostname.includes('.s3.')) {
+  //       // Format: https://bucket-name.s3.region.amazonaws.com/path/to/file
+  //       bucket = url.hostname.split('.s3.')[0];
+  //       key = url.pathname.substring(1); // Remove leading slash
+  //     } else if (url.hostname === 's3.amazonaws.com') {
+  //       // Format: https://s3.amazonaws.com/bucket-name/path/to/file
+  //       const pathParts = url.pathname.substring(1).split('/');
+  //       bucket = pathParts[0];
+  //       key = pathParts.slice(1).join('/');
+  //     } else {
+  //       throw new Error('Unrecognized S3 URL format');
+  //     }
+
+  //     if (!bucket || !key) {
+  //       throw new Error('Could not extract bucket and key from URL');
+  //     }
+
+  //     const s3Uri = `s3://${bucket}/${key}`;
+  //     console.log(`Converted: ${httpsUrl} → ${s3Uri}`);
+
+  //     return s3Uri;
+
+  //   } catch (error) {
+  //     console.error('Failed to convert HTTPS URL to S3 URI:', error);
+  //     throw new Error(`Invalid S3 URL format: ${error.message}`);
+  //   }
+  // }
+
+  // // Optional: Add a method to check transcription status separately
+  // async checkTranscriptionStatus(jobName) {
+  //   try {
+  //     const authHeaders = await authService.getAuthHeaders();
+  //     const userEmail = authService.getUserData()?.email;
+
+  //     const response = await axios.post(
+  //       `${this.baseUrl}/transcription-status`, // If you create a separate endpoint
+  //       { job_name: jobName },
+  //       {
+  //         headers: {
+  //           ...authHeaders,
+  //           'Content-Type': 'application/json',
+  //           'X-User-Email': userEmail
+  //         }
+  //       }
+  //     );
+
+  //     return response.data;
+  //   } catch (error) {
+  //     console.error('Failed to check transcription status:', error);
+  //     throw error;
+  //   }
+  // }
 
   /**
    * 🆕 Start summary generation process (non-blocking)
