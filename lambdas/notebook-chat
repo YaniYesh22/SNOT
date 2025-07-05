@@ -1,12 +1,15 @@
-# ENHANCED CHAT LAMBDA WITH IMPROVED PROMPT AND SOURCE HANDLING
+# ENHANCED CHAT LAMBDA WITH IMPROVED PROMPT AND SOURCE HANDLING + CHAT SAVE
 import json
 import boto3
 import logging
 import numpy as np
 import time
 import hashlib
+import math
+import re
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
+import uuid
 
 # Configure logging
 logger = logging.getLogger()
@@ -35,6 +38,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         else:
             body = event
         
+        # Check if this is a save chat request
+        if body.get('action') == 'save_chat':
+            return save_chat_history(body)
+        
+        # Regular chat request
         email = body.get('email')
         notebook_uuid = body.get('notebook_uuid')
         question = body.get('question', '').strip()
@@ -111,6 +119,75 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
         return create_api_response(500, {'error': str(e)})
+
+def save_chat_history(body: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Save chat history to S3
+    """
+    try:
+        email = body.get('email')
+        notebook_uuid = body.get('notebook_uuid')
+        chat_history = body.get('chat_history', [])
+        chat_title = body.get('chat_title', '')
+        
+        if not all([email, notebook_uuid, chat_history]):
+            return create_api_response(400, {
+                'error': 'Missing required parameters',
+                'required': ['email', 'notebook_uuid', 'chat_history']
+            })
+        
+        # Generate chat ID and timestamp
+        chat_id = str(uuid.uuid4())
+        timestamp = datetime.now().isoformat()
+        
+        # Auto-generate title if not provided
+        if not chat_title:
+            chat_title = "Untitled Chat"
+            # Try to use first user message as title
+            for msg in chat_history:
+                if msg.get('role') == 'user' and msg.get('content'):
+                    chat_title = msg['content'][:50].strip()
+                    if len(msg['content']) > 50:
+                        chat_title += "..."
+                    break
+        
+        # Create chat data
+        chat_data = {
+            'chat_id': chat_id,
+            'notebook_uuid': notebook_uuid,
+            'email': email,
+            'title': chat_title,
+            'timestamp': timestamp,
+            'message_count': len(chat_history),
+            'chat_history': chat_history
+        }
+        
+        # Save to S3
+        bucket = 'smart-notebook-media'
+        key = f"notebooks/{email}/{notebook_uuid}/chats/{chat_id}.json"
+        
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=json.dumps(chat_data, default=str, indent=2),
+            ContentType='application/json'
+        )
+        
+        logger.info(f"Chat saved: {chat_id} for {email}/{notebook_uuid}")
+        
+        return create_api_response(200, {
+            'message': 'Chat saved successfully',
+            'chat_id': chat_id,
+            'title': chat_title,
+            'timestamp': timestamp
+        })
+        
+    except Exception as e:
+        logger.error(f"Error saving chat: {str(e)}")
+        return create_api_response(500, {
+            'error': 'Failed to save chat',
+            'details': str(e)
+        })
 
 def generate_chat_response_with_enhanced_retry(
     question: str, 
@@ -384,18 +461,18 @@ def build_context_from_chunks(chunks: List[Dict]) -> str:
     
     return '\n\n'.join(context_parts)
 
-# Keep all your existing rate limiting functions unchanged
 def check_user_rate_limit(email: str, notebook_uuid: str) -> Dict:
     """Check if user has exceeded rate limits"""
     user_key = f"{email}_{notebook_uuid}"
     current_time = datetime.now()
     
     try:
-        if rate_limit_table:
-            response = rate_limit_table.get_item(Key={'user_id': user_key})
-            user_data = response.get('Item', {})
-        else:
-            user_data = {}
+        if not rate_limit_table:
+            logger.warning("Rate limit table not available, allowing request")
+            return {'allowed': True}
+            
+        response = rate_limit_table.get_item(Key={'user_id': user_key})
+        user_data = response.get('Item', {})
         
         last_request_time = user_data.get('last_request_time')
         requests_this_minute = user_data.get('requests_this_minute', 0)
@@ -443,7 +520,7 @@ def check_user_rate_limit(email: str, notebook_uuid: str) -> Dict:
         return {'allowed': True}
         
     except Exception as e:
-        logger.error(f"Rate limit check error: {e}")
+        logger.warning(f"Rate limit check error (allowing request): {e}")
         return {'allowed': True}
 
 def record_request(email: str, notebook_uuid: str):
@@ -452,66 +529,70 @@ def record_request(email: str, notebook_uuid: str):
     current_time = datetime.now()
     
     try:
-        if rate_limit_table:
-            response = rate_limit_table.get_item(Key={'user_id': user_key})
-            user_data = response.get('Item', {})
+        if not rate_limit_table:
+            logger.warning("Rate limit table not available, skipping request recording")
+            return
             
-            minute_window = user_data.get('minute_window')
-            hour_window = user_data.get('hour_window')
-            
-            if minute_window:
-                minute_window = datetime.fromisoformat(minute_window)
-            if hour_window:
-                hour_window = datetime.fromisoformat(hour_window)
-            
-            requests_this_minute = user_data.get('requests_this_minute', 0)
-            requests_this_hour = user_data.get('requests_this_hour', 0)
-            
-            if not minute_window or (current_time - minute_window).total_seconds() >= 60:
-                requests_this_minute = 0
-                minute_window = current_time
-            
-            if not hour_window or (current_time - hour_window).total_seconds() >= 3600:
-                requests_this_hour = 0
-                hour_window = current_time
-            
-            requests_this_minute += 1
-            requests_this_hour += 1
-            
-            rate_limit_table.put_item(Item={
-                'user_id': user_key,
-                'last_request_time': current_time.isoformat(),
-                'requests_this_minute': requests_this_minute,
-                'requests_this_hour': requests_this_hour,
-                'minute_window': minute_window.isoformat(),
-                'hour_window': hour_window.isoformat(),
-                'ttl': int((current_time + timedelta(days=1)).timestamp())
-            })
+        response = rate_limit_table.get_item(Key={'user_id': user_key})
+        user_data = response.get('Item', {})
+        
+        minute_window = user_data.get('minute_window')
+        hour_window = user_data.get('hour_window')
+        
+        if minute_window:
+            minute_window = datetime.fromisoformat(minute_window)
+        if hour_window:
+            hour_window = datetime.fromisoformat(hour_window)
+        
+        requests_this_minute = user_data.get('requests_this_minute', 0)
+        requests_this_hour = user_data.get('requests_this_hour', 0)
+        
+        if not minute_window or (current_time - minute_window).total_seconds() >= 60:
+            requests_this_minute = 0
+            minute_window = current_time
+        
+        if not hour_window or (current_time - hour_window).total_seconds() >= 3600:
+            requests_this_hour = 0
+            hour_window = current_time
+        
+        requests_this_minute += 1
+        requests_this_hour += 1
+        
+        rate_limit_table.put_item(Item={
+            'user_id': user_key,
+            'last_request_time': current_time.isoformat(),
+            'requests_this_minute': requests_this_minute,
+            'requests_this_hour': requests_this_hour,
+            'minute_window': minute_window.isoformat(),
+            'hour_window': hour_window.isoformat(),
+            'ttl': int((current_time + timedelta(days=1)).timestamp())
+        })
     except Exception as e:
-        logger.error(f"Failed to record request: {e}")
+        logger.warning(f"Failed to record request (continuing anyway): {e}")
 
 def get_rate_limit_status(email: str, notebook_uuid: str) -> Dict:
     """Get current rate limit status for user"""
     user_key = f"{email}_{notebook_uuid}"
     
     try:
-        if rate_limit_table:
-            response = rate_limit_table.get_item(Key={'user_id': user_key})
-            user_data = response.get('Item', {})
+        if not rate_limit_table:
+            return {'requests_this_minute': 0, 'requests_this_hour': 0}
             
-            return {
-                'requests_this_minute': user_data.get('requests_this_minute', 0),
-                'requests_this_hour': user_data.get('requests_this_hour', 0),
-                'limits': {
-                    'per_minute': 10,
-                    'per_hour': 50,
-                    'min_interval': 3
-                }
+        response = rate_limit_table.get_item(Key={'user_id': user_key})
+        user_data = response.get('Item', {})
+        
+        return {
+            'requests_this_minute': user_data.get('requests_this_minute', 0),
+            'requests_this_hour': user_data.get('requests_this_hour', 0),
+            'limits': {
+                'per_minute': 10,
+                'per_hour': 50,
+                'min_interval': 3
             }
+        }
     except Exception as e:
-        logger.error(f"Failed to get rate limit status: {e}")
-    
-    return {'requests_this_minute': 0, 'requests_this_hour': 0}
+        logger.warning(f"Failed to get rate limit status: {e}")
+        return {'requests_this_minute': 0, 'requests_this_hour': 0}
 
 class RateLimitException(Exception):
     pass
@@ -527,24 +608,195 @@ def load_vector_db(bucket: str, email: str, notebook_uuid: str) -> Dict:
         return {}
 
 def search_relevant_chunks(vector_db: Dict, question: str) -> List[Dict]:
-    """Search for relevant chunks"""
+    """Search for relevant chunks using vector similarity with adaptive thresholds and matching preprocessing"""
     chunks = vector_db.get('chunks', [])
     if not chunks:
         return []
     
+    try:
+        # Generate embedding for the question using the same model and preprocessing as processing
+        question_embedding = generate_question_embedding(question)
+        
+        # Debug: Log question for context
+        logger.info(f"Question: '{question[:100]}{'...' if len(question) > 100 else ''}'")
+        
+        # Calculate similarity scores for all chunks
+        all_chunks_with_scores = []
+        
+        for chunk in chunks:
+            chunk_embedding = chunk.get('embedding')
+            if not chunk_embedding:
+                logger.warning(f"Chunk missing embedding, skipping: {chunk.get('id', 'unknown')}")
+                continue
+                
+            # Verify embedding format
+            if not isinstance(chunk_embedding, list) or len(chunk_embedding) != 1024:
+                logger.warning(f"Invalid embedding format for chunk {chunk.get('id', 'unknown')}: length {len(chunk_embedding) if isinstance(chunk_embedding, list) else 'not list'}")
+                continue
+                
+            # Calculate cosine similarity
+            similarity_score = calculate_cosine_similarity(question_embedding, chunk_embedding)
+            chunk_copy = chunk.copy()
+            chunk_copy['similarity_score'] = similarity_score
+            all_chunks_with_scores.append(chunk_copy)
+        
+        if not all_chunks_with_scores:
+            logger.error("No valid chunks with embeddings found!")
+            return []
+        
+        # Sort by similarity score (highest first)
+        all_chunks_with_scores.sort(key=lambda x: x['similarity_score'], reverse=True)
+        
+        # Adaptive threshold based on the data
+        max_score = all_chunks_with_scores[0]['similarity_score']
+        avg_score = sum(chunk['similarity_score'] for chunk in all_chunks_with_scores) / len(all_chunks_with_scores)
+        
+        # Use dynamic threshold: either 50% of max score or 0.05, whichever is higher
+        dynamic_threshold = max(max_score * 0.5, 0.05)
+        
+        logger.info(f"Similarity scores - Max: {max_score:.3f}, Avg: {avg_score:.3f}, Dynamic threshold: {dynamic_threshold:.3f}")
+        
+        # Apply dynamic threshold
+        relevant_chunks = [chunk for chunk in all_chunks_with_scores if chunk['similarity_score'] >= dynamic_threshold]
+        
+        # Always ensure we have at least 3 chunks, but no more than 8
+        if len(relevant_chunks) < 3:
+            relevant_chunks = all_chunks_with_scores[:3]
+            logger.info(f"Using top 3 chunks (below threshold)")
+        elif len(relevant_chunks) > 8:
+            relevant_chunks = relevant_chunks[:8]
+            logger.info(f"Limited to top 8 chunks")
+        else:
+            logger.info(f"Using {len(relevant_chunks)} chunks above threshold")
+        
+        # Preview top chunks for debugging
+        for i, chunk in enumerate(relevant_chunks[:3]):
+            chunk_preview = chunk.get('text', '')[:100].replace('\n', ' ')
+            metadata = chunk.get('metadata', {})
+            source_name = metadata.get('filename', 'Unknown')
+            logger.info(f"Top chunk {i+1} (score: {chunk['similarity_score']:.3f}) from {source_name}: {chunk_preview}...")
+        
+        logger.info(f"Found {len(relevant_chunks)} relevant chunks using vector similarity")
+        return relevant_chunks
+        
+    except Exception as e:
+        logger.error(f"Error in vector similarity search: {str(e)}")
+        # Fallback to keyword search
+        return search_relevant_chunks_fallback(vector_db, question)
+
+def generate_question_embedding(question: str) -> List[float]:
+    """Generate embedding for the question using Amazon Titan Text Embeddings V2 with matching preprocessing"""
+    try:
+        # Apply the SAME preprocessing as in the document processor
+        # Clean text just like in create_chunks function
+        cleaned_question = re.sub(r'\s+', ' ', question).strip()
+        
+        # Limit text length for embedding model (same as document processor)
+        text_for_embedding = cleaned_question[:8000] if len(cleaned_question) > 8000 else cleaned_question
+        
+        request_body = {"inputText": text_for_embedding}
+        
+        response = bedrock_client.invoke_model(
+            modelId='amazon.titan-embed-text-v2:0',
+            body=json.dumps(request_body),
+            contentType='application/json'
+        )
+        
+        response_body = json.loads(response['body'].read())
+        embedding = response_body['embedding']
+        
+        logger.info(f"Generated question embedding (length: {len(embedding)}) for cleaned text: '{text_for_embedding[:50]}{'...' if len(text_for_embedding) > 50 else ''}'")
+        return embedding
+        
+    except Exception as e:
+        logger.error(f"Error generating question embedding: {str(e)}")
+        raise Exception(f"Failed to generate question embedding: {str(e)}")
+
+def calculate_cosine_similarity(embedding1: List[float], embedding2: List[float]) -> float:
+    """Calculate cosine similarity between two embeddings"""
+    try:
+        # Convert to numpy arrays for easier calculation
+        vec1 = np.array(embedding1)
+        vec2 = np.array(embedding2)
+        
+        # Calculate dot product
+        dot_product = np.dot(vec1, vec2)
+        
+        # Calculate magnitudes
+        magnitude1 = np.linalg.norm(vec1)
+        magnitude2 = np.linalg.norm(vec2)
+        
+        # Avoid division by zero
+        if magnitude1 == 0 or magnitude2 == 0:
+            return 0.0
+        
+        # Calculate cosine similarity
+        cosine_similarity = dot_product / (magnitude1 * magnitude2)
+        
+        return float(cosine_similarity)
+        
+    except Exception as e:
+        logger.error(f"Error calculating cosine similarity: {str(e)}")
+        return 0.0
+
+def search_relevant_chunks_fallback(vector_db: Dict, question: str) -> List[Dict]:
+    """Enhanced fallback keyword search with better scoring"""
+    logger.warning("Using enhanced fallback keyword search")
+    
+    chunks = vector_db.get('chunks', [])
+    if not chunks:
+        return []
+    
+    # Clean and prepare question for keyword matching (same as document processor)
+    question_clean = re.sub(r'\s+', ' ', question.lower()).strip()
+    question_words = set(question_clean.split())
+    
+    # Remove very common words that don't add meaning
+    stop_words = {'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now', 'old', 'see', 'two', 'who', 'with', 'from', 'they', 'know', 'want', 'been', 'good', 'much', 'some', 'time', 'very', 'when', 'come', 'here', 'just', 'like', 'long', 'make', 'many', 'over', 'such', 'take', 'than', 'them', 'well', 'were'}
+    meaningful_words = question_words - stop_words
+    
+    if not meaningful_words:
+        meaningful_words = question_words  # Fallback to all words if no meaningful words found
+    
     relevant_chunks = []
-    question_lower = question.lower()
     
     for chunk in chunks:
-        text_lower = chunk.get('text', '').lower()
-        score = sum(1 for word in question_lower.split() if word in text_lower)
-        if score > 0:
+        text_clean = re.sub(r'\s+', ' ', chunk.get('text', '').lower()).strip()
+        text_words = set(text_clean.split())
+        
+        # Calculate multiple similarity metrics
+        common_words = meaningful_words.intersection(text_words)
+        
+        if common_words:
+            # Score based on multiple factors
+            word_overlap_score = len(common_words) / len(meaningful_words)
+            text_length_bonus = min(len(text_clean) / 1000, 0.1)  # Small bonus for longer texts
+            
+            # Look for exact phrase matches
+            phrase_bonus = 0
+            if len(question_clean) > 10:
+                if question_clean in text_clean:
+                    phrase_bonus = 0.5
+            
+            total_score = word_overlap_score + text_length_bonus + phrase_bonus
+            
             chunk_copy = chunk.copy()
-            chunk_copy['similarity_score'] = score
+            chunk_copy['similarity_score'] = total_score
             relevant_chunks.append(chunk_copy)
     
     relevant_chunks.sort(key=lambda x: x['similarity_score'], reverse=True)
-    return relevant_chunks[:8]  # Return more chunks for better context
+    
+    # Log fallback search results
+    if relevant_chunks:
+        logger.info(f"Fallback search found {len(relevant_chunks)} chunks, top score: {relevant_chunks[0]['similarity_score']:.3f}")
+    else:
+        logger.warning("No chunks found even with fallback search")
+        # Ultimate fallback: return first 3 chunks
+        relevant_chunks = chunks[:3]
+        for i, chunk in enumerate(relevant_chunks):
+            chunk['similarity_score'] = 0.01  # Very low score to indicate poor match
+    
+    return relevant_chunks[:8]
 
 def create_api_response(status_code: int, body: Dict) -> Dict:
     """Create API response"""
