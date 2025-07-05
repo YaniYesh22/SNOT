@@ -1,0 +1,812 @@
+import json
+import boto3
+import logging
+from typing import Dict, Any, List
+from datetime import datetime
+import time
+import random
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Initialize AWS clients
+s3_client = boto3.client('s3')
+bedrock_client = boto3.client('bedrock-runtime')
+dynamodb = boto3.resource('dynamodb')
+
+# DynamoDB table for notebook metadata - make this configurable
+TABLE_NAME = 'NotebooksTable'  # Change this to your actual table name
+
+try:
+    notebooks_table = dynamodb.Table(TABLE_NAME)
+    # Test if table exists
+    notebooks_table.table_status
+    logger.info(f"Connected to DynamoDB table: {TABLE_NAME}")
+except Exception as e:
+    logger.warning(f"Could not connect to DynamoDB table '{TABLE_NAME}': {e}")
+    logger.warning("DynamoDB updates will be skipped. Summary metadata will only be saved to S3.")
+    notebooks_table = None
+
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Summarizer using stored content from S3 with improved rate limiting and metadata updates
+    """
+    try:
+        # Parse input
+        bucket = event.get('bucket', 'smart-notebook-media')
+        email = event.get('email')
+        notebook_uuid = event.get('notebook_uuid')
+        summary_types = event.get('summary_types', ['academic', 'casual', 'simple'])
+        
+        if not email or not notebook_uuid:
+            raise ValueError("Missing email or notebook_uuid")
+        
+        logger.info(f"Generating summaries for notebook: {notebook_uuid}")
+        
+        # Load processed content or vector database
+        content = load_notebook_content(bucket, email, notebook_uuid)
+        
+        if not content:
+            return {
+                'statusCode': 400,
+                'body': {'error': 'No content found. Please process your notebook files first.'}
+            }
+        
+        # Generate summaries with proper rate limiting
+        summaries = {}
+        successful_summaries = []
+        failed_summaries = []
+        
+        for i, summary_type in enumerate(summary_types):
+            try:
+                logger.info(f"Generating {summary_type} summary ({i+1}/{len(summary_types)})...")
+                
+                # Progressive delay to avoid throttling
+                if i > 0:
+                    delay = 10 + (i * 5)  # 10, 15, 20 seconds between requests
+                    logger.info(f"Waiting {delay} seconds before next request...")
+                    time.sleep(delay)
+                
+                summary = generate_summary_with_retry(content, summary_type)
+                summaries[summary_type] = summary
+                successful_summaries.append(summary_type)
+                
+                # Save to S3
+                summary_key = f"notebooks/{email}/{notebook_uuid}/summaries/{summary_type}_summary.txt"
+                save_summary_to_s3(bucket, summary_key, summary)
+                
+                logger.info(f"Successfully generated {summary_type} summary")
+                
+            except Exception as e:
+                error_msg = f"Error: {str(e)}"
+                logger.error(f"Error generating {summary_type} summary: {str(e)}")
+                summaries[summary_type] = error_msg
+                failed_summaries.append(summary_type)
+        
+        # Create combined report only if we have successful summaries
+        if successful_summaries:
+            try:
+                combined_summary = create_combined_report(summaries, notebook_uuid, email)
+                combined_key = f"notebooks/{email}/{notebook_uuid}/summaries/combined_summary.txt"
+                save_summary_to_s3(bucket, combined_key, combined_summary)
+            except Exception as e:
+                logger.error(f"Error creating combined report: {str(e)}")
+        
+        # Create metadata
+        metadata = {
+            'notebook_uuid': notebook_uuid,
+            'user_email': email,
+            'generated_at': datetime.now().isoformat(),
+            'summary_types_requested': summary_types,
+            'summary_types_successful': successful_summaries,
+            'summary_types_failed': failed_summaries,
+            'content_length': len(content),
+            'method': 'S3-based RAG with rate limiting'
+        }
+        
+        metadata_key = f"notebooks/{email}/{notebook_uuid}/summaries/metadata.json"
+        save_metadata_to_s3(bucket, metadata_key, metadata)
+        
+        # UPDATE NOTEBOOK METADATA IN DYNAMODB AND S3
+        try:
+            update_notebook_metadata(bucket, email, notebook_uuid, successful_summaries, failed_summaries)
+        except Exception as e:
+            logger.error(f"Failed to update notebook metadata: {str(e)}")
+            # Don't fail the whole operation if metadata update fails
+        
+        return {
+            'statusCode': 200,
+            'body': {
+                'message': f'Summary generation completed. {len(successful_summaries)} successful, {len(failed_summaries)} failed.',
+                'notebook_uuid': notebook_uuid,
+                'summaries_generated': successful_summaries,
+                'summaries_failed': failed_summaries,
+                'content_length': len(content),
+                'summary_locations': {
+                    summary_type: f"s3://{bucket}/notebooks/{email}/{notebook_uuid}/summaries/{summary_type}_summary.txt"
+                    for summary_type in successful_summaries
+                },
+                'errors': [f"{summary_type}: {summaries[summary_type]}" for summary_type in failed_summaries],
+                'retry_suggestion': "If some summaries failed due to throttling, try running again in a few minutes." if failed_summaries else None,
+                'metadata_updated': True
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'body': {'error': str(e)}
+        }
+
+def update_notebook_metadata(bucket: str, email: str, notebook_uuid: str, 
+                           successful_summaries: List[str], failed_summaries: List[str]):
+    """
+    Update notebook metadata in both DynamoDB and S3 with summary information
+    """
+    timestamp = datetime.now().isoformat()
+    
+    # Prepare summary metadata
+    summary_metadata = {
+        'summary_types_available': successful_summaries,
+        'summary_types_failed': failed_summaries,
+        'last_summarization_date': timestamp,
+        'summarization_status': 'completed' if successful_summaries and not failed_summaries else 'partial' if successful_summaries else 'failed',
+        'total_summaries_available': len(successful_summaries)
+    }
+    
+    # 1. UPDATE DYNAMODB METADATA
+    if notebooks_table:
+        try:
+            # Use your existing key structure
+            pk = f"USER#{email}"
+            sk = f"NOTEBOOK#{notebook_uuid}"
+            
+            logger.info(f"Attempting to update DynamoDB with PK: {pk}, SK: {sk}")
+            
+            # First, let's try to get the item to see if it exists
+            try:
+                get_response = notebooks_table.get_item(
+                    Key={
+                        'PK': pk,
+                        'SK': sk
+                    }
+                )
+                
+                if 'Item' not in get_response:
+                    logger.warning(f"Item not found in DynamoDB with PK: {pk}, SK: {sk}")
+                    logger.warning("Skipping DynamoDB update - item doesn't exist")
+                    # Skip DynamoDB update if item doesn't exist
+                    return
+                else:
+                    logger.info("Found existing item in DynamoDB, proceeding with update")
+                    
+            except Exception as get_error:
+                logger.error(f"Error checking if item exists: {str(get_error)}")
+                # If we can't check, skip the DynamoDB update
+                return
+            
+            # Prepare update expression for your schema
+            update_expression = "SET "
+            update_parts = []
+            expression_values = {}
+            
+            # Add summary types as DynamoDB list format
+            if successful_summaries:
+                update_parts.append("summary_types_available = :summary_types")
+                expression_values[':summary_types'] = successful_summaries
+                
+            if failed_summaries:
+                update_parts.append("summary_types_failed = :failed_types") 
+                expression_values[':failed_types'] = failed_summaries
+            else:
+                update_parts.append("summary_types_failed = :failed_types")
+                expression_values[':failed_types'] = []
+            
+            update_parts.extend([
+                "last_summarization_date = :timestamp",
+                "summarization_status = :status", 
+                "total_summaries_available = :total_summaries",
+                "has_summaries = :has_summaries",
+                "updatedAt = :updated_at"
+            ])
+            
+            expression_values.update({
+                ':timestamp': timestamp,
+                ':status': summary_metadata['summarization_status'],
+                ':total_summaries': len(successful_summaries),
+                ':has_summaries': len(successful_summaries) > 0,
+                ':updated_at': timestamp
+            })
+            
+            # Add summary locations
+            if successful_summaries:
+                update_parts.append("summary_locations = :locations")
+                expression_values[':locations'] = {
+                    summary_type: f"s3://{bucket}/notebooks/{email}/{notebook_uuid}/summaries/{summary_type}_summary.txt"
+                    for summary_type in successful_summaries
+                }
+            
+            update_expression += ", ".join(update_parts)
+            
+            logger.info(f"Update expression: {update_expression}")
+            logger.info(f"Expression values keys: {list(expression_values.keys())}")
+            
+            # Update DynamoDB using your key structure
+            update_response = notebooks_table.update_item(
+                Key={
+                    'PK': pk,
+                    'SK': sk
+                },
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_values,
+                ReturnValues="UPDATED_NEW"
+            )
+            
+            logger.info(f"Successfully updated DynamoDB metadata for notebook {notebook_uuid}")
+            logger.info(f"Updated attributes: {list(update_response.get('Attributes', {}).keys())}")
+            
+        except Exception as e:
+            logger.error(f"Failed to update DynamoDB metadata: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
+            
+            # Log more details for debugging
+            if "ResourceNotFoundException" in str(e):
+                logger.error("Table or item not found. Check:")
+                logger.error(f"1. Table name: 'notebooks'")
+                logger.error(f"2. Keys: PK='{pk}', SK='{sk}'")
+                logger.error("3. Ensure the notebook record exists before running summarization")
+            
+            # Continue to S3 update even if DynamoDB fails
+    else:
+        logger.warning("DynamoDB table connection not available, skipping DynamoDB update")
+    
+    # 2. UPDATE S3 NOTEBOOK METADATA (this part works fine)
+    try:
+        # Load existing notebook metadata from S3
+        metadata_key = f"notebooks/{email}/{notebook_uuid}/metadata.json"
+        
+        try:
+            # Try to load existing metadata
+            response = s3_client.get_object(Bucket=bucket, Key=metadata_key)
+            existing_metadata = json.loads(response['Body'].read().decode('utf-8'))
+        except s3_client.exceptions.NoSuchKey:
+            # Create new metadata if doesn't exist
+            existing_metadata = {
+                'notebook_uuid': notebook_uuid,
+                'user_email': email,
+                'created_at': timestamp,
+                'processing_history': []
+            }
+        except Exception as e:
+            logger.warning(f"Error loading existing metadata, creating new: {str(e)}")
+            existing_metadata = {
+                'notebook_uuid': notebook_uuid,
+                'user_email': email,
+                'created_at': timestamp,
+                'processing_history': []
+            }
+        
+        # Update metadata with summary information
+        existing_metadata.update({
+            'summary_types_available': successful_summaries,
+            'summary_types_failed': failed_summaries,
+            'last_summarization_date': timestamp,
+            'summarization_status': summary_metadata['summarization_status'],
+            'total_summaries_available': len(successful_summaries),
+            'has_summaries': len(successful_summaries) > 0,
+            'last_updated': timestamp
+        })
+        
+        # Add summary locations
+        if successful_summaries:
+            existing_metadata['summary_locations'] = {
+                summary_type: f"s3://{bucket}/notebooks/{email}/{notebook_uuid}/summaries/{summary_type}_summary.txt"
+                for summary_type in successful_summaries
+            }
+        
+        # Add to processing history
+        if 'processing_history' not in existing_metadata:
+            existing_metadata['processing_history'] = []
+        
+        processing_event = {
+            'type': 'summarization',
+            'timestamp': timestamp,
+            'status': summary_metadata['summarization_status'],
+            'summary_types_generated': successful_summaries,
+            'summary_types_failed': failed_summaries,
+            'total_summaries': len(successful_summaries)
+        }
+        
+        existing_metadata['processing_history'].append(processing_event)
+        
+        # Keep only last 10 processing events
+        existing_metadata['processing_history'] = existing_metadata['processing_history'][-10:]
+        
+        # Save updated metadata to S3
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=metadata_key,
+            Body=json.dumps(existing_metadata, indent=2, default=str).encode('utf-8'),
+            ContentType='application/json',
+            Metadata={
+                'notebook-uuid': notebook_uuid,
+                'user-email': email,
+                'last-updated': timestamp,
+                'has-summaries': str(len(successful_summaries) > 0),
+                'summary-types': ','.join(successful_summaries) if successful_summaries else 'none',
+                'summarization-status': summary_metadata['summarization_status']
+            }
+        )
+        
+        logger.info(f"Successfully updated S3 metadata for notebook {notebook_uuid}")
+        
+    except Exception as e:
+        logger.error(f"Failed to update S3 metadata: {str(e)}")
+
+def generate_summary_with_retry(content: str, summary_type: str, max_retries: int = 3) -> str:
+    """Generate comprehensive summary with exponential backoff retry logic"""
+    
+    # Increase content length limit for more comprehensive summaries
+    max_content_length = 150000  # Increased from 80k to 150k
+    if len(content) > max_content_length:
+        # Try to truncate at sentence boundaries to maintain context
+        truncated_content = content[:max_content_length]
+        last_period = truncated_content.rfind('.')
+        if last_period > max_content_length * 0.8:  # If we find a period in the last 20%
+            content = truncated_content[:last_period + 1]
+        else:
+            content = truncated_content
+        content += "\n\n[Content truncated due to length limitations...]"
+    
+    prompts = {
+        'academic': f"""You are an expert academic researcher and writer. Provide a comprehensive, scholarly summary of the following notebook content. Your summary should be substantial, detailed, and follow academic standards.
+
+**REQUIREMENTS:**
+- Length: 1500-2500 words minimum
+- Structure: Use clear academic sections with headers
+- Depth: Provide thorough analysis, not just surface-level points
+- Citations: Reference specific examples from the content
+- Critical thinking: Include analysis, implications, and connections
+
+**STRUCTURE YOUR RESPONSE WITH THESE SECTIONS:**
+
+## Executive Summary
+Provide a concise overview (200-300 words) of the entire content, highlighting the most critical findings and contributions.
+
+## Key Findings and Main Arguments
+- Identify and elaborate on all major findings, theories, or arguments presented
+- Explain the significance of each finding in detail
+- Discuss how findings relate to each other and build upon one another
+- Include specific data points, statistics, or evidence mentioned
+
+## Methodological Analysis
+- Detail any research methods, approaches, or frameworks discussed
+- Analyze the strengths and limitations of methodologies presented
+- Discuss experimental designs, data collection methods, or analytical approaches
+- Comment on the validity and reliability of methods used
+
+## Theoretical Framework and Conceptual Foundation
+- Identify and explain all theoretical concepts, models, or frameworks
+- Discuss how theories are applied or tested in the content
+- Explain the historical context or evolution of concepts presented
+- Connect theories to practical applications or real-world scenarios
+
+## Evidence and Supporting Data
+- Comprehensively review all evidence, data, statistics, and examples provided
+- Analyze the quality and reliability of evidence presented
+- Discuss patterns, trends, or relationships revealed in the data
+- Comment on any gaps in evidence or areas needing further research
+
+## Critical Analysis and Evaluation
+- Provide objective assessment of arguments and evidence quality
+- Identify strengths and weaknesses in reasoning or methodology
+- Discuss potential biases, limitations, or alternative interpretations
+- Evaluate the credibility and significance of sources or references
+
+## Implications and Applications
+- Discuss theoretical implications for the field or discipline
+- Analyze practical applications and real-world relevance
+- Consider policy implications or recommendations for practice
+- Explore potential future research directions or questions raised
+
+## Connections and Cross-References
+- Link concepts across different sections of the content
+- Identify relationships between different topics or themes
+- Connect findings to broader academic literature or current debates
+- Highlight interdisciplinary connections where relevant
+
+## Conclusion and Future Directions
+- Synthesize all major points into coherent conclusions
+- Assess the overall contribution and significance of the content
+- Suggest areas for future investigation or development
+- Provide final scholarly assessment of the work's value
+
+**Content to Analyze:**
+{content}
+
+Please provide your comprehensive academic summary following the structure above:""",
+
+        'casual': f"""You are a skilled science communicator and educational content creator. Transform this complex notebook content into an engaging, comprehensive summary that anyone can understand and enjoy reading.
+
+**REQUIREMENTS:**
+- Length: 1200-2000 words minimum
+- Tone: Conversational, friendly, and engaging
+- Style: Use storytelling elements, analogies, and real-world examples
+- Accessibility: Explain complex concepts in simple terms
+- Engagement: Make it interesting and relatable
+
+**STRUCTURE YOUR RESPONSE WITH THESE SECTIONS:**
+
+## What's This All About? (The Big Picture)
+Start with an engaging hook that explains why this content matters in everyday terms. Use analogies or real-world comparisons to make complex ideas accessible.
+
+## The Main Story (Key Points Explained Simply)
+Break down the most important findings or concepts using:
+- Simple, jargon-free language
+- Everyday analogies and metaphors
+- Concrete examples people can relate to
+- Step-by-step explanations for complex processes
+- "Think of it like..." comparisons
+
+## The Evidence (Why Should We Believe This?)
+Explain the supporting evidence in accessible terms:
+- What kind of research or data supports these points?
+- Use concrete numbers and statistics, but explain what they mean
+- Share interesting case studies or examples
+- Explain research methods in simple terms (e.g., "Scientists tested this by...")
+
+## Real-World Impact (Why This Matters to You)
+- How does this affect everyday life?
+- What practical applications exist now or in the future?
+- Share specific examples of how this knowledge is being used
+- Discuss benefits, risks, or considerations for regular people
+- Include success stories or interesting applications
+
+## The Controversy Corner (Different Viewpoints)
+- Are there debates or disagreements about these topics?
+- Present different perspectives fairly and simply
+- Explain why experts might disagree
+- Help readers understand the nuances without taking sides
+
+## Cool Facts and Surprising Discoveries
+- Highlight the most interesting, surprising, or counterintuitive findings
+- Share "Did you know?" type facts
+- Include historical context or evolution of ideas
+- Mention breakthrough moments or paradigm shifts
+
+## What's Next? (Future Possibilities)
+- Where is this field heading?
+- What exciting developments might we see?
+- How might this change our lives in 5-10 years?
+- What questions still need answers?
+
+## The Bottom Line (Key Takeaways)
+Summarize the most important points readers should remember:
+- 5-7 key takeaways in simple language
+- Practical advice or actionable insights
+- Final thoughts on significance and relevance
+
+**Content to Summarize:**
+{content}
+
+Please provide your engaging, comprehensive casual summary following the structure above:""",
+
+        'simple': f"""Create a comprehensive yet accessible bullet-point summary of this notebook content. Focus on clarity, organization, and completeness while maintaining simplicity.
+
+**REQUIREMENTS:**
+- Length: 800-1200 words minimum
+- Format: Organized bullet points with clear categories
+- Style: Simple, direct language
+- Coverage: Include all major topics and subtopics
+- Structure: Logical flow from general to specific
+
+**ORGANIZE YOUR SUMMARY USING THIS STRUCTURE:**
+
+## 📋 OVERVIEW
+• Main topic/subject of the content
+• Primary purpose or objective
+• Scope and key areas covered
+• Why this information is important
+
+## 🎯 MAIN FINDINGS & KEY POINTS
+• [List all major discoveries, conclusions, or main arguments]
+• [Include specific data, statistics, or measurements where mentioned]
+• [Note any surprising or counterintuitive findings]
+• [Highlight breakthrough insights or new information]
+
+## 🔬 METHODS & APPROACHES
+• Research methods or analytical approaches used
+• Data sources and collection methods
+• Tools, technologies, or frameworks applied
+• Study design or experimental setup (if applicable)
+
+## 📊 EVIDENCE & DATA
+• Key statistics, numbers, or measurements
+• Important graphs, charts, or data visualizations described
+• Case studies or examples provided
+• Comparison data or benchmarks mentioned
+
+## 💡 CONCEPTS & THEORIES
+• Main theories or conceptual frameworks discussed
+• Key definitions and terminology
+• Models or systems explained
+• Cause-and-effect relationships identified
+
+## ⚖️ PROS & CONS / STRENGTHS & LIMITATIONS
+• Advantages or benefits identified
+• Disadvantages, risks, or limitations noted
+• Strengths of methods or approaches
+• Areas needing improvement or further research
+
+## 🌍 REAL-WORLD APPLICATIONS
+• Practical uses or applications mentioned
+• Industries or fields where this applies
+• Current implementations or success stories
+• Potential future uses or developments
+
+## 🔗 CONNECTIONS & RELATIONSHIPS
+• How different concepts connect to each other
+• Relationships between variables or factors
+• Cross-references to related topics or fields
+• Dependencies or prerequisites identified
+
+## ❓ UNRESOLVED QUESTIONS & FUTURE RESEARCH
+• Open questions that need further investigation
+• Areas where more research is needed
+• Suggested next steps or future directions
+• Gaps in current knowledge or understanding
+
+## 📝 KEY TAKEAWAYS
+• [5-8 most important points to remember]
+• [Essential facts everyone should know]
+• [Critical insights or conclusions]
+• [Practical implications for readers]
+
+## 📚 ADDITIONAL CONTEXT
+• Historical background or evolution of ideas
+• Comparison with previous research or methods
+• Relevant context or background information
+• Related fields or disciplines involved
+
+**Content to Summarize:**
+{content}
+
+Please provide your comprehensive bullet-point summary following the structure above:"""
+    }
+    
+    for attempt in range(max_retries):
+        try:
+            request_body = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 8000,  # Increased from 3000 to 8000 for longer summaries
+                "messages": [{"role": "user", "content": prompts[summary_type]}],
+                "temperature": 0.2,  # Reduced for more consistent, focused output
+                "top_p": 0.85       # Slightly reduced for better coherence
+            }
+            
+            response = bedrock_client.invoke_model(
+                modelId='anthropic.claude-3-sonnet-20240229-v1:0',
+                body=json.dumps(request_body),
+                contentType='application/json'
+            )
+            
+            response_body = json.loads(response['body'].read())
+            summary = response_body['content'][0]['text'].strip()
+            
+            # Validate summary length and quality
+            word_count = len(summary.split())
+            min_words = {'academic': 1200, 'casual': 800, 'simple': 600}
+            
+            if word_count < min_words.get(summary_type, 500):
+                logger.warning(f"{summary_type} summary only {word_count} words, may be too short")
+            
+            logger.info(f"Successfully generated {summary_type} summary on attempt {attempt + 1}")
+            logger.info(f"Summary length: {word_count} words, {len(summary)} characters")
+            return summary
+            
+        except Exception as e:
+            error_str = str(e)
+            logger.warning(f"Attempt {attempt + 1} failed for {summary_type} summary: {error_str}")
+            
+            # Check if it's a throttling error
+            if any(keyword in error_str.lower() for keyword in ["throttling", "too many requests", "rate limit", "quota"]):
+                if attempt < max_retries - 1:
+                    # Exponential backoff with jitter for throttling
+                    base_delay = (2 ** attempt) * 8  # Increased base delay
+                    jitter = random.uniform(2, 8)    # Increased jitter range
+                    delay = base_delay + jitter
+                    logger.info(f"Throttling detected, waiting {delay:.1f} seconds before retry...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise Exception(f"Failed after {max_retries} attempts due to throttling: {error_str}")
+            
+            # Check if it's a content length error
+            elif any(keyword in error_str.lower() for keyword in ["content too long", "input too large", "token limit"]):
+                if attempt < max_retries - 1:
+                    # Reduce content length and retry
+                    current_length = len(content)
+                    new_length = int(current_length * 0.7)  # Reduce by 30%
+                    logger.info(f"Content too long, reducing from {current_length} to {new_length} characters")
+                    
+                    truncated_content = content[:new_length]
+                    last_period = truncated_content.rfind('.')
+                    if last_period > new_length * 0.8:
+                        content = truncated_content[:last_period + 1]
+                    else:
+                        content = truncated_content
+                    content += "\n\n[Content truncated due to length limitations...]"
+                    
+                    # Update the prompt with new content
+                    prompts[summary_type] = prompts[summary_type].replace(
+                        f"Content to Analyze:\n{content.split('[Content truncated')[0]}", 
+                        f"Content to Analyze:\n{content}"
+                    )
+                    continue
+                else:
+                    raise Exception(f"Content too long even after truncation: {error_str}")
+            
+            else:
+                # Non-retryable error
+                logger.error(f"Non-retryable error on attempt {attempt + 1}: {error_str}")
+                if attempt < max_retries - 1:
+                    # Still retry once for unexpected errors
+                    delay = 3 + random.uniform(1, 3)
+                    logger.info(f"Unexpected error, waiting {delay:.1f} seconds before retry...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise Exception(f"Non-retryable error: {error_str}")
+    
+    raise Exception(f"Failed to generate {summary_type} summary after {max_retries} attempts")
+
+def load_notebook_content(bucket: str, email: str, notebook_uuid: str) -> str:
+    """Load content from processed files or vector database"""
+    try:
+        # Try to load from vector database first (more organized)
+        try:
+            vector_db_key = f"notebooks/{email}/{notebook_uuid}/vectors/vector_db.json"
+            response = s3_client.get_object(Bucket=bucket, Key=vector_db_key)
+            vector_db = json.loads(response['Body'].read().decode('utf-8'))
+            
+            # Extract content from chunks, organized by file
+            files_content = {}
+            for chunk in vector_db.get('chunks', []):
+                metadata = chunk.get('metadata', {})
+                filename = metadata.get('filename', 'Unknown')
+                content_type = metadata.get('content_type', 'files')
+                
+                # Skip error chunks
+                if chunk['text'].startswith('[Error') or chunk['text'].startswith('[Unsupported'):
+                    continue
+                
+                if filename not in files_content:
+                    files_content[filename] = {
+                        'type': content_type,
+                        'chunks': []
+                    }
+                
+                files_content[filename]['chunks'].append(chunk['text'])
+            
+            # Format content
+            formatted_content = []
+            for filename, file_data in files_content.items():
+                if not file_data['chunks']:  # Skip files with no valid content
+                    continue
+                    
+                content_type_label = "VIDEO TRANSCRIPTION" if file_data['type'] == 'transcribe' else "DOCUMENT"
+                formatted_content.append(f"\n=== {content_type_label}: {filename} ===\n")
+                formatted_content.append('\n\n'.join(file_data['chunks']))
+                formatted_content.append('\n' + '='*60 + '\n')
+            
+            content = '\n'.join(formatted_content)
+            logger.info(f"Loaded content from vector database: {len(content)} characters from {len(files_content)} files")
+            return content
+            
+        except Exception as vector_error:
+            logger.info(f"Vector database not found, trying processed files: {str(vector_error)}")
+            
+            # Fallback to processed files
+            prefix = f"notebooks/{email}/{notebook_uuid}/processed/"
+            response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
+            
+            if 'Contents' not in response:
+                return ""
+            
+            content_parts = []
+            for obj in response['Contents']:
+                if obj['Key'].endswith('.txt'):
+                    try:
+                        file_response = s3_client.get_object(Bucket=bucket, Key=obj['Key'])
+                        content = file_response['Body'].read().decode('utf-8')
+                        
+                        filename = obj['Key'].split('/')[-1]
+                        content_parts.append(f"\n--- {filename} ---\n{content}\n")
+                        
+                    except Exception as e:
+                        logger.warning(f"Error reading {obj['Key']}: {str(e)}")
+                        continue
+            
+            content = '\n'.join(content_parts)
+            logger.info(f"Loaded content from processed files: {len(content)} characters")
+            return content
+            
+    except Exception as e:
+        logger.error(f"Error loading notebook content: {str(e)}")
+        return ""
+
+def create_combined_report(summaries: Dict[str, str], notebook_uuid: str, email: str) -> str:
+    """Create combined report with all summaries"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+    
+    successful_summaries = {k: v for k, v in summaries.items() if not v.startswith('Error')}
+    failed_summaries = {k: v for k, v in summaries.items() if v.startswith('Error')}
+    
+    report_parts = [
+        f"# Comprehensive Summary Report",
+        f"**Notebook ID:** {notebook_uuid}",
+        f"**User:** {email}",
+        f"**Generated:** {timestamp}",
+        f"**Method:** S3-based RAG with Rate Limiting",
+        f"**Successful Summaries:** {', '.join(successful_summaries.keys()) if successful_summaries else 'None'}",
+        f"**Failed Summaries:** {', '.join(failed_summaries.keys()) if failed_summaries else 'None'}",
+        "\n" + "=" * 60 + "\n"
+    ]
+    
+    # Add each successful summary
+    for summary_type, content in successful_summaries.items():
+        report_parts.extend([
+            f"## {summary_type.title()} Summary",
+            "",
+            content,
+            "\n" + "-" * 40 + "\n"
+        ])
+    
+    # Add error section if there were failures
+    if failed_summaries:
+        report_parts.extend([
+            "## Generation Errors",
+            "",
+            "The following summaries could not be generated:",
+            ""
+        ])
+        for summary_type, error in failed_summaries.items():
+            report_parts.append(f"- **{summary_type.title()}:** {error}")
+        
+        report_parts.append("\n" + "-" * 40 + "\n")
+    
+    return "\n".join(report_parts)
+
+def save_summary_to_s3(bucket: str, key: str, summary: str):
+    """Save summary to S3 with metadata"""
+    timestamp = datetime.now().isoformat()
+    summary_type = key.split('/')[-1].replace('_summary.txt', '')
+    
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=summary.encode('utf-8'),
+        ContentType='text/plain',
+        Metadata={
+            'summary-type': summary_type,
+            'created-at': timestamp,
+            'content-type': 'summary',
+            'word-count': str(len(summary.split())),
+            'character-count': str(len(summary))
+        }
+    )
+
+def save_metadata_to_s3(bucket: str, key: str, metadata: Dict):
+    """Save metadata to S3"""
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=json.dumps(metadata, indent=2, default=str).encode('utf-8'),
+        ContentType='application/json',
+        Metadata={
+            'content-type': 'metadata',
+            'created-at': datetime.now().isoformat()
+        }
+    )
