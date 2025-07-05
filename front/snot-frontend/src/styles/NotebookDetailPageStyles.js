@@ -1,5 +1,4 @@
-// NotebookDetailPageStyles.js
-
+// Complete Updated NotebookDetailPageStyles.js with Reading Mode
 export const styles = {
   // Main container styles
   container: {
@@ -9,21 +8,22 @@ export const styles = {
   },
   main: {
     flexGrow: 1,
-    background: '#fafafa',
+    background: '#f8fafc',
     display: 'flex',
     flexDirection: 'column',
     height: '100vh'
   },
 
-  // Header styles
+  // Original Header styles (for normal mode)
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '1rem 2rem',
     background: 'white',
-    borderBottom: '1px solid #e5e7eb',
-    flexShrink: 0
+    borderBottom: '1px solid #e2e8f0',
+    flexShrink: 0,
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
   },
   headerLeft: {
     flex: 1
@@ -36,44 +36,116 @@ export const styles = {
   backButton: {
     background: 'none',
     border: 'none',
-    color: '#6b7280',
+    color: '#64748b',
     fontSize: '0.875rem',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     gap: '0.5rem',
     padding: '0.5rem',
-    borderRadius: '6px',
-    transition: 'background-color 0.2s ease'
+    borderRadius: '8px',
+    transition: 'all 0.2s ease'
   },
   saveButton: {
     padding: '0.5rem 1rem',
-    background: '#4f46e5',
+    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
     color: 'white',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '8px',
     fontWeight: '500',
     cursor: 'pointer',
     fontSize: '0.875rem',
-    transition: 'all 0.2s ease'
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 4px rgba(79, 70, 229, 0.3)'
   },
   savingButton: {
-    background: '#9ca3af',
-    cursor: 'not-allowed'
+    background: '#94a3b8',
+    cursor: 'not-allowed',
+    boxShadow: 'none'
   },
 
-  // Toolbar Section Styles
-  toolbarSection: {
+  // NEW: Minimal Reading Mode Header Styles
+  readingModeHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '0.75rem 2rem',
     background: 'white',
-    borderBottom: '1px solid #e5e7eb',
-    padding: '1rem 2rem',
+    borderBottom: '1px solid #e2e8f0',
+    flexShrink: 0,
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+  },
+
+  readingHeaderLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem'
+  },
+
+  readingBackButton: {
+    background: 'none',
+    border: 'none',
+    color: '#64748b',
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.375rem',
+    padding: '0.375rem 0.5rem',
+    borderRadius: '6px',
+    transition: 'all 0.2s ease',
+    fontWeight: '500'
+  },
+
+  readingNotebookTitle: {
+    fontSize: '1.1rem',
+    fontWeight: '600',
+    color: '#0f172a',
+    margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem'
+  },
+
+  readingNotebookIcon: {
+    width: '20px',
+    height: '20px',
+    color: '#4f46e5'
+  },
+
+  readingHeaderRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem'
+  },
+
+  readingInfoItem: {
+    fontSize: '0.75rem',
+    color: '#64748b',
+    background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+    padding: '0.25rem 0.5rem',
+    borderRadius: '6px',
+    fontWeight: '500',
+    border: '1px solid #e2e8f0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.25rem'
+  },
+
+  // Enhanced Toolbar Section Styles
+  toolbarSection: {
+    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+    borderBottom: '2px solid #e2e8f0',
+    padding: '1.25rem 2rem',
     display: 'flex',
     alignItems: 'center',
     gap: '3rem',
-    flexShrink: 0
+    flexShrink: 0,
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    position: 'relative'
   },
 
-  // Title Container (moved to toolbar)
+  // Title Container
   titleContainer: {
     display: 'flex',
     alignItems: 'center',
@@ -94,14 +166,14 @@ export const styles = {
     fontWeight: '700',
     padding: '0',
     outline: 'none',
-    color: ' #111827',
+    color: '#0f172a',
     background: 'transparent',
     width: '100%',
     fontFamily: 'inherit',
     lineHeight: '1.2'
   },
 
-  // Modern Toolbar Styles
+  // Enhanced Toolbar Styles
   toolbar: {
     display: 'flex',
     alignItems: 'center',
@@ -111,13 +183,33 @@ export const styles = {
   toolbarActionsSection: {
     display: 'flex',
     alignItems: 'center',
-    gap: '1rem'
+    gap: '1rem',
+    padding: '0.5rem 1rem',
+    background: 'rgba(255, 255, 255, 0.7)',
+    borderRadius: '12px',
+    border: '1px solid rgba(79, 70, 229, 0.1)'
   },
   sectionLabel: {
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    color: ' #374151',
-    whiteSpace: 'nowrap'
+    fontSize: '0.95rem',
+    fontWeight: '800',
+    color: '#1f2937',
+    whiteSpace: 'nowrap',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    opacity: 1,
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem'
+  },
+  sectionIcon: {
+    width: '18px',
+    height: '18px',
+    color: '#4f46e5',
+    flexShrink: 0
   },
   toolbarButtons: {
     display: 'flex',
@@ -128,28 +220,30 @@ export const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '0.5rem',
-    padding: '0.625rem 1rem',
-    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+    padding: '0.75rem 1.25rem',
+    background: 'white',
     color: '#374151',
-    border: '1px solid #e2e8f0',
+    border: '2px solid #e5e7eb',
     borderRadius: '10px',
-    fontWeight: '500',
+    fontWeight: '600',
     cursor: 'pointer',
     fontSize: '0.875rem',
     transition: 'all 0.2s ease',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.06)',
+    position: 'relative'
   },
   toolbarButtonIcon: {
     flexShrink: 0,
     opacity: 0.8
   },
   toolbarButtonLoading: {
-    background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)',
+    background: '#f3f4f6',
     cursor: 'not-allowed',
-    color: '#6b7280'
+    color: '#9ca3af',
+    border: '2px solid #e5e7eb'
   },
 
-  // Horizontal Notebook Info Styles
+  // Notebook Info Section
   notebookInfoSection: {
     display: 'flex',
     alignItems: 'center',
@@ -160,7 +254,7 @@ export const styles = {
     alignItems: 'center',
     gap: '1rem',
     fontSize: '0.875rem',
-    color: '#6b7280'
+    color: '#64748b'
   },
   notebookInfoItem: {
     display: 'flex',
@@ -168,25 +262,30 @@ export const styles = {
     gap: '0.25rem'
   },
   notebookInfoLabel: {
-    fontWeight: '500'
+    fontWeight: '600',
+    color: '#374151'
   },
   notebookInfoValue: {
     color: '#4f46e5',
-    fontWeight: '600'
+    fontWeight: '700',
+    background: 'linear-gradient(135deg, #ede9fe, #e0e7ff)',
+    padding: '0.125rem 0.375rem',
+    borderRadius: '6px',
+    fontSize: '0.875rem'
   },
   notebookInfoSeparator: {
-    color: '#d1d5db'
+    color: '#cbd5e1'
   },
 
-  // Summary container and dropdown
+  // Summary and Link Dropdowns
   summaryContainer: {
     position: 'relative'
   },
   summarySpinner: {
     width: '16px',
     height: '16px',
-    border: '2px solid rgba(55, 65, 81, 0.3)',
-    borderTop: '2px solid #374151',
+    border: '2px solid rgba(71, 85, 105, 0.3)',
+    borderTop: '2px solid #475569',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
     flexShrink: 0
@@ -198,9 +297,9 @@ export const styles = {
     marginTop: '0.5rem',
     width: '280px',
     background: 'white',
-    border: '1px solid #e5e7eb',
-    borderRadius: '12px',
-    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
+    border: '1px solid #e2e8f0',
+    borderRadius: '16px',
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
     overflow: 'hidden',
     zIndex: 1001
   },
@@ -208,8 +307,8 @@ export const styles = {
     padding: '1rem 1.25rem 0.75rem',
     fontSize: '0.9rem',
     fontWeight: '600',
-    color: '#374151',
-    borderBottom: '1px solid #f3f4f6'
+    color: '#475569',
+    borderBottom: '1px solid #f1f5f9'
   },
   summaryOption: {
     width: '100%',
@@ -219,21 +318,20 @@ export const styles = {
     textAlign: 'left',
     cursor: 'pointer',
     transition: 'background-color 0.2s ease',
-    borderBottom: '1px solid #f9fafb'
+    borderBottom: '1px solid #f8fafc'
   },
   summaryOptionTitle: {
     fontSize: '0.9rem',
     fontWeight: '600',
-    color: '#111827',
+    color: '#0f172a',
     marginBottom: '0.25rem'
   },
   summaryOptionDesc: {
     fontSize: '0.8rem',
-    color: '#6b7280',
+    color: '#64748b',
     lineHeight: '1.4'
   },
 
-  // Link dropdown styles (keep existing)
   linkContainer: {
     position: 'relative'
   },
@@ -244,7 +342,7 @@ export const styles = {
     marginTop: '0.75rem',
     width: '380px',
     background: 'white',
-    border: '1px solid #e5e7eb',
+    border: '1px solid #e2e8f0',
     borderRadius: '16px',
     boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
     overflow: 'hidden',
@@ -255,8 +353,8 @@ export const styles = {
     padding: '1.25rem 1.5rem 1rem',
     fontSize: '1rem',
     fontWeight: '700',
-    color: '#111827',
-    borderBottom: '1px solid #f3f4f6',
+    color: '#0f172a',
+    borderBottom: '1px solid #f1f5f9',
     background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
     display: 'flex',
     alignItems: 'center',
@@ -273,14 +371,14 @@ export const styles = {
   linkInput: {
     width: '100%',
     padding: '1rem 1.25rem',
-    border: '2px solid #e5e7eb',
+    border: '2px solid #e2e8f0',
     borderRadius: '12px',
     fontSize: '0.95rem',
     outline: 'none',
     transition: 'all 0.2s ease',
     fontFamily: 'inherit',
-    background: '#fafafa',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+    background: '#f8fafc',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
     lineHeight: '1.5'
   },
   linkDropdownActions: {
@@ -292,8 +390,8 @@ export const styles = {
   linkCancelButton: {
     padding: '0.75rem 1.25rem',
     background: 'white',
-    color: '#6b7280',
-    border: '2px solid #e5e7eb',
+    color: '#64748b',
+    border: '2px solid #e2e8f0',
     borderRadius: '10px',
     fontSize: '0.875rem',
     fontWeight: '600',
@@ -319,15 +417,15 @@ export const styles = {
     justifyContent: 'center'
   },
   linkConfirmButtonDisabled: {
-    background: '#e5e7eb',
-    color: '#9ca3af',
+    background: '#e2e8f0',
+    color: '#94a3b8',
     cursor: 'not-allowed',
     boxShadow: 'none'
   },
   linkDropdownNote: {
     padding: '0.75rem 1.5rem 1.25rem',
     fontSize: '0.8rem',
-    color: '#6b7280',
+    color: '#64748b',
     textAlign: 'center',
     background: '#f8fafc',
     borderTop: '1px solid #f1f5f9',
@@ -339,10 +437,7 @@ export const styles = {
   linkDropdownNoteIcon: {
     width: '14px',
     height: '14px',
-    color: '#9ca3af'
-  },
-  buttonIcon: {
-    flexShrink: 0
+    color: '#94a3b8'
   },
 
   // Error styles
@@ -377,269 +472,1510 @@ export const styles = {
     marginBottom: '0.25rem'
   },
 
-  // Content layout
+  // 3-COLUMN LAYOUT STYLES
   contentLayout: {
     display: 'flex',
     flex: 1,
+    overflow: 'hidden',
+    gap: '1rem',
+    padding: '1rem',
+    background: '#f8fafc'
+  },
+
+  // Left Panel - Sources
+  leftPanel: {
+    width: '320px',
+    background: 'white',
+    display: 'flex',
+    flexDirection: 'column',
+    borderRadius: '16px',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    flexShrink: 0,
     overflow: 'hidden'
   },
 
-  // Central area (updated)
-  centralArea: {
+  // Middle Panel - Chat
+  middlePanel: {
     flex: 1,
-    padding: '2rem',
-    overflowY: 'auto',
     background: 'white',
-    margin: '1rem',
-    marginRight: '0.5rem',
-    borderRadius: '8px',
-    border: '1px solid #e5e7eb'
-  },
-
-  // UPDATED: Compact horizontal sources section
-  sourcesSection: {
-    width: '100%',
     display: 'flex',
     flexDirection: 'column',
-    marginBottom: '1.5rem'
-  },
-
-  // Welcome Section Styles (keep existing)
-  welcomeContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    minHeight: '500px'
-  },
-  welcomeContent: {
-    textAlign: 'center',
-    maxWidth: '600px',
-    padding: '2rem'
-  },
-  welcomeIcon: {
-    display: 'flex',
-    justifyContent: 'center',
-    marginBottom: '2rem',
-    color: '#6366f1'
-  },
-  welcomeTitle: {
-    fontSize: '2rem',
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: '1rem',
-    margin: '0 0 1rem 0'
-  },
-  welcomeDescription: {
-    fontSize: '1.125rem',
-    color: '#6b7280',
-    lineHeight: '1.6',
-    marginBottom: '3rem',
-    margin: '0 0 3rem 0'
-  },
-  welcomeFeatures: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem',
-    alignItems: 'center'
-  },
-  featureItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-    padding: '1rem 1.5rem',
-    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-    borderRadius: '12px',
+    borderRadius: '16px',
     border: '1px solid #e2e8f0',
-    minWidth: '280px',
-    transition: 'all 0.2s ease'
-  },
-  featureIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '40px',
-    height: '40px',
-    borderRadius: '10px',
-    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-    color: 'white',
-    flexShrink: 0
-  },
-  featureText: {
-    fontSize: '1rem',
-    fontWeight: '500',
-    color: '#374151'
-  },
-
-  sourcesContainer: {
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'row', // Changed from 'column'
-    gap: '2rem',
-    alignItems: 'flex-start'
-  },
-
-  // NEW: Individual section containers
-  filesList: {
-    flex: 1,
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
     minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column'
+    overflow: 'hidden'
   },
 
-  linksList: {
-    flex: 1,
-    minWidth: 0,
+// Enhanced Saved Chats Button
+savedChatsButton: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.625rem',
+  padding: '0.75rem 1rem',
+  background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+  color: '#475569',
+  border: '2px solid #e2e8f0',
+  borderRadius: '12px',
+  fontSize: '0.8rem',
+  fontWeight: '600',
+  cursor: 'pointer',
+  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.06)'
+},
+
+// Enhanced Save Chat Button
+saveChatButton: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+  padding: '0.75rem 1rem',
+  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+  color: 'white',
+  border: 'none',
+  borderRadius: '12px',
+  fontSize: '0.8rem',
+  fontWeight: '600',
+  cursor: 'pointer',
+  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
+},
+
+// Enhanced Dropdown
+savedChatsDropdown: {
+  position: 'absolute',
+  top: '100%',
+  right: 0,
+  marginTop: '0.75rem',
+  width: '420px',
+  background: 'white',
+  border: '1px solid #e2e8f0',
+  borderRadius: '20px',
+  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.1)',
+  overflow: 'hidden',
+  zIndex: 1001,
+  animation: 'savedChatsSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+},
+
+// Enhanced Dropdown Header
+savedChatsDropdownHeader: {
+  padding: '1.5rem 1.75rem 1.25rem',
+  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+  borderBottom: '2px solid #e2e8f0',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.75rem',
+  fontSize: '1.1rem',
+  fontWeight: '700',
+  color: '#0f172a'
+},
+
+// Enhanced Content
+savedChatsContent: {
+  maxHeight: '400px',
+  overflow: 'auto',
+  background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)'
+},
+
+// Enhanced Loading
+savedChatsLoading: {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '3rem 2rem',
+  gap: '1rem',
+  color: '#64748b'
+},
+
+// Enhanced Empty State
+savedChatsEmpty: {
+  padding: '3rem 2rem',
+  textAlign: 'center',
+  background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)'
+},
+
+savedChatsEmptyText: {
+  fontSize: '1.1rem',
+  fontWeight: '600',
+  color: '#475569',
+  margin: '0 0 0.75rem 0',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '0.5rem'
+},
+
+savedChatsEmptySubtext: {
+  fontSize: '0.9rem',
+  color: '#64748b',
+  margin: 0,
+  lineHeight: '1.6'
+},
+
+// Enhanced Chat List
+savedChatsList: {
+  padding: '1rem 0.75rem',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.75rem'
+},
+
+// Enhanced Chat Item
+savedChatItem: {
+  padding: '1.25rem 1.5rem',
+  background: 'white',
+  border: '2px solid transparent',
+  borderRadius: '16px',
+  cursor: 'pointer',
+  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.06)',
+  margin: '0 0.5rem'
+},
+
+// Enhanced Item Header
+savedChatItemHeader: {
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'space-between',
+  marginBottom: '0.75rem',
+  gap: '1rem'
+},
+
+savedChatItemTitle: {
+  fontSize: '1rem',
+  fontWeight: '600',
+  color: '#0f172a',
+  lineHeight: '1.4',
+  margin: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  display: '-webkit-box',
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: 'vertical',
+  flex: 1,
+  minWidth: 0
+},
+
+savedChatItemDate: {
+  fontSize: '0.75rem',
+  color: '#64748b',
+  fontWeight: '500',
+  background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+  padding: '0.375rem 0.75rem',
+  borderRadius: '8px',
+  flexShrink: 0,
+  border: '1px solid #e2e8f0'
+},
+
+// Enhanced Meta
+savedChatItemMeta: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '1rem',
+  fontSize: '0.8rem',
+  color: '#64748b',
+  fontWeight: '500',
+  flexWrap: 'wrap'
+},
+
+// Enhanced Footer
+savedChatsFooter: {
+  padding: '1.25rem 1.75rem',
+  borderTop: '2px solid #e2e8f0',
+  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center'
+},
+
+savedChatsCloseButton: {
+  padding: '0.75rem 1.5rem',
+  background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+  color: '#64748b',
+  border: '2px solid #e2e8f0',
+  borderRadius: '12px',
+  fontSize: '0.875rem',
+  fontWeight: '600',
+  cursor: 'pointer',
+  transition: 'all 0.3s ease',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+},
+
+// Enhanced Modal
+saveChatModal: {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  background: 'rgba(0, 0, 0, 0.6)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 2000,
+  backdropFilter: 'blur(8px)',
+  animation: 'modalFadeIn 0.3s ease-out'
+},
+
+saveChatModalContent: {
+  background: 'white',
+  borderRadius: '20px',
+  width: '90%',
+  maxWidth: '500px',
+  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.1)',
+  animation: 'modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+  overflow: 'hidden',
+  border: '2px solid #e2e8f0'
+},
+
+saveChatModalHeader: {
+  padding: '2rem 2rem 1rem',
+  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+  borderBottom: '2px solid #e2e8f0',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between'
+},
+
+saveChatModalTitle: {
+  fontSize: '1.5rem',
+  fontWeight: '700',
+  color: '#0f172a',
+  margin: 0,
+  background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+  WebkitBackgroundClip: 'text',
+  WebkitTextFillColor: 'transparent',
+  backgroundClip: 'text'
+},
+
+saveChatModalClose: {
+  background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+  border: '2px solid #e2e8f0',
+  fontSize: '1.25rem',
+  color: '#64748b',
+  cursor: 'pointer',
+  padding: '0.5rem',
+  borderRadius: '10px',
+  width: '40px',
+  height: '40px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  transition: 'all 0.3s ease',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+},
+
+saveChatModalBody: {
+  padding: '2rem'
+},
+
+saveChatInfo: {
+  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+  border: '2px solid #bfdbfe',
+  borderRadius: '12px',
+  padding: '1.25rem',
+  marginBottom: '1.5rem',
+  textAlign: 'center'
+},
+
+saveChatInfoText: {
+  fontSize: '1rem',
+  color: '#1e40af',
+  margin: 0,
+  fontWeight: '600'
+},
+
+saveChatInputContainer: {
+  marginBottom: '2rem'
+},
+
+saveChatLabel: {
+  display: 'block',
+  fontSize: '1rem',
+  fontWeight: '600',
+  color: '#374151',
+  marginBottom: '0.75rem'
+},
+
+saveChatInput: {
+  width: '100%',
+  padding: '1rem 1.25rem',
+  border: '2px solid #e2e8f0',
+  borderRadius: '12px',
+  fontSize: '1rem',
+  outline: 'none',
+  transition: 'all 0.3s ease',
+  background: '#f8fafc',
+  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+  fontFamily: 'inherit'
+},
+
+saveChatInputHint: {
+  fontSize: '0.875rem',
+  color: '#64748b',
+  marginTop: '0.5rem',
+  fontStyle: 'italic'
+},
+
+saveChatModalActions: {
+  display: 'flex',
+  gap: '1rem',
+  justifyContent: 'flex-end'
+},
+
+saveChatCancelButton: {
+  padding: '0.875rem 1.5rem',
+  background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+  color: '#64748b',
+  border: '2px solid #e2e8f0',
+  borderRadius: '12px',
+  fontSize: '0.875rem',
+  fontWeight: '600',
+  cursor: 'pointer',
+  transition: 'all 0.3s ease',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+},
+
+saveChatConfirmButton: {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+  padding: '0.875rem 1.5rem',
+  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+  color: 'white',
+  border: 'none',
+  borderRadius: '12px',
+  fontSize: '0.875rem',
+  fontWeight: '700',
+  cursor: 'pointer',
+  transition: 'all 0.3s ease',
+  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
+  minWidth: '140px',
+  justifyContent: 'center'
+},
+
+saveChatConfirmButtonLoading: {
+  background: 'linear-gradient(135deg, #6b7280, #4b5563)',
+  cursor: 'not-allowed',
+  boxShadow: 'none'
+},
+  
+  // Right Panel - Notes and Summaries
+  rightPanel: {
+    width: '320px',
+    background: 'white',
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    borderRadius: '16px',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    flexShrink: 0,
+    overflow: 'auto',
+    maxHeight: '100%'
   },
-  emptyStateMessage: {
-    padding: '1rem',
-    textAlign: 'center',
-    color: '#9ca3af',
-    fontSize: '0.875rem',
-    fontStyle: 'italic',
-    background: '#f9fafb',
-    borderRadius: '8px',
-    border: '1px dashed #e5e7eb'
+
+  // Sources Panel Styles
+  sourcesPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
+    overflow: 'hidden'
   },
-  // UPDATED: Smaller, more subtle section headers
-  sectionHeader: {
+
+  sourcesPanelHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '0.75rem',
-    paddingBottom: '0.5rem',
-    borderBottom: '1px solid #f1f5f9'
-  },
-  sectionTitle: {
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    color: '#374151',
-    margin: 0
-  },
-  sectionCount: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: '20px',
-    height: '20px',
-    borderRadius: '10px',
-    background: '#e5e7eb',
-    color: '#6b7280',
-    fontSize: '0.7rem',
-    fontWeight: '600',
-    padding: '0 0.4rem'
+    padding: '1.5rem 1.5rem 1rem',
+    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+    borderBottom: '1px solid #e2e8f0',
+    flexShrink: 0
   },
 
-  // UPDATED: Horizontal grid instead of vertical
-  itemsGrid: {
+  sourcesPanelTitle: {
+    fontSize: '1.25rem',
+    fontWeight: '700',
+    color: '#0f172a',
+    margin: 0,
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text'
+  },
+
+  sourcesCount: {
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    color: 'white',
+    borderRadius: '12px',
+    padding: '0.375rem 0.75rem',
+    fontSize: '0.75rem',
+    fontWeight: '700',
+    minWidth: '24px',
+    textAlign: 'center',
+    boxShadow: '0 2px 4px rgba(79, 70, 229, 0.3)'
+  },
+
+  sourcesContent: {
+    flex: 1,
+    overflow: 'auto',
+    padding: '1rem 0',
+    background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)'
+  },
+
+  sourcesSection: {
+    marginBottom: '1.5rem',
+    background: 'white',
+    borderRadius: '12px',
+    overflow: 'hidden'
+  },
+
+  sourcesSectionHeader: {
     display: 'flex',
-    gap: '0.75rem',
-    overflowX: 'auto',
-    paddingBottom: '0.5rem',
-    scrollbarWidth: 'thin',
-    scrollbarColor: '#e5e7eb transparent'
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '0.75rem 1.5rem',
+    background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)',
+    borderBottom: '1px solid #f1f5f9',
+    position: 'sticky',
+    top: 0,
+    zIndex: 10
   },
 
-  // UPDATED: Much smaller, compact file items
-  modernFileItem: {
+  sourcesSectionTitle: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.5rem',
-    minWidth: '200px',
-    maxWidth: '250px',
-    padding: '0.5rem 0.75rem',
-    background: 'white',
-    borderRadius: '8px',
-    border: '1px solid #e5e7eb',
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#475569'
+  },
+
+  sourcesSectionIcon: {
+    color: '#64748b'
+  },
+
+  sourcesSectionCount: {
+    background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)',
+    color: '#475569',
+    borderRadius: '10px',
+    padding: '0.25rem 0.625rem',
+    fontSize: '0.7rem',
+    fontWeight: '600',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+  },
+
+  sourcesItems: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+    padding: '0.75rem 0'
+  },
+
+  sourceItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.875rem',
+    padding: '1rem 1.5rem',
+    borderRadius: '12px',
+    border: '1px solid transparent',
     transition: 'all 0.2s ease',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+    cursor: 'pointer',
+    position: 'relative',
+    background: 'white',
+    margin: '0 0.75rem'
+  },
+
+  sourceItemIcon: {
     flexShrink: 0
   },
-  fileIconContainer: {
-    flexShrink: 0
-  },
-  modernFileIcon: {
-    width: '24px',
-    height: '24px',
-    borderRadius: '4px',
+
+  fileTypeIcon: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '8px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: 'white',
-    boxShadow: 'none'
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
   },
-  fileContent: {
+
+  sourceItemContent: {
     flex: 1,
     minWidth: 0
   },
-  fileName: {
-    fontSize: '0.8rem',
-    fontWeight: '500',
-    color: '#111827',
+
+  sourceItemTitle: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: '0.375rem',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    marginBottom: '0.125rem'
+    lineHeight: '1.2'
   },
-  fileMetadata: {
+
+  sourceItemLink: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#3b82f6',
+    textDecoration: 'none',
+    marginBottom: '0.375rem',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    display: 'block',
+    transition: 'color 0.2s ease',
+    lineHeight: '1.2'
+  },
+
+  sourceItemMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    fontSize: '0.75rem',
+    color: '#64748b',
+    fontWeight: '500'
+  },
+
+  sourceItemSeparator: {
+    color: '#cbd5e1'
+  },
+
+  linkStatusBadge: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.375rem',
+    padding: '0.125rem 0.5rem',
+    borderRadius: '6px',
     fontSize: '0.7rem',
-    color: '#6b7280'
+    fontWeight: '600'
   },
-  metadataSeparator: {
-    color: '#d1d5db'
-  },
-  fileActions: {
+
+  sourceItemActions: {
     display: 'flex',
-    gap: '0.25rem',
-    flexShrink: 0
+    gap: '0.375rem',
+    flexShrink: 0,
+    opacity: 0,
+    transition: 'opacity 0.2s ease'
   },
 
-  // UPDATED: Much smaller, compact link items
-  modernLinkItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    minWidth: '280px',
-    maxWidth: '320px',
-    padding: '0.75rem',
-    background: 'white',
-    borderRadius: '12px',
-    border: '1px solid #e5e7eb',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
-    flexShrink: 0
-  },
-
-  linkIconContainer: {
-    flexShrink: 0
-  },
-
-  modernLinkIcon: {
-    width: '60px',
-    height: '45px',
-    borderRadius: '8px',
+  sourceActionButton: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
-    color: 'white',
-    boxShadow: 'none'
-  },
-  youtubeThumbnailContainer: {
-    width: '60px',
-    height: '45px',
+    width: '32px',
+    height: '32px',
     borderRadius: '8px',
-    overflow: 'hidden',
-    position: 'relative',
-    background: '#f3f4f6',
+    background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+    color: '#64748b',
+    border: 'none',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+  },
+
+  sourceRemoveButton: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    background: 'linear-gradient(135deg, #fef2f2, #fee2e2)',
+    color: '#dc2626',
+    border: 'none',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+  },
+
+  // No Sources Empty State
+  noSourcesMessage: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '4rem 2rem',
+    textAlign: 'center',
+    height: '100%'
+  },
+
+  noSourcesIcon: {
+    color: '#cbd5e1',
+    marginBottom: '1.5rem'
+  },
+
+  noSourcesText: {
+    fontSize: '1.125rem',
+    fontWeight: '600',
+    color: '#475569',
+    margin: '0 0 0.5rem 0'
+  },
+
+  noSourcesSubtext: {
+    fontSize: '0.875rem',
+    color: '#64748b',
+    margin: 0,
+    lineHeight: '1.5'
+  },
+
+  // Chat Panel Styles
+  chatPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
+    overflow: 'hidden'
+  },
+
+  chatPanelHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '1.5rem 1.5rem 1rem',
+    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+    borderBottom: '1px solid #e2e8f0',
+    flexShrink: 0
+  },
+
+  chatPanelTitle: {
+    fontSize: '1.25rem',
+    fontWeight: '700',
+    color: '#0f172a',
+    margin: 0,
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text'
+  },
+
+  chatHeaderActions: {
+    display: 'flex',
+    gap: '0.75rem',
+    alignItems: 'center'
+  },
+
+  summariesSelect: {
+    background: 'white',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    padding: '0.5rem 0.75rem',
+    fontSize: '0.75rem',
+    color: '#475569',
+    cursor: 'pointer',
+    minWidth: '120px',
+    fontWeight: '500',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+  },
+
+  clearChatButton: {
+    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    padding: '0.5rem 0.75rem',
+    fontSize: '0.75rem',
+    color: '#64748b',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontWeight: '500',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+  },
+
+  // Chat Messages
+  chatMessages: {
+    flex: 1,
+    overflow: 'auto',
+    padding: '1.5rem',
+    background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)'
+  },
+
+  chatMessage: {
+    marginBottom: '1.5rem'
+  },
+
+  chatMessageContent: {
+    borderRadius: '16px',
+    padding: '1rem 1.25rem',
+    maxWidth: '85%',
+    position: 'relative',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+  },
+
+  chatMessageUser: {
+    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+    color: 'white',
+    marginLeft: 'auto',
+    borderBottomRightRadius: '6px'
+  },
+
+  chatMessageAI: {
+    background: 'white',
+    border: '1px solid #e2e8f0',
+    marginRight: 'auto',
+    borderBottomLeftRadius: '6px',
+    color: '#0f172a'
+  },
+
+  chatMessageSystem: {
+    background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+    border: '1px solid #bfdbfe',
+    color: '#1e40af',
+    marginRight: 'auto',
+    borderBottomLeftRadius: '6px'
+  },
+
+  chatMessageError: {
+    background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+    border: '1px solid #fecaca',
+    color: '#dc2626',
+    marginRight: 'auto',
+    borderBottomLeftRadius: '6px'
+  },
+
+  chatMessageSummary: {
+    background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+    border: '1px solid #bbf7d0',
+    color: '#15803d',
+    marginRight: 'auto',
+    borderBottomLeftRadius: '6px'
+  },
+
+  chatMessageSources: {
+    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+    border: '1px solid #e2e8f0',
+    color: '#475569',
+    marginRight: 'auto',
+    borderBottomLeftRadius: '6px',
+    fontSize: '0.8rem'
+  },
+
+  chatMessageText: {
+    fontSize: '0.875rem',
+    lineHeight: '1.6',
+    marginBottom: '0.5rem',
+    whiteSpace: 'pre-wrap'
+  },
+
+  chatMessageTime: {
+    fontSize: '0.75rem',
+    opacity: 0.7,
+    textAlign: 'right',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    fontWeight: '500'
+  },
+
+  chatMessageMeta: {
+    fontSize: '0.65rem',
+    opacity: 0.8,
+    fontStyle: 'italic'
+  },
+
+  // Chat Empty State
+  chatEmptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    textAlign: 'center',
+    minHeight: '400px',
+    padding: '2rem'
+  },
+
+  chatEmptyIcon: {
+    color: '#cbd5e1',
+    marginBottom: '1.5rem'
+  },
+
+  chatEmptyText: {
+    fontSize: '1.125rem',
+    fontWeight: '600',
+    color: '#475569',
+    margin: '0 0 0.5rem 0'
+  },
+
+  chatEmptySubtext: {
+    fontSize: '0.875rem',
+    color: '#64748b',
+    margin: 0,
+    lineHeight: '1.5'
+  },
+
+  // Typing indicator
+  chatTypingIndicator: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.375rem',
+    padding: '0.75rem 0'
+  },
+
+  typingDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: '#64748b',
+    animation: 'typingAnimation 1.4s infinite ease-in-out'
+  },
+
+  // Chat Form
+  chatForm: {
+    padding: '1.5rem',
+    borderTop: '1px solid #e2e8f0',
+    background: 'white',
+    flexShrink: 0
+  },
+
+  chatFormInner: {
+    margin: 0
+  },
+
+  chatInputContainer: {
+    display: 'flex',
+    gap: '1rem',
+    alignItems: 'center'
+  },
+
+  chatInput: {
+    flex: 1,
+    padding: '1rem 1.25rem',
+    border: '2px solid #e2e8f0',
+    borderRadius: '24px',
+    fontSize: '0.875rem',
+    outline: 'none',
+    background: '#f8fafc',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+    lineHeight: '1.5'
+  },
+
+  chatSendButton: {
+    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: '44px',
+    height: '44px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.4)'
+  },
+
+  chatSendButtonDisabled: {
+    background: '#94a3b8',
+    cursor: 'not-allowed',
+    boxShadow: 'none'
+  },
+
+  buttonSpinner: {
+    width: '16px',
+    height: '16px',
+    border: '2px solid rgba(255, 255, 255, 0.3)',
+    borderTop: '2px solid white',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
+  },
+
+  chatNote: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.5rem',
+    fontSize: '0.875rem',
+    color: '#64748b',
+    fontStyle: 'italic',
+    marginTop: '0.75rem',
+    padding: '0.75rem',
+    background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+    borderRadius: '12px',
+    border: '1px solid #e2e8f0'
+  },
+
+  chatNoteIcon: {
+    color: '#94a3b8'
+  },
+
+  // Source information in chat
+  sourcesInfo: {
+    marginTop: '0.75rem',
+    padding: '0.75rem',
+    background: 'rgba(79, 70, 229, 0.05)',
+    borderRadius: '8px',
+    border: '1px solid rgba(79, 70, 229, 0.1)'
+  },
+
+  sourcesHeader: {
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    color: '#4f46e5',
+    marginBottom: '0.5rem'
+  },
+
+  sourceNumber: {
+    fontWeight: '600',
+    color: '#4f46e5',
+    minWidth: '14px'
+  },
+
+  sourceText: {
+    color: '#64748b',
+    lineHeight: '1.4'
+  },
+
+  sourceScore: {
+    color: '#059669',
+    fontWeight: '500'
+  },
+
+  // Notes Section
+  notesSection: {
+    padding: '1.5rem',
+    borderBottom: '1px solid #e2e8f0',
+    flex: '0 0 auto',
+    background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)',
+    maxHeight: '300px',
+    display: 'flex',
+    flexDirection: 'column'
+  },
+
+  notesSectionTitle: {
+    fontSize: '1.125rem',
+    fontWeight: '700',
+    color: '#0f172a',
+    margin: '0 0 1rem 0',
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text'
+  },
+
+  notesEditor: {
+    height: '200px',
+    marginBottom: '0.5rem',
+    flex: '1 1 auto',
+    maxHeight: '200px',
+    overflow: 'hidden'
+  },
+
+  quillEditor: {
+    height: '150px',
+    fontSize: '0.875rem',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+  },
+
+  // Generated Summaries Section
+  summariesSection: {
+    padding: '1.5rem',
+    flex: '1 1 auto',
+    background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)',
+    minHeight: 'fit-content',
+    overflow: 'visible'
+  },
+
+  summariesHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '1.5rem',
+    paddingBottom: '1rem',
+    borderBottom: '2px solid #e2e8f0'
+  },
+
+  summariesTitle: {
+    fontSize: '1.125rem',
+    fontWeight: '700',
+    color: '#0f172a',
+    margin: 0,
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text'
+  },
+
+  summariesGrid: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem'
+  },
+
+  summaryCard: {
+    background: 'white',
+    border: '1px solid #e2e8f0',
+    borderRadius: '16px',
+    padding: '1.5rem',
+    cursor: 'pointer',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    position: 'relative',
+    overflow: 'hidden',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+  },
+
+  summaryCardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+    marginBottom: '1rem'
+  },
+
+  summaryTypeIcon: {
+    fontSize: '1.75rem',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '52px',
+    height: '52px',
+    background: 'linear-gradient(135deg, #f8fafc, #e2e8f0)',
+    borderRadius: '14px',
+    border: '2px solid #e2e8f0',
+    flexShrink: 0,
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+  },
+
+  summaryCardTitle: {
+    flex: 1,
+    minWidth: 0
+  },
+
+  summaryTypeName: {
+    fontSize: '1rem',
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: '0.375rem',
+    lineHeight: 1.2
+  },
+
+  summaryStatus: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    fontSize: '0.75rem',
+    color: '#059669',
+    fontWeight: '600'
+  },
+
+  statusDot: {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    background: '#10b981',
+    animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+  },
+
+  summaryCardAction: {
+    color: '#64748b',
+    transition: 'all 0.3s ease',
+    transform: 'translateX(0)',
+    opacity: 0.7
+  },
+
+  summaryMetadata: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+    marginBottom: '1rem'
+  },
+
+  metadataItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    fontSize: '0.8rem',
+    transition: 'all 0.2s ease',
+    padding: '0.375rem 0.5rem',
+    borderRadius: '8px',
+    background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)'
+  },
+
+  metadataIcon: {
+    fontSize: '0.9rem',
+    flexShrink: 0,
+    width: '16px',
+    textAlign: 'center'
+  },
+
+  metadataLabel: {
+    color: '#64748b',
+    fontWeight: '500',
+    minWidth: '60px'
+  },
+
+  metadataValue: {
+    color: '#0f172a',
+    fontWeight: '600'
+  },
+
+  summaryProgress: {
+    marginTop: 'auto'
+  },
+
+  progressBar: {
+    width: '100%',
+    height: '8px',
+    backgroundColor: '#e2e8f0',
+    borderRadius: '4px',
+    overflow: 'hidden',
+    marginBottom: '1rem'
+  },
+
+  progressFill: {
+    height: '100%',
+    background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
+    borderRadius: '4px',
+    transition: 'width 0.5s ease',
+    width: '100%',
+    backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%)',
+    backgroundSize: '16px 16px',
+    animation: 'progressStripes 1s linear infinite'
+  },
+
+  // Progress Popup Styles
+  summaryProgressPopup: {
+    position: 'fixed',
+    top: '20px',
+    right: '20px',
+    width: '350px',
+    background: 'white',
+    border: '1px solid #e2e8f0',
+    borderRadius: '16px',
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    zIndex: 2000,
+    animation: 'slideInFromRight 0.3s ease-out',
+    overflow: 'hidden'
+  },
+
+  progressPopupHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '1.25rem 1.5rem',
+    borderBottom: '1px solid #f1f5f9',
+    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)'
+  },
+
+  progressPopupTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    fontSize: '1rem',
+    fontWeight: '700',
+    color: '#0f172a'
+  },
+
+  progressIcon: {
+    fontSize: '1rem',
+    animation: 'pulse 2s infinite'
+  },
+
+  progressPopupClose: {
+    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+    border: '1px solid #e2e8f0',
+    fontSize: '1.1rem',
+    color: '#64748b',
+    cursor: 'pointer',
+    padding: '0.5rem',
+    borderRadius: '8px',
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+  },
+
+  progressPopupContent: {
+    padding: '1.5rem'
+  },
+
+  progressPopupStats: {
+    fontSize: '0.8rem',
+    color: '#64748b',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '1rem',
+    padding: '0.75rem 1rem',
+    background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0'
+  },
+
+  progressPopupText: {
+    fontSize: '0.875rem',
+    color: '#475569',
+    marginBottom: '1rem',
+    fontWeight: '500'
+  },
+
+  progressPopupTime: {
+    fontSize: '0.75rem',
+    color: '#64748b',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem'
+  },
+
+  progressTypeDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+    marginTop: '1rem'
+  },
+
+  progressTypeItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '0.5rem 0.75rem',
+    background: 'white',
+    border: '1px solid #f1f5f9',
+    borderRadius: '8px',
+    fontSize: '0.8rem'
+  },
+
+  progressTypeName: {
+    fontWeight: '600',
+    color: '#475569'
+  },
+
+  progressTypeStatus: {
+    fontWeight: '600',
+    fontSize: '0.75rem'
+  },
+
+  taskId: {
+    fontFamily: 'monospace',
+    backgroundColor: '#f1f5f9',
+    padding: '0.125rem 0.375rem',
+    borderRadius: '4px',
+    fontSize: '0.7rem',
+    color: '#64748b'
+  },
+
+  // Compact Summary Page Header Styles
+  summaryPageContainer: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    background: 'white',
+    margin: '1rem',
+    borderRadius: '16px',
+    border: '1px solid #e2e8f0',
+    overflow: 'hidden',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+  },
+
+  summaryPageHeader: {
+    padding: '1rem 2rem 0.75rem', // Reduced from 2rem 2rem 1.5rem
+    borderBottom: '1px solid #e2e8f0',
+    background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)',
+    flexShrink: 0
+  },
+
+  backToNotebookButton: {
+    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+    border: '1px solid #e2e8f0',
+    color: '#64748b',
+    fontSize: '0.8rem', // Smaller font
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.375rem', // Reduced gap
+    padding: '0.5rem 0.75rem', // Smaller padding
+    borderRadius: '8px',
+    transition: 'all 0.2s ease',
+    marginBottom: '0.75rem', // Reduced margin
+    fontWeight: '500',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+  },
+
+  summaryPageTitle: {
+    marginLeft: '0'
+  },
+
+  summaryPageMainTitle: {
+    fontSize: '1.5rem', // Reduced from 2rem
+    fontWeight: '700',
+    color: '#0f172a',
+    margin: '0 0 0.25rem 0', // Reduced bottom margin
+    lineHeight: '1.3'
+  },
+
+  summaryPageSubtitle: {
+    fontSize: '0.875rem', // Reduced from 1rem
+    color: '#64748b',
+    margin: 0
+  },
+
+  summaryPageContent: {
+    flex: 1,
+    overflow: 'auto',
+    padding: '1rem 2rem 2rem' // Reduced top padding
+  },
+
+  summaryPageText: {
+    maxWidth: '800px',
+    margin: '0 auto'
+  },
+
+  summaryPageMeta: {
+    display: 'flex',
+    gap: '1rem',
+    marginBottom: '1rem', // Reduced from 2rem
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    padding: '0.75rem',
+    background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0'
+  },
+
+  summaryPageMetaItem: {
+    fontSize: '0.75rem', // Reduced from 0.875rem
+    color: '#64748b',
+    background: 'white',
+    padding: '0.25rem 0.5rem', // Reduced padding
+    borderRadius: '6px',
+    fontWeight: '500',
+    border: '1px solid #e2e8f0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.25rem'
+  },
+
+  summaryPageTextContent: {
+    fontSize: '1rem',
+    lineHeight: '1.7',
+    color: '#475569',
+    whiteSpace: 'pre-wrap',
+    marginBottom: '2rem',
+    background: 'linear-gradient(135deg, #fafbfc, #f8fafc)',
+    padding: '2rem',
+    borderRadius: '12px',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+  },
+
+  summaryPageActions: {
+    display: 'flex',
+    gap: '1rem',
+    justifyContent: 'center',
+    flexWrap: 'wrap'
+  },
+
+  summaryPageCopyButton: {
+    background: 'linear-gradient(135deg, #059669, #047857)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '10px',
+    padding: '0.75rem 1.5rem',
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 4px 12px rgba(5, 150, 105, 0.4)'
+  },
+
+  summaryPageDownloadButton: {
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '10px',
+    padding: '0.75rem 1.5rem',
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.4)'
+  },
+
+  summaryPageLoading: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '400px',
+    gap: '1rem'
+  },
+
+  summaryPageLoadingSpinner: {
+    width: '48px',
+    height: '48px',
+    border: '4px solid #f1f5f9',
+    borderRadius: '50%',
+    borderTop: '4px solid #4f46e5',
+    animation: 'spin 1s linear infinite'
+  },
+
+  // Loading States
+  loadingContainer: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    height: "100%",
+    color: "#64748b"
+  },
+
+  loadingSpinner: {
+    width: "48px",
+    height: "48px",
+    border: "4px solid #f1f5f9",
+    borderRadius: "50%",
+    borderTop: "4px solid #4f46e5",
+    animation: "spin 1s linear infinite",
+    marginBottom: "1.5rem",
+  },
+
+  loadingText: {
+    fontSize: '1.1rem',
+    fontWeight: '500'
+  },
+
+  // Status styles for links
+  statusProcessing: {
+    color: '#f59e0b',
+    fontWeight: '600',
+    background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+    borderRadius: '6px'
+  },
+
+  statusCompleted: {
+    color: '#059669',
+    fontWeight: '600',
+    background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)',
+    borderRadius: '6px'
+  },
+
+  statusError: {
+    color: '#dc2626',
+    fontWeight: '600',
+    background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
+    borderRadius: '6px'
+  },
+
+  // YouTube thumbnail styles
+  youtubeThumbnailContainer: {
+    width: '36px',
+    height: '27px',
+    borderRadius: '6px',
+    overflow: 'hidden',
+    position: 'relative',
+    background: '#f1f5f9',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
   },
 
   thumbnailImage: {
@@ -654,8 +1990,8 @@ export const styles = {
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
-    width: '16px',
-    height: '16px',
+    width: '14px',
+    height: '14px',
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     borderRadius: '50%',
     display: 'flex',
@@ -665,922 +2001,22 @@ export const styles = {
     fontSize: '8px'
   },
 
-  linkTitle: {
-    fontSize: '0.85rem',
-    fontWeight: '600',
-    color: '#111827',
-    lineHeight: '1.3',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    marginBottom: '0.125rem'
-  },
-
-  linkUrl: {
-    fontSize: '0.7rem',
-    color: '#6b7280',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    textDecoration: 'none',
-    opacity: 0.8
-  },
-
-  statusIndicator: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    flexShrink: 0
-  },
-  linkContent: {
-    flex: 1,
-    minWidth: 0
-  },
-  modernLinkText: {
-    fontSize: '0.8rem',
-    fontWeight: '500',
-    color: '#0ea5e9',
-    textDecoration: 'none',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    display: 'block',
-    marginBottom: '0.125rem',
-    transition: 'color 0.2s ease'
-  },
-  linkStatus: {
-    fontSize: '0.7rem'
-  },
-  statusProcessing: {
-    color: '#f59e0b',
-    fontWeight: '500'
-  },
-  statusCompleted: {
-    color: '#10b981',
-    fontWeight: '500'
-  },
-  statusError: {
-    color: '#ef4444',
-    fontWeight: '500'
-  },
-  linkActions: {
-    display: 'flex',
-    gap: '0.25rem',
-    flexShrink: 0
-  },
-
-  // UPDATED: Smaller action buttons
-  modernActionButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '24px',
-    height: '24px',
-    borderRadius: '4px',
-    background: '#f3f4f6',
-    color: '#6b7280',
-    border: 'none',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
-  },
-  modernRemoveButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '24px',
-    height: '24px',
-    borderRadius: '4px',
-    background: '#fef2f2',
-    color: '#dc2626',
-    border: 'none',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
-  },
-
-  // Progress styles
-  progressBackdrop: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    zIndex: 1999,
-    backdropFilter: 'blur(2px)'
-  },
-  progressContainer: {
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '90%',
-    maxWidth: '500px',
-    padding: '1.5rem',
-    background: 'white',
-    border: '1px solid #e2e8f0',
-    borderRadius: '12px',
-    fontSize: '0.875rem',
-    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
-    zIndex: 2000
-  },
-  progressHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '0.75rem'
-  },
-  progressTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontWeight: '600',
-    color: '#1e293b'
-  },
-  progressIcon: {
-    fontSize: '1rem',
-    animation: 'pulse 2s infinite'
-  },
-  progressStats: {
-    color: '#64748b',
-    fontSize: '0.8rem',
-    fontWeight: '500'
-  },
-  progressBar: {
-    width: '100%',
-    height: '8px',
-    backgroundColor: '#e2e8f0',
-    borderRadius: '4px',
-    overflow: 'hidden',
-    marginBottom: '0.75rem'
-  },
-  progressBarFill: {
-    height: '100%',
-    background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
-    borderRadius: '4px',
-    transition: 'width 0.5s ease',
-    backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%)',
-    backgroundSize: '16px 16px',
-    animation: 'progressStripes 1s linear infinite'
-  },
-  progressDetails: {
-    marginBottom: '0.5rem'
-  },
-  progressText: {
-    color: '#475569',
-    marginBottom: '0.25rem',
-    fontWeight: '500'
-  },
-  progressTime: {
-    color: '#64748b',
-    fontSize: '0.75rem',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem'
-  },
-  taskId: {
-    fontFamily: 'monospace',
-    backgroundColor: '#f1f5f9',
-    padding: '0.125rem 0.25rem',
-    borderRadius: '3px',
-    fontSize: '0.7rem'
-  },
-  progressTypeDetails: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.25rem',
-    paddingTop: '0.5rem',
-    borderTop: '1px solid #e2e8f0'
-  },
-  progressTypeItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  progressTypeName: {
-    fontSize: '0.75rem',
-    color: '#64748b',
-    fontWeight: '500'
-  },
-  progressTypeStatus: {
-    fontSize: '0.75rem',
-    fontWeight: '600'
-  },
-
-  // Right sidebar styles
-  rightSidebar: {
-    width: '320px',
-    background: 'white',
-    borderLeft: '1px solid #e5e7eb',
-    display: 'flex',
-    flexDirection: 'column',
-    overflowY: 'auto'
-  },
-
-  // Notes section
-  notesSection: {
-    padding: '1.5rem',
-    borderBottom: '1px solid #e5e7eb',
-    flex: '0 0 auto'
-  },
-  notesSectionTitle: {
-    fontSize: '1rem',
-    fontWeight: '600',
-    color: '#111827',
-    margin: '0 0 1rem 0'
-  },
-  notesEditor: {
-    height: '200px',
-    marginBottom: '0.5rem'
-  },
-  quillEditor: {
-    height: '150px',
-    fontSize: '0.875rem'
-  },
-  notesFooter: {
-    display: 'flex',
-    justifyContent: 'flex-end'
-  },
-  wordCount: {
-    fontSize: '0.75rem',
-    color: '#6b7280'
-  },
-
-  // Generated Summaries Section
-  summariesSection: {
-    padding: '1.5rem',
-    borderTop: '1px solid #e5e7eb',
-    flex: '0 0 auto',
-    background: 'linear-gradient(135deg, #fafafa 0%, #f8fafc 100%)',
-    minHeight: 'fit-content'
-  },
-  summariesHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '1.25rem',
-    paddingBottom: '0.75rem',
-    borderBottom: '2px solid #e5e7eb'
-  },
-  summariesTitle: {
-    fontSize: '1.1rem',
-    fontWeight: '700',
-    color: '#111827',
-    margin: 0,
-    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text'
-  },
-  summariesCount: {
-    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-    color: 'white',
-    borderRadius: '12px',
-    padding: '0.25rem 0.75rem',
-    fontSize: '0.75rem',
-    fontWeight: '600',
-    minWidth: '24px',
-    textAlign: 'center',
-    boxShadow: '0 2px 8px rgba(79, 70, 229, 0.3)'
-  },
-  summariesGrid: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1rem'
-  },
-  summaryCard: {
-    background: 'white',
-    border: '1px solid #e5e7eb',
-    borderRadius: '16px',
-    padding: '1.25rem',
-    cursor: 'pointer',
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-    position: 'relative',
-    overflow: 'hidden',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
-  },
-  summaryCardHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-    marginBottom: '1rem'
-  },
-  summaryTypeIcon: {
-    fontSize: '1.75rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '48px',
-    height: '48px',
-    background: 'linear-gradient(135deg, #f8fafc, #e2e8f0)',
-    borderRadius: '12px',
-    border: '2px solid #e5e7eb',
-    flexShrink: 0,
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-  },
-  summaryCardTitle: {
-    flex: 1,
-    minWidth: 0
-  },
-  summaryTypeName: {
-    fontSize: '0.95rem',
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: '0.25rem',
-    lineHeight: 1.2
-  },
-  summaryStatus: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontSize: '0.75rem',
-    color: '#059669',
-    fontWeight: '500'
-  },
-  statusDot: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    background: '#10b981',
-    animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
-  },
-  summaryCardAction: {
-    color: '#6b7280',
-    transition: 'all 0.3s ease',
-    transform: 'translateX(0)',
-    opacity: 0.7
-  },
-  summaryMetadata: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.5rem',
-    marginBottom: '1rem'
-  },
-  metadataItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontSize: '0.8rem',
-    transition: 'all 0.2s ease',
-    padding: '0.25rem',
-    borderRadius: '6px'
-  },
-  metadataIcon: {
-    fontSize: '0.9rem',
-    flexShrink: 0,
-    width: '16px',
-    textAlign: 'center'
-  },
-  metadataLabel: {
-    color: '#6b7280',
-    fontWeight: '500',
-    minWidth: '60px'
-  },
-  metadataValue: {
-    color: '#111827',
-    fontWeight: '600'
-  },
-  summaryProgress: {
-    marginTop: 'auto'
-  },
-  progressFill: {
-    height: '100%',
-    width: '100%',
-    background: 'linear-gradient(90deg, #4f46e5, #7c3aed)',
-    borderRadius: '2px'
-  },
-
-  // Summary Page Styles
-  summaryPageContainer: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    background: 'white',
-    margin: '1rem',
-    borderRadius: '8px',
-    border: '1px solid #e5e7eb',
-    overflow: 'hidden'
-  },
-  summaryPageHeader: {
-    padding: '1.5rem 2rem',
-    borderBottom: '1px solid #e5e7eb',
-    background: '#fafafa',
-    flexShrink: 0
-  },
-  backToNotebookButton: {
-    background: 'none',
-    border: 'none',
-    color: '#6b7280',
-    fontSize: '0.875rem',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.5rem',
+  modernLinkIcon: {
+    width: '36px',
+    height: '27px',
     borderRadius: '6px',
-    transition: 'background-color 0.2s ease',
-    marginBottom: '1rem'
-  },
-  summaryPageTitle: {
-    marginLeft: '0.5rem'
-  },
-  summaryPageMainTitle: {
-    fontSize: '2rem',
-    fontWeight: '700',
-    color: '#111827',
-    margin: '0 0 0.5rem 0',
-    lineHeight: '1.2'
-  },
-  summaryPageSubtitle: {
-    fontSize: '1rem',
-    color: '#6b7280',
-    margin: 0
-  },
-  summaryPageContent: {
-    flex: 1,
-    overflow: 'auto',
-    padding: '2rem'
-  },
-  summaryPageText: {
-    maxWidth: '800px',
-    margin: '0 auto'
-  },
-  summaryPageMeta: {
     display: 'flex',
-    gap: '1rem',
-    marginBottom: '2rem',
-    flexWrap: 'wrap'
-  },
-  summaryPageMetaItem: {
-    fontSize: '0.875rem',
-    color: '#6b7280',
-    background: '#f3f4f6',
-    padding: '0.5rem 1rem',
-    borderRadius: '6px'
-  },
-  summaryPageTextContent: {
-    fontSize: '1rem',
-    lineHeight: '1.7',
-    color: '#374151',
-    whiteSpace: 'pre-wrap',
-    marginBottom: '2rem',
-    background: '#fafafa',
-    padding: '2rem',
-    borderRadius: '8px',
-    border: '1px solid #e5e7eb'
-  },
-  summaryPageActions: {
-    display: 'flex',
-    gap: '1rem',
+    alignItems: 'center',
     justifyContent: 'center',
-    flexWrap: 'wrap'
-  },
-  summaryPageCopyButton: {
-    background: '#059669',
+    background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
     color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '0.75rem 1.5rem',
-    fontSize: '0.875rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
-  },
-  summaryPageDownloadButton: {
-    background: '#4f46e5',
-    color: 'white',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '0.75rem 1.5rem',
-    fontSize: '0.875rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
-  },
-  summaryPageLoading: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '400px',
-    gap: '1rem'
-  },
-  summaryPageLoadingSpinner: {
-    width: '48px',
-    height: '48px',
-    border: '4px solid #f3f4f6',
-    borderRadius: '50%',
-    borderTop: '4px solid #4f46e5',
-    animation: 'spin 1s linear infinite'
-  },
-
-  // Chat section
-  chatSection: {
-    flexShrink: 0,
-    background: 'white',
-    borderTop: '1px solid #e5e7eb',
-    padding: '1.5rem 2rem',
-    maxHeight: '60vh',
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  chatContainer: {
-    maxWidth: '800px',
-    margin: '0 auto',
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%'
-  },
-  chatHeader: {
-    textAlign: 'center',
-    marginBottom: '1rem',
-    flexShrink: 0,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  chatTitle: {
-    fontSize: '1.125rem',
-    fontWeight: '600',
-    color: '#111827',
-    margin: 0,
-    flex: 1,
-    textAlign: 'left'
-  },
-  chatHeaderActions: {
-    display: 'flex',
-    gap: '0.75rem',
-    alignItems: 'center'
-  },
-  summariesDropdown: {
-    position: 'relative'
-  },
-  summariesSelect: {
-    background: 'white',
-    border: '1px solid #d1d5db',
-    borderRadius: '6px',
-    padding: '0.375rem 0.75rem',
-    fontSize: '0.75rem',
-    color: '#374151',
-    cursor: 'pointer',
-    minWidth: '120px'
-  },
-  clearChatButton: {
-    background: 'none',
-    border: '1px solid #d1d5db',
-    borderRadius: '6px',
-    padding: '0.375rem 0.75rem',
-    fontSize: '0.75rem',
-    color: '#6b7280',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
-  },
-
-  // Chat messages
-  chatMessages: {
-    flex: 1,
-    overflowY: 'auto',
-    marginBottom: '1rem',
-    maxHeight: '400px',
-    padding: '0.5rem',
-    border: '1px solid #e5e7eb',
-    borderRadius: '8px',
-    background: '#fafafa'
-  },
-  chatMessage: {
-    marginBottom: '1rem'
-  },
-  chatMessageContent: {
-    borderRadius: '12px',
-    padding: '0.75rem 1rem',
-    maxWidth: '80%',
-    position: 'relative'
-  },
-  chatMessageUser: {
-    background: '#4f46e5',
-    color: 'white',
-    marginLeft: 'auto',
-    borderBottomRightRadius: '4px'
-  },
-  chatMessageAI: {
-    background: 'white',
-    border: '1px solid #e5e7eb',
-    marginRight: 'auto',
-    borderBottomLeftRadius: '4px'
-  },
-  chatMessageSystem: {
-    background: '#f0f9ff',
-    border: '1px solid #bae6fd',
-    color: '#0369a1',
-    marginRight: 'auto',
-    borderBottomLeftRadius: '4px'
-  },
-  chatMessageSummary: {
-    background: '#f0fdf4',
-    border: '1px solid #bbf7d0',
-    color: '#15803d',
-    marginRight: 'auto',
-    borderBottomLeftRadius: '4px'
-  },
-  chatMessageError: {
-    background: '#fef2f2',
-    border: '1px solid #fecaca',
-    color: '#dc2626',
-    marginRight: 'auto',
-    borderBottomLeftRadius: '4px'
-  },
-  chatMessageSources: {
-    background: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    color: '#475569',
-    marginRight: 'auto',
-    borderBottomLeftRadius: '4px',
-    fontSize: '0.8rem'
-  },
-  chatMessageText: {
-    fontSize: '0.875rem',
-    lineHeight: '1.4',
-    marginBottom: '0.25rem',
-    whiteSpace: 'pre-wrap'
-  },
-  chatMessageTime: {
-    fontSize: '0.75rem',
-    opacity: 0.7,
-    textAlign: 'right',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  chatMessageMeta: {
-    fontSize: '0.65rem',
-    opacity: 0.8,
-    fontStyle: 'italic'
-  },
-
-  // Source information
-  sourcesInfo: {
-    marginTop: '0.5rem',
-    padding: '0.5rem',
-    background: 'rgba(79, 70, 229, 0.05)',
-    borderRadius: '4px',
-    border: '1px solid rgba(79, 70, 229, 0.1)'
-  },
-  sourcesHeader: {
-    fontSize: '0.75rem',
-    fontWeight: '600',
-    color: '#4f46e5',
-    marginBottom: '0.25rem'
-  },
-  sourceItem: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '0.25rem',
-    marginBottom: '0.125rem',
-    fontSize: '0.7rem'
-  },
-  sourceNumber: {
-    fontWeight: '600',
-    color: '#4f46e5',
-    minWidth: '12px'
-  },
-  sourceText: {
-    color: '#6b7280',
-    lineHeight: '1.3'
-  },
-  sourceScore: {
-    color: '#059669',
-    fontWeight: '500'
-  },
-
-  // Typing indicator
-  chatTypingIndicator: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.25rem',
-    padding: '0.5rem 0'
-  },
-  typingDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    backgroundColor: '#6b7280',
-    animation: 'typingAnimation 1.4s infinite ease-in-out'
-  },
-
-  // Chat form
-  chatForm: {
-    marginBottom: '1rem',
-    flexShrink: 0
-  },
-  chatInputContainer: {
-    display: 'flex',
-    gap: '0.75rem',
-    alignItems: 'center'
-  },
-  chatInput: {
-    flex: 1,
-    padding: '0.75rem 1rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '24px',
-    fontSize: '0.875rem',
-    outline: 'none',
-    background: '#f9fafb'
-  },
-  chatSendButton: {
-    background: '#4f46e5',
-    color: 'white',
-    border: 'none',
-    borderRadius: '50%',
-    width: '40px',
-    height: '40px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease'
-  },
-  chatSendButtonDisabled: {
-    background: '#9ca3af',
-    cursor: 'not-allowed'
-  },
-
-  // Button spinner
-  buttonSpinner: {
-    width: '16px',
-    height: '16px',
-    border: '2px solid rgba(255, 255, 255, 0.3)',
-    borderTop: '2px solid white',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite'
-  },
-
-  // Chat note
-  chatNote: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '0.5rem',
-    fontSize: '0.875rem',
-    color: '#6b7280',
-    fontStyle: 'italic',
-    flexShrink: 0
-  },
-  chatNoteIcon: {
-    color: '#9ca3af'
-  },
-
-  // Summary modal
-  summaryModal: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2000,
-    padding: '2rem'
-  },
-  summaryModalContent: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    width: '100%',
-    maxWidth: '800px',
-    maxHeight: '90vh',
-    display: 'flex',
-    flexDirection: 'column',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-  },
-  summaryModalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '1.5rem 2rem',
-    borderBottom: '1px solid #e5e7eb',
-    flexShrink: 0
-  },
-  summaryModalTitle: {
-    fontSize: '1.5rem',
-    fontWeight: '700',
-    color: '#111827',
-    margin: 0
-  },
-  summaryModalClose: {
-    background: 'none',
-    border: 'none',
-    fontSize: '1.5rem',
-    color: '#6b7280',
-    cursor: 'pointer',
-    padding: '0.5rem',
-    borderRadius: '6px',
-    transition: 'all 0.2s ease'
-  },
-  summaryModalBody: {
-    flex: 1,
-    overflow: 'auto',
-    padding: '2rem'
-  },
-  summaryContent: {
-    height: '100%'
-  },
-  summaryMeta: {
-    display: 'flex',
-    gap: '1rem',
-    marginBottom: '1.5rem',
-    flexWrap: 'wrap'
-  },
-  summaryMetaItem: {
-    fontSize: '0.875rem',
-    color: '#6b7280',
-    background: '#f3f4f6',
-    padding: '0.375rem 0.75rem',
-    borderRadius: '6px'
-  },
-  summaryText: {
-    backgroundColor: '#f9fafb',
-    border: '1px solid #e5e7eb',
-    borderRadius: '8px',
-    padding: '1.5rem',
-    fontSize: '0.9rem',
-    lineHeight: '1.6',
-    color: '#374151',
-    whiteSpace: 'pre-wrap',
-    marginBottom: '1.5rem',
-    minHeight: '300px',
-    overflow: 'auto'
-  },
-  summaryActions: {
-    display: 'flex',
-    gap: '1rem',
-    justifyContent: 'center',
-    flexWrap: 'wrap'
-  },
-  summaryCopyButton: {
-    background: '#059669',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    padding: '0.5rem 1rem',
-    fontSize: '0.875rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
-  },
-  summaryDownloadButton: {
-    background: '#4f46e5',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    padding: '0.5rem 1rem',
-    fontSize: '0.875rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
-  },
-  summaryLoading: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '300px',
-    gap: '1rem'
-  },
-  summaryLoadingSpinner: {
-    width: '48px',
-    height: '48px',
-    border: '4px solid #f3f4f6',
-    borderRadius: '50%',
-    borderTop: '4px solid #4f46e5',
-    animation: 'spin 1s linear infinite'
-  },
-
-  // Loading
-  loadingContainer: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    height: "100%",
-    color: "#6b7280"
-  },
-  loadingSpinner: {
-    width: "48px",
-    height: "48px",
-    border: "4px solid #f3f4f6",
-    borderRadius: "50%",
-    borderTop: "4px solid #4f46e5",
-    animation: "spin 1s linear infinite",
-    marginBottom: "1.5rem",
-  },
-  loadingText: {
-    fontSize: '1.1rem',
-    fontWeight: '500'
+    boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)'
   }
 };
 
-// Enhanced animations for the styles
+// Enhanced animations with Reading Mode hover effects
+// Add this to your enhancedAnimations in NotebookDetailPageStyles.js:
+
 export const enhancedAnimations = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
@@ -1589,7 +2025,7 @@ export const enhancedAnimations = `
   
   @keyframes progressStripes {
     0% { background-position: 0 0; }
-    100% { background-position: 16px 0; }
+    100% { background-position: 32px 0; }
   }
   
   @keyframes pulse {
@@ -1602,6 +2038,17 @@ export const enhancedAnimations = `
     30% { transform: translateY(-10px); }
   }
 
+  @keyframes slideInFromRight {
+    from {
+      opacity: 0;
+      transform: translateX(100px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
   @keyframes fadeInUp {
     from {
       opacity: 0;
@@ -1610,17 +2057,6 @@ export const enhancedAnimations = `
     to {
       opacity: 1;
       transform: translateY(0);
-    }
-  }
-
-  @keyframes compactItemSlideIn {
-    from {
-      opacity: 0;
-      transform: translateX(-10px) scale(0.95);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0) scale(1);
     }
   }
 
@@ -1635,78 +2071,65 @@ export const enhancedAnimations = `
     }
   }
 
-  /* Welcome section animations */
-  .welcome-content {
-    animation: fadeInUp 0.6s ease-out;
+  @keyframes shimmer {
+    0% { background-position: -200px 0; }
+    100% { background-position: calc(200px + 100%) 0; }
   }
 
-  /* Feature item hover effects */
-  .feature-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  /* NEW: Reading Mode Back Button Hover Effect */
+  .reading-back-button:hover {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+    color: #374151 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
   }
 
-  /* UPDATED: Compact modern file item hover effects */
-  .modern-file-item:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-    border-color: #d1d5db !important;
+  /* Enhanced hover effects */
+  .source-item:hover {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
+    transform: translateY(-2px) translateX(2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1) !important;
+    border-color: #e2e8f0 !important;
   }
 
-  /* UPDATED: Compact modern link item hover effects */
-  .modern-link-item:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-    border-color: #d1d5db !important;
+  .source-item:hover .sourceItemActions {
+    opacity: 1 !important;
   }
 
-  .modern-link-item:hover .thumbnailImage {
-    transform: scale(1.05);
+  .source-action-button:hover {
+    background: linear-gradient(135deg, #e2e8f0, #cbd5e1) !important;
+    color: #475569 !important;
+    transform: translateY(-1px) scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
   }
 
-  .modern-link-item:hover .youtubeThumbnailContainer {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  .source-remove-button:hover {
+    background: linear-gradient(135deg, #fee2e2, #fca5a5) !important;
+    color: #dc2626 !important;
+    transform: translateY(-1px) scale(1.05);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3) !important;
   }
 
-  .modern-link-item .linkTitle:hover {
-    color: #0369a1 !important;
-  }
-
-  @media (max-width: 768px) {
-    .youtubeThumbnailContainer,
-    .modernLinkIcon {
-      width: 48px !important;
-      height: 36px !important;
-    }
-  }
-
-  /* Modern link text hover */
-  .modern-link-text:hover {
-    color: #0369a1 !important;
+  .source-item-link:hover {
+    color: #1d4ed8 !important;
     text-decoration: underline;
   }
 
-  /* UPDATED: Smaller modern action button hovers */
-  .modern-action-button:hover {
-    background: #e5e7eb !important;
-    color: #374151 !important;
-    transform: translateY(-1px);
+  .sourcesItems {
+    transition: all 0.3s ease;
   }
 
-  .modern-remove-button:hover {
-    background: #fee2e2 !important;
-    color: #dc2626 !important;
-    transform: translateY(-1px);
+  .sourceItem {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Modern toolbar button hover effects */
+  /* Enhanced toolbar button hover effects */
   .toolbar-button:hover:not(:disabled) {
-    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%) !important;
-    border-color: #94a3b8 !important;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-    color: #1e293b !important;
+    background: #f3f4f6 !important;
+    border-color: #9ca3af !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+    color: #0f172a !important;
   }
 
   .toolbar-button:disabled {
@@ -1720,75 +2143,104 @@ export const enhancedAnimations = `
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
   }
 
-  /* Summary dropdown hover effects */
-  .summary-dropdown-container .summary-option:hover {
-    background-color: #f9fafb !important;
-  }
-  
-  .summary-dropdown-container .summary-option:last-child {
-    border-bottom: none !important;
-  }
-
-  /* Modern summary card hover effects */
-  .modern-summary-card {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
+  /* Enhanced summary card hover effects */
   .modern-summary-card:hover {
-    transform: translateY(-4px) scale(1.02);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15) !important;
     border-color: #4f46e5 !important;
   }
 
-  /* Link dropdown animations and hover effects */
-  .link-dropdown-container .linkInput:focus {
+  .modern-summary-card:hover .summaryTypeIcon {
+    background: linear-gradient(135deg, #4f46e5, #7c3aed) !important;
+    color: white !important;
+    transform: scale(1.1);
+  }
+
+  /* Enhanced link dropdown animations and hover effects */
+  .linkInput:focus {
     border-color: #3b82f6 !important;
     background: white !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 2px rgba(0, 0, 0, 0.05) !important;
-  }
-
-  .link-dropdown-container .linkCancelButton:hover {
-    background: #f3f4f6 !important;
-    border-color: #d1d5db !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
   }
 
-  .link-dropdown-container .linkConfirmButton:hover:not(:disabled) {
+  .linkCancelButton:hover {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+    border-color: #cbd5e1 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  .linkConfirmButton:hover:not(:disabled) {
     background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4) !important;
+    box-shadow: 0 12px 25px rgba(59, 130, 246, 0.5) !important;
   }
 
-  /* NEW: Horizontal scrollbar styling for itemsGrid */
-  .itemsGrid::-webkit-scrollbar {
-    height: 4px;
+  /* Enhanced chat input hover effects */
+  .chatInput:focus {
+    border-color: #4f46e5 !important;
+    background: white !important;
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-1px);
   }
 
-  .itemsGrid::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 2px;
+  .chatSendButton:hover:not(:disabled) {
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%) !important;
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 12px 25px rgba(79, 70, 229, 0.5) !important;
   }
 
-  .itemsGrid::-webkit-scrollbar-thumb {
-    background: #e2e8f0;
-    border-radius: 2px;
+  .progress-popup-close:hover {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+    color: #475569 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
   }
 
-  .itemsGrid::-webkit-scrollbar-thumb:hover {
-    background: #d1d5db;
+  /* Enhanced modal and button hover effects */
+  .summary-modal-close:hover {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+    color: #475569 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+  }
+  
+  .summary-copy-button:hover {
+    background: linear-gradient(135deg, #047857, #065f46) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(5, 150, 105, 0.5) !important;
+  }
+  
+  .summary-download-button:hover {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.5) !important;
   }
 
-  /* NEW: Fade effect for overflow scrolling */
-  .itemsGrid::after {
-    content: '';
-    position: sticky;
-    right: 0;
-    width: 20px;
-    height: 100%;
-    background: linear-gradient(to left, white, transparent);
-    pointer-events: none;
-    flex-shrink: 0;
+  .clear-chat-button:hover {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+    border-color: #cbd5e1 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  .back-button:hover {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  .save-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.5) !important;
+  }
+
+  /* Summary dropdown hover effects */
+  .summary-option:hover {
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9) !important;
+    transform: translateX(4px);
   }
 
   /* Add typing animation delay for dots */
@@ -1799,153 +2251,224 @@ export const enhancedAnimations = `
   .typingDot:nth-child(3) {
     animation-delay: 0.4s;
   }
-  
-  /* Summary modal animations */
-  .summary-modal-close:hover {
-    background-color: #f3f4f6 !important;
-    color: #374151 !important;
-  }
-  
-  .summary-copy-button:hover {
-    background-color: #047857 !important;
-  }
-  
-  .summary-download-button:hover {
-    background-color: #3730a3 !important;
+
+  /* Enhanced responsive adjustments for 3-column layout */
+  @media (max-width: 1400px) {
+    .leftPanel,
+    .rightPanel {
+      width: 300px !important;
+    }
   }
 
-  /* Smooth entrance animations */
-  .feature-item {
-    animation: fadeInUp 0.5s ease-out;
+  @media (max-width: 1200px) {
+    .leftPanel,
+    .rightPanel {
+      width: 280px !important;
+    }
+    
+    .contentLayout {
+      gap: 0.75rem !important;
+    }
   }
 
-  .feature-item:nth-child(1) { animation-delay: 0.1s; }
-  .feature-item:nth-child(2) { animation-delay: 0.2s; }
-  .feature-item:nth-child(3) { animation-delay: 0.3s; }
-
-  /* UPDATED: Compact file and link item animations */
-  .modern-file-item {
-    animation: compactItemSlideIn 0.3s ease-out;
+  @media (max-width: 1024px) {
+    .leftPanel,
+    .rightPanel {
+      width: 240px !important;
+    }
+    
+    .contentLayout {
+      gap: 0.5rem !important;
+      padding: 0.5rem !important;
+    }
   }
 
-  .modern-link-item {
-    animation: compactItemSlideIn 0.3s ease-out;
-  }
-
-  /* NEW: Responsive adjustments for smaller screens */
   @media (max-width: 768px) {
-    .modern-file-item,
-    .modern-link-item {
-      min-width: 180px !important;
-      max-width: 200px !important;
-      padding: 0.4rem 0.6rem !important;
-    }
-    
-    .fileName,
-    .modern-link-text {
-      font-size: 0.75rem !important;
-    }
-    
-    .fileMetadata,
-    .linkStatus {
-      font-size: 0.65rem !important;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .itemsGrid {
+    .contentLayout {
+      flex-direction: column !important;
       gap: 0.5rem !important;
     }
     
-    .modern-file-item,
-    .modern-link-item {
-      min-width: 160px !important;
-      max-width: 180px !important;
+    .leftPanel,
+    .rightPanel {
+      width: 100% !important;
+      height: 300px !important;
     }
     
-    .sectionTitle {
-      font-size: 0.8rem !important;
+    .middlePanel {
+      flex: 1 !important;
+      min-height: 400px !important;
     }
-    
-    .sectionCount {
-      min-width: 18px !important;
-      height: 18px !important;
-      font-size: 0.65rem !important;
+
+    // Add these animations to your existing enhancedAnimations string:
+
+  @keyframes savedChatsSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-20px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
     }
   }
 
-  /* NEW: Focus states for accessibility */
-  .modern-action-button:focus,
-  .modern-remove-button:focus {
-    outline: 2px solid #3b82f6;
-    outline-offset: 1px;
+  @keyframes modalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
-  .modern-link-text:focus {
-    outline: 2px solid #3b82f6;
-    outline-offset: 1px;
-    border-radius: 2px;
+  @keyframes modalSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-30px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 
-  /* NEW: Status indicators for links */
-  .modern-link-item[data-status="processing"] .linkStatus {
-    color: #f59e0b !important;
+  /* Enhanced hover effects for saved chats */
+  .saved-chats-button:hover {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+    border-color: #cbd5e1 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+    color: #374151 !important;
   }
 
-  .modern-link-item[data-status="completed"] .linkStatus {
-    color: #10b981 !important;
+  .save-chat-button:hover {
+    background: linear-gradient(135deg, #059669, #047857) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.5) !important;
   }
 
-  .modern-link-item[data-status="error"] .linkStatus {
-    color: #ef4444 !important;
+  .saved-chat-item:hover {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
+    border-color: #4f46e5 !important;
+    transform: translateY(-3px) translateX(3px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15) !important;
   }
 
-  /* NEW: Enhanced input placeholder styling for link dropdown */
-  .link-dropdown-container .linkInput::placeholder {
-    color: #9ca3af;
-    opacity: 1;
-    font-style: italic;
+  .saved-chat-item:hover .savedChatItemTitle {
+    color: #4f46e5 !important;
   }
 
-  .link-dropdown-container .linkInput:hover:not(:focus) {
-    border-color: #d1d5db !important;
-    background: #f9fafb !important;
+  .saved-chats-close-button:hover {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+    border-color: #cbd5e1 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+    color: #374151 !important;
   }
 
-  /* NEW: Responsive improvements for link dropdown */
+  .save-chat-modal-close:hover {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+    border-color: #cbd5e1 !important;
+    color: #374151 !important;
+    transform: translateY(-1px);
+  }
+
+  .save-chat-cancel-button:hover {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0) !important;
+    border-color: #cbd5e1 !important;
+    color: #374151 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+  }
+
+  .save-chat-confirm-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #059669, #047857) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.5) !important;
+  }
+
+  .save-chat-input:focus {
+    border-color: #4f46e5 !important;
+    background: white !important;
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-1px);
+  }
+
+  /* Responsive adjustments for saved chats */
   @media (max-width: 768px) {
-    .link-dropdown-container .linkDropdown {
-      width: 320px !important;
-      left: auto !important;
-      right: 0 !important;
-      margin-right: -10px;
+    .savedChatsDropdown {
+      width: 350px !important;
+      right: -50px !important;
     }
     
-    .link-dropdown-container .linkInput {
-      font-size: 16px !important; /* Prevents zoom on mobile */
+    .save-chat-modal-content {
+      width: 95% !important;
+      margin: 1rem !important;
     }
   }
 
   @media (max-width: 480px) {
-    .link-dropdown-container .linkDropdown {
-      width: 280px !important;
-      right: -20px !important;
+    .savedChatsDropdown {
+      width: 320px !important;
+      right: -80px !important;
     }
-    
-    .link-dropdown-container .linkDropdownActions {
+  }
+
+    /* Make reading mode header more compact on mobile */
+    .readingModeHeader {
+      padding: 0.5rem 1rem !important;
       flex-direction: column !important;
-      gap: 0.75rem !important;
+      gap: 0.5rem !important;
     }
-    
-    .link-dropdown-container .linkCancelButton,
-    .link-dropdown-container .linkConfirmButton {
+
+    .readingHeaderLeft,
+    .readingHeaderRight {
       width: 100% !important;
       justify-content: center !important;
     }
+
+    .readingHeaderRight {
+      gap: 0.5rem !important;
+    }
+
+    .readingInfoItem {
+      font-size: 0.7rem !important;
+      padding: 0.125rem 0.375rem !important;
+    }
+  }
+
+  /* Smooth panel transitions */
+  .leftPanel,
+  .middlePanel,
+  .rightPanel {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Enhanced scrollbar styling */
+  .sourcesContent::-webkit-scrollbar,
+  .chatMessages::-webkit-scrollbar,
+  .rightPanel::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .sourcesContent::-webkit-scrollbar-track,
+  .chatMessages::-webkit-scrollbar-track,
+  .rightPanel::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+  }
+
+  .sourcesContent::-webkit-scrollbar-thumb,
+  .chatMessages::-webkit-scrollbar-thumb,
+  .rightPanel::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #cbd5e1, #94a3b8);
+    border-radius: 3px;
+  }
+
+  .sourcesContent::-webkit-scrollbar-thumb:hover,
+  .chatMessages::-webkit-scrollbar-thumb:hover,
+  .rightPanel::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #94a3b8, #64748b);
   }
 `;
 
-// Function to inject the CSS if not already present
 export const injectNotebookDetailCSS = () => {
   if (!document.querySelector('#notebook-detail-styles')) {
     const style = document.createElement('style');

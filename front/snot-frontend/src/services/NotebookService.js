@@ -539,716 +539,716 @@ class NotebookService {
     }
   }
 
- async getNotebook(notebookId, options = {}) {
-  try {
-    /* ---------- sanity checks ---------- */
-    if (!notebookId) throw new Error('Notebook ID is required');
-    console.log(`📖 Fetching notebook: ${notebookId}`);
-
-    /* ---------- auth & user ---------- */
-    const authHeaders = await authService.getAuthHeaders();
-    if (!authHeaders?.Authorization)
-      throw new Error('Authentication required – please login');
-
-    const userEmail =
-      authService.getUserData()?.email?.toLowerCase() || 'guest@example.com';
-
-    /* ---------- query parameters ---------- */
-    const params = {};
-    if (options.chunk !== undefined && options.chunk !== null) params.chunk = options.chunk;
-    if (options.all === true) params.all = 'true';
-    params.includeDownloadUrls = 'true';
-    
-    // 🔧 FIX: Use the correct parameter name for Lambda
-    if (options.includeSummaryContent !== false) params.includeSummaries = 'true';
-    
-    console.log('Request params:', params);
-
-    /* ---------- make the call ---------- */
-    const { data: raw } = await axios.get(
-      `${this.baseUrl}/getNotebook/${notebookId}`,
-      {
-        headers: {
-          Authorization: authHeaders.Authorization,
-          'Content-Type': 'application/json',
-          'X-User-Email': userEmail
-        },
-        params
-      }
-    );
-
-    /* ---------- unwrap Lambda envelope ---------- */
-    let data;
-    if (raw && raw.body && typeof raw.body === 'string') {
-      data = JSON.parse(raw.body);
-    } else if (typeof raw === 'string') {
-      data = JSON.parse(raw);
-    } else {
-      data = raw;
-    }
-    
-    console.log('Parsed notebook data:', data);
-
-    // 🔧 FIX: Handle different Lambda response formats
-    let notebookData;
-    if (data.notebook) {
-      // Format 1: {notebook: {...}}
-      notebookData = data.notebook;
-    } else if (data.metadata) {
-      // Format 2: {metadata: {...}, chunks: {...}, summaries: {...}, ...}
-      notebookData = {
-        ...data.metadata,
-        chunks: data.chunks,
-        files: data.files,
-        links: data.links,
-        summaries: data.summaries,
-        summaryContent: data.summaryContent,
-        summaryTypes: data.summaryTypes,
-        summariesCount: data.summariesCount,
-        hasSummaries: data.summariesCount > 0,
-        lastSummarizationDate: data.metadata.lastSummarization || data.metadata.last_summarization_date,
-        summaryStatus: data.metadata.summaryStatus || data.metadata.summary_status
-      };
-    } else {
-      notebookData = data;
-    }
-    
-    if (!notebookData) {
-      throw new Error('Invalid response – missing notebook data');
-    }
-
-    /* ---------- restore cached tags (optional) ---------- */
+  async getNotebook(notebookId, options = {}) {
     try {
-      const tagCache = JSON.parse(localStorage.getItem('notebookTags') || '{}');
-      if (tagCache[notebookId] && (!notebookData.tags || !notebookData.tags.length)) {
-        notebookData.tags = tagCache[notebookId];
-      }
-    } catch (e) {
-      console.warn('Tag cache read failed:', e);
-    }
+      /* ---------- sanity checks ---------- */
+      if (!notebookId) throw new Error('Notebook ID is required');
+      console.log(`📖 Fetching notebook: ${notebookId}`);
 
-    /* ---------- map files ---------- */
-    const files = (notebookData.files || []).map(f => ({
-      id: f.fileId,
-      name: f.fileName,
-      size: f.fileSize,
-      sizeFormatted: f.fileSizeFormatted,
-      type: f.fileType,
-      extension: f.fileExtension,
-      mimeType: f.mimeType,
-      uploadedAt: f.uploadedAt,
-      isValid: f.isValidFile,
-      downloadUrl: f.downloadUrl,
-      s3Key: f.s3Key,
-      s3Url: f.s3Url
-    }));
+      /* ---------- auth & user ---------- */
+      const authHeaders = await authService.getAuthHeaders();
+      if (!authHeaders?.Authorization)
+        throw new Error('Authentication required – please login');
 
-    /* ---------- map links ---------- */
-    const links = (notebookData.links || []).map(l => ({
-      id: l.id,
-      url: l.url,
-      title: l.title,
-      addedAt: l.addedAt,
-      type: l.type,
-      videoId: l.videoId,
-      transcriptStatus: l.transcriptStatus,
-      downloadStatus: l.downloadStatus,
-      description: l.description,
-      thumbnailUrl: l.thumbnailUrl,
-      isYouTube: l.isYouTube,
-      domain: l.domain,
-      isValid: l.isValidLink
-    }));
+      const userEmail =
+        authService.getUserData()?.email?.toLowerCase() || 'guest@example.com';
 
-    /* ---------- 🔧 FIXED: Process summaries from actual Lambda response format ---------- */
-    const summaries = notebookData.summaries || {};
-    const summaryContent = notebookData.summaryContent || {};
-    const summaryTypes = notebookData.summaryTypes || Object.keys(summaries);
-    
-    console.log('🔍 Processing Lambda summaries:', {
-      summaries,
-      summaryContent,
-      summaryTypes,
-      hasSummaries: notebookData.hasSummaries,
-      summariesType: typeof summaries,
-      summariesKeys: Object.keys(summaries)
-    });
+      /* ---------- query parameters ---------- */
+      const params = {};
+      if (options.chunk !== undefined && options.chunk !== null) params.chunk = options.chunk;
+      if (options.all === true) params.all = 'true';
+      params.includeDownloadUrls = 'true';
 
-    // Build enhanced summaries in the format expected by the frontend
-    const enhancedSummaries = {};
-    
-    // 🔧 FIXED: Process each summary type correctly for the actual response format
-    for (const [type, summaryValue] of Object.entries(summaries)) {
-      console.log(`📄 Processing ${type} summary:`, { 
-        summaryValue, 
-        valueType: typeof summaryValue,
-        isString: typeof summaryValue === 'string',
-        isObject: typeof summaryValue === 'object'
-      });
-      
-      // 🔧 FIXED: Handle the actual response format where summaries are objects
-      let s3Url = null;
-      
-      if (typeof summaryValue === 'string') {
-        // Simple string URL (Format 1)
-        s3Url = summaryValue;
-      } else if (summaryValue && typeof summaryValue === 'object') {
-        // Object format (Format 2) - extract the actual URL
-        s3Url = summaryValue.s3Path || 
-                summaryValue.url || 
-                summaryValue.s3Url || 
-                summaryValue.downloadUrl || 
-                summaryValue.s3_url;
-      }
-      
-      // 🔧 FIXED: Safe URL validation with type checking
-      const hasValidUrl = s3Url && 
-                         typeof s3Url === 'string' &&
-                         s3Url !== 'undefined' && 
-                         s3Url !== 'null' && 
-                         s3Url.trim() !== '' &&
-                         (s3Url.startsWith('http') || s3Url.startsWith('s3://'));
-      
-      const hasContent = summaryContent[type] && 
-                        typeof summaryContent[type] === 'string' && 
-                        summaryContent[type].length > 0;
-      
-      console.log(`📄 ${type} summary analysis:`, {
-        summaryValue,
-        s3Url,
-        hasValidUrl,
-        hasContent,
-        contentLength: summaryContent[type]?.length || 0
-      });
-      
-      // 🔧 FIXED: Accept summaries with valid URLs even if no content is provided
-      if (hasValidUrl || hasContent) {
-        enhancedSummaries[type] = {
-          // Use real URL if available, otherwise create placeholder for content-only
-          url: hasValidUrl ? s3Url : (hasContent ? `#content-${type}` : null),
-          ready: true,
-          generatedAt: notebookData.lastSummarizationDate || notebookData.lastModified || new Date().toISOString(),
-          downloadUrl: hasValidUrl ? s3Url : null,
-          
-          // Content from Lambda response (might be empty)
-          content: summaryContent[type] || null,
-          hasContent: hasContent,
-          
-          // Additional metadata from Lambda
-          source: 'lambda_response',
-          fetchedAt: new Date().toISOString(),
-          
-          // 🔧 NEW: Include summary metadata if available
-          exists: summaryValue?.exists,
-          summaryType: summaryValue?.type || type
-        };
-        
-        console.log(`✅ Added ${type} summary:`, {
-          hasValidUrl,
-          hasContent,
-          contentLength: summaryContent[type]?.length || 0,
-          url: enhancedSummaries[type].url,
-          summaryExists: summaryValue?.exists
-        });
+      // 🔧 FIX: Use the correct parameter name for Lambda
+      if (options.includeSummaryContent !== false) params.includeSummaries = 'true';
+
+      console.log('Request params:', params);
+
+      /* ---------- make the call ---------- */
+      const { data: raw } = await axios.get(
+        `${this.baseUrl}/getNotebook/${notebookId}`,
+        {
+          headers: {
+            Authorization: authHeaders.Authorization,
+            'Content-Type': 'application/json',
+            'X-User-Email': userEmail
+          },
+          params
+        }
+      );
+
+      /* ---------- unwrap Lambda envelope ---------- */
+      let data;
+      if (raw && raw.body && typeof raw.body === 'string') {
+        data = JSON.parse(raw.body);
+      } else if (typeof raw === 'string') {
+        data = JSON.parse(raw);
       } else {
-        console.warn(`⚠️ Skipping ${type} summary - no valid URL or content:`, {
+        data = raw;
+      }
+
+      console.log('Parsed notebook data:', data);
+
+      // 🔧 FIX: Handle different Lambda response formats
+      let notebookData;
+      if (data.notebook) {
+        // Format 1: {notebook: {...}}
+        notebookData = data.notebook;
+      } else if (data.metadata) {
+        // Format 2: {metadata: {...}, chunks: {...}, summaries: {...}, ...}
+        notebookData = {
+          ...data.metadata,
+          chunks: data.chunks,
+          files: data.files,
+          links: data.links,
+          summaries: data.summaries,
+          summaryContent: data.summaryContent,
+          summaryTypes: data.summaryTypes,
+          summariesCount: data.summariesCount,
+          hasSummaries: data.summariesCount > 0,
+          lastSummarizationDate: data.metadata.lastSummarization || data.metadata.last_summarization_date,
+          summaryStatus: data.metadata.summaryStatus || data.metadata.summary_status
+        };
+      } else {
+        notebookData = data;
+      }
+
+      if (!notebookData) {
+        throw new Error('Invalid response – missing notebook data');
+      }
+
+      /* ---------- restore cached tags (optional) ---------- */
+      try {
+        const tagCache = JSON.parse(localStorage.getItem('notebookTags') || '{}');
+        if (tagCache[notebookId] && (!notebookData.tags || !notebookData.tags.length)) {
+          notebookData.tags = tagCache[notebookId];
+        }
+      } catch (e) {
+        console.warn('Tag cache read failed:', e);
+      }
+
+      /* ---------- map files ---------- */
+      const files = (notebookData.files || []).map(f => ({
+        id: f.fileId,
+        name: f.fileName,
+        size: f.fileSize,
+        sizeFormatted: f.fileSizeFormatted,
+        type: f.fileType,
+        extension: f.fileExtension,
+        mimeType: f.mimeType,
+        uploadedAt: f.uploadedAt,
+        isValid: f.isValidFile,
+        downloadUrl: f.downloadUrl,
+        s3Key: f.s3Key,
+        s3Url: f.s3Url
+      }));
+
+      /* ---------- map links ---------- */
+      const links = (notebookData.links || []).map(l => ({
+        id: l.id,
+        url: l.url,
+        title: l.title,
+        addedAt: l.addedAt,
+        type: l.type,
+        videoId: l.videoId,
+        transcriptStatus: l.transcriptStatus,
+        downloadStatus: l.downloadStatus,
+        description: l.description,
+        thumbnailUrl: l.thumbnailUrl,
+        isYouTube: l.isYouTube,
+        domain: l.domain,
+        isValid: l.isValidLink
+      }));
+
+      /* ---------- 🔧 FIXED: Process summaries from actual Lambda response format ---------- */
+      const summaries = notebookData.summaries || {};
+      const summaryContent = notebookData.summaryContent || {};
+      const summaryTypes = notebookData.summaryTypes || Object.keys(summaries);
+
+      console.log('🔍 Processing Lambda summaries:', {
+        summaries,
+        summaryContent,
+        summaryTypes,
+        hasSummaries: notebookData.hasSummaries,
+        summariesType: typeof summaries,
+        summariesKeys: Object.keys(summaries)
+      });
+
+      // Build enhanced summaries in the format expected by the frontend
+      const enhancedSummaries = {};
+
+      // 🔧 FIXED: Process each summary type correctly for the actual response format
+      for (const [type, summaryValue] of Object.entries(summaries)) {
+        console.log(`📄 Processing ${type} summary:`, {
+          summaryValue,
+          valueType: typeof summaryValue,
+          isString: typeof summaryValue === 'string',
+          isObject: typeof summaryValue === 'object'
+        });
+
+        // 🔧 FIXED: Handle the actual response format where summaries are objects
+        let s3Url = null;
+
+        if (typeof summaryValue === 'string') {
+          // Simple string URL (Format 1)
+          s3Url = summaryValue;
+        } else if (summaryValue && typeof summaryValue === 'object') {
+          // Object format (Format 2) - extract the actual URL
+          s3Url = summaryValue.s3Path ||
+            summaryValue.url ||
+            summaryValue.s3Url ||
+            summaryValue.downloadUrl ||
+            summaryValue.s3_url;
+        }
+
+        // 🔧 FIXED: Safe URL validation with type checking
+        const hasValidUrl = s3Url &&
+          typeof s3Url === 'string' &&
+          s3Url !== 'undefined' &&
+          s3Url !== 'null' &&
+          s3Url.trim() !== '' &&
+          (s3Url.startsWith('http') || s3Url.startsWith('s3://'));
+
+        const hasContent = summaryContent[type] &&
+          typeof summaryContent[type] === 'string' &&
+          summaryContent[type].length > 0;
+
+        console.log(`📄 ${type} summary analysis:`, {
           summaryValue,
           s3Url,
           hasValidUrl,
-          hasContent
+          hasContent,
+          contentLength: summaryContent[type]?.length || 0
         });
-      }
-    }
 
-    /* ---------- build enhanced summary result ---------- */
-    let finalEnhancedSummaries = enhancedSummaries;
-    
-    // 🔧 NEW: Optionally fetch summary content if not provided and URLs are available
-    if (options.includeSummaryContent !== false && Object.keys(enhancedSummaries).length > 0) {
-      const hasAnySummaryWithoutContent = Object.values(enhancedSummaries).some(s => 
-        s.url && s.url.startsWith('s3://') && !s.hasContent
-      );
-      
-      if (hasAnySummaryWithoutContent) {
-        console.log('📥 Some summaries need content fetching...');
-        try {
-          finalEnhancedSummaries = await this.fetchSummaryContentWhenNeeded(enhancedSummaries);
-        } catch (fetchError) {
-          console.warn('⚠️ Failed to fetch some summary content:', fetchError.message);
-          // Continue with what we have
-        }
-      }
-    }
-    
-    const summaryResult = {
-      summaries: finalEnhancedSummaries,
-      summariesCount: Object.keys(finalEnhancedSummaries).length,
-      contentAvailable: Object.values(finalEnhancedSummaries).filter(s => s.hasContent).length,
-      lastFetched: new Date().toISOString()
-    };
+        // 🔧 FIXED: Accept summaries with valid URLs even if no content is provided
+        if (hasValidUrl || hasContent) {
+          enhancedSummaries[type] = {
+            // Use real URL if available, otherwise create placeholder for content-only
+            url: hasValidUrl ? s3Url : (hasContent ? `#content-${type}` : null),
+            ready: true,
+            generatedAt: notebookData.lastSummarizationDate || notebookData.lastModified || new Date().toISOString(),
+            downloadUrl: hasValidUrl ? s3Url : null,
 
-    /* ---------- build final view model ---------- */
-    const notebook = {
-      /* ids & titles */
-      notebookId: notebookData.notebookId || notebookId,
-      title: notebookData.title || notebookData.Title || 'Untitled Notebook',
+            // Content from Lambda response (might be empty)
+            content: summaryContent[type] || null,
+            hasContent: hasContent,
 
-      /* core content */
-      content: (notebookData.chunks && notebookData.chunks[0]?.content) || 
-               (notebookData.chunks && notebookData.chunks['0']) || '',
-      allChunks: notebookData.chunks || [],
-      chunkCount: notebookData.chunkCount || 1,
-
-      /* meta */
-      tags: notebookData.tags || [],
-      tagsCount: notebookData.tags?.length || 0,
-      connections: notebookData.connections || [],
-      preview: notebookData.preview || '',
-      createdBy: notebookData.createdBy,
-      createdAt: notebookData.createdAt,
-      updatedAt: notebookData.lastModified || notebookData.updatedAt,
-      wordCount: notebookData.wordCount || 0,
-      byteSize: notebookData.byteSize || 0,
-
-      /* 🔧 FIXED: Enhanced summarization with proper Lambda data */
-      summarizationStatus: notebookData.summaryStatus || 'not_started',
-      lastSummarization: notebookData.lastSummarizationDate,
-      summaryTypesAvailable: summaryTypes,
-      summaryLocations: summaries,                               // {type: s3://… or object}
-      summaries: summaryResult.summaries,                        // Enhanced format
-      summariesCount: summaryResult.summariesCount,
-      summaryTypes,
-      
-      // Additional summary metadata
-      summaryContentAvailable: summaryResult.contentAvailable,
-      summaryLastFetched: summaryResult.lastFetched,
-      hasSummaries: notebookData.hasSummaries || Object.keys(summaries).length > 0,
-
-      /* files & links */
-      files,
-      filesCount: notebookData.filesCount ?? files.length,
-      filesSummary: notebookData.filesSummary ?? null,
-      links,
-      linksCount: notebookData.linksCount ?? links.length,
-      linksSummary: notebookData.linksSummary ?? null
-    };
-
-    console.log('✅ Notebook formatted with Lambda summaries:', {
-      notebookId: notebook.notebookId,
-      title: notebook.title,
-      summariesCount: notebook.summariesCount,
-      summaryTypes: Object.keys(notebook.summaries),
-      contentAvailable: notebook.summaryContentAvailable,
-      hasSummaries: notebook.hasSummaries
-    });
-
-    return notebook;
-    
-  } catch (error) {
-    console.error('❌ getNotebook error:', error);
-    if (error.response) {
-      const { status } = error.response;
-      if (status === 401) throw new Error('Please login to access this notebook');
-      if (status === 403) throw new Error('You do not have permission');
-      if (status === 404) throw new Error('Notebook not found');
-      if (status === 500) throw new Error('Server error – please retry later');
-    } else if (error.message.includes('Network Error')) {
-      throw new Error('Network problem – check your connection');
-    }
-    throw error;
-  }
-}
-
-/**
- * 🔧 NEW: Helper function to fetch summary content when not provided in Lambda response
- * Add this to your NotebookService class
- */
-async fetchSummaryContentWhenNeeded(enhancedSummaries) {
-  const summariesWithContent = { ...enhancedSummaries };
-  
-  for (const [type, summaryData] of Object.entries(enhancedSummaries)) {
-    // If summary has a valid URL but no content, try to fetch it
-    if (summaryData.url && 
-        summaryData.url.startsWith('s3://') && 
-        !summaryData.hasContent) {
-      
-      try {
-        console.log(`📥 Fetching content for ${type} summary from ${summaryData.url}`);
-        
-        // Try to use your getSummary method first
-        const content = await this.fetchSummaryFromS3(summaryData.url);
-        
-        if (content && content.length > 0) {
-          summariesWithContent[type] = {
-            ...summaryData,
-            content: content,
-            hasContent: true,
+            // Additional metadata from Lambda
+            source: 'lambda_response',
             fetchedAt: new Date().toISOString(),
-            url: summaryData.url // Keep the original URL
+
+            // 🔧 NEW: Include summary metadata if available
+            exists: summaryValue?.exists,
+            summaryType: summaryValue?.type || type
           };
-          
-          console.log(`✅ Fetched content for ${type}: ${content.length} characters`);
+
+          console.log(`✅ Added ${type} summary:`, {
+            hasValidUrl,
+            hasContent,
+            contentLength: summaryContent[type]?.length || 0,
+            url: enhancedSummaries[type].url,
+            summaryExists: summaryValue?.exists
+          });
+        } else {
+          console.warn(`⚠️ Skipping ${type} summary - no valid URL or content:`, {
+            summaryValue,
+            s3Url,
+            hasValidUrl,
+            hasContent
+          });
         }
-        
-      } catch (fetchError) {
-        console.warn(`⚠️ Could not fetch content for ${type}:`, fetchError.message);
-        // Keep the summary without content - don't remove it
       }
-    }
-  }
-  
-  return summariesWithContent;
-}
 
-/**
- * 🔧 ENHANCED: Update your existing fetchSummaryFromS3 method to handle S3 URLs better
- */
-async fetchSummaryFromS3(s3Url, notebookId = null, summaryType = null) {
-  try {
-    console.log(`📄 Fetching summary content from: ${s3Url}`);
+      /* ---------- build enhanced summary result ---------- */
+      let finalEnhancedSummaries = enhancedSummaries;
 
-    // If we have specific notebook and summary type, try the getSummary endpoint first
-    if (notebookId && summaryType) {
-      try {
-        console.log('🚀 Trying getSummary endpoint first...');
-        const result = await this.getSummary(notebookId, summaryType, 'plain');
-        
-        if (result && result.content) {
-          console.log('✅ Got summary content from getSummary endpoint');
-          return result.content;
+      // 🔧 NEW: Optionally fetch summary content if not provided and URLs are available
+      if (options.includeSummaryContent !== false && Object.keys(enhancedSummaries).length > 0) {
+        const hasAnySummaryWithoutContent = Object.values(enhancedSummaries).some(s =>
+          s.url && s.url.startsWith('s3://') && !s.hasContent
+        );
+
+        if (hasAnySummaryWithoutContent) {
+          console.log('📥 Some summaries need content fetching...');
+          try {
+            finalEnhancedSummaries = await this.fetchSummaryContentWhenNeeded(enhancedSummaries);
+          } catch (fetchError) {
+            console.warn('⚠️ Failed to fetch some summary content:', fetchError.message);
+            // Continue with what we have
+          }
         }
-      } catch (endpointError) {
-        console.log('⚠️ getSummary endpoint failed, trying direct S3 fetch:', endpointError.message);
       }
-    }
 
-    // Try to convert S3 URL to presigned URL if needed
-    if (s3Url.startsWith('s3://')) {
-      // For now, try direct fetch - you might need to implement presigned URL generation
-      // Or use your existing getSummary endpoint to get the content
-      throw new Error('S3 direct access not implemented - use getSummary endpoint');
-    }
+      const summaryResult = {
+        summaries: finalEnhancedSummaries,
+        summariesCount: Object.keys(finalEnhancedSummaries).length,
+        contentAvailable: Object.values(finalEnhancedSummaries).filter(s => s.hasContent).length,
+        lastFetched: new Date().toISOString()
+      };
 
-    // If it's already an HTTP URL, fetch directly
-    if (s3Url.startsWith('http')) {
-      const response = await fetch(s3Url, {
-        method: 'GET',
-        timeout: 30000
+      /* ---------- build final view model ---------- */
+      const notebook = {
+        /* ids & titles */
+        notebookId: notebookData.notebookId || notebookId,
+        title: notebookData.title || notebookData.Title || 'Untitled Notebook',
+
+        /* core content */
+        content: (notebookData.chunks && notebookData.chunks[0]?.content) ||
+          (notebookData.chunks && notebookData.chunks['0']) || '',
+        allChunks: notebookData.chunks || [],
+        chunkCount: notebookData.chunkCount || 1,
+
+        /* meta */
+        tags: notebookData.tags || [],
+        tagsCount: notebookData.tags?.length || 0,
+        connections: notebookData.connections || [],
+        preview: notebookData.preview || '',
+        createdBy: notebookData.createdBy,
+        createdAt: notebookData.createdAt,
+        updatedAt: notebookData.lastModified || notebookData.updatedAt,
+        wordCount: notebookData.wordCount || 0,
+        byteSize: notebookData.byteSize || 0,
+
+        /* 🔧 FIXED: Enhanced summarization with proper Lambda data */
+        summarizationStatus: notebookData.summaryStatus || 'not_started',
+        lastSummarization: notebookData.lastSummarizationDate,
+        summaryTypesAvailable: summaryTypes,
+        summaryLocations: summaries,                               // {type: s3://… or object}
+        summaries: summaryResult.summaries,                        // Enhanced format
+        summariesCount: summaryResult.summariesCount,
+        summaryTypes,
+
+        // Additional summary metadata
+        summaryContentAvailable: summaryResult.contentAvailable,
+        summaryLastFetched: summaryResult.lastFetched,
+        hasSummaries: notebookData.hasSummaries || Object.keys(summaries).length > 0,
+
+        /* files & links */
+        files,
+        filesCount: notebookData.filesCount ?? files.length,
+        filesSummary: notebookData.filesSummary ?? null,
+        links,
+        linksCount: notebookData.linksCount ?? links.length,
+        linksSummary: notebookData.linksSummary ?? null
+      };
+
+      console.log('✅ Notebook formatted with Lambda summaries:', {
+        notebookId: notebook.notebookId,
+        title: notebook.title,
+        summariesCount: notebook.summariesCount,
+        summaryTypes: Object.keys(notebook.summaries),
+        contentAvailable: notebook.summaryContentAvailable,
+        hasSummaries: notebook.hasSummaries
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      return notebook;
+
+    } catch (error) {
+      console.error('❌ getNotebook error:', error);
+      if (error.response) {
+        const { status } = error.response;
+        if (status === 401) throw new Error('Please login to access this notebook');
+        if (status === 403) throw new Error('You do not have permission');
+        if (status === 404) throw new Error('Notebook not found');
+        if (status === 500) throw new Error('Server error – please retry later');
+      } else if (error.message.includes('Network Error')) {
+        throw new Error('Network problem – check your connection');
       }
-
-      const content = await response.text();
-      console.log(`✅ Summary content fetched successfully (${content.length} characters)`);
-      return content;
+      throw error;
     }
-
-    throw new Error('Unsupported URL format');
-
-  } catch (error) {
-    console.error(`❌ Error fetching summary content:`, error);
-    throw new Error(`Failed to fetch summary: ${error.message}`);
   }
-}
 
-// 🔧 SIMPLIFIED: Enhanced summary processing function for Lambda response
-async enhanceSummariesWithContent(notebookId, summaries = {}, summaryLocations = {}, includeSummaryContent = true) {
-  try {
-    console.log('🔍 Enhancing summaries with content:', {
-      notebookId,
-      summariesCount: Object.keys(summaries).length,
-      locationsCount: Object.keys(summaryLocations).length,
-      includeSummaryContent
-    });
+  /**
+   * 🔧 NEW: Helper function to fetch summary content when not provided in Lambda response
+   * Add this to your NotebookService class
+   */
+  async fetchSummaryContentWhenNeeded(enhancedSummaries) {
+    const summariesWithContent = { ...enhancedSummaries };
 
-    const enhancedSummaries = {};
-    let contentAvailable = 0;
+    for (const [type, summaryData] of Object.entries(enhancedSummaries)) {
+      // If summary has a valid URL but no content, try to fetch it
+      if (summaryData.url &&
+        summaryData.url.startsWith('s3://') &&
+        !summaryData.hasContent) {
 
-    // 🔧 NEW: Handle Lambda response format directly
-    // This function is now mainly for backward compatibility since getNotebook handles it
-    for (const [type, summaryData] of Object.entries(summaries)) {
-      console.log(`📄 Processing summary ${type}:`, summaryData);
-      
-      // If summaryData is already enhanced (object with metadata)
-      if (typeof summaryData === 'object' && summaryData !== null) {
-        enhancedSummaries[type] = {
-          ...summaryData,
-          source: summaryData.source || 'enhanced_input'
-        };
-        
-        if (summaryData.hasContent || summaryData.content) {
-          contentAvailable++;
-        }
-        
-        console.log(`✅ Used pre-enhanced summary: ${type}`);
-        continue;
-      }
-      
-      // If summaryData is just a URL string (legacy format)
-      if (typeof summaryData === 'string') {
-        const url = summaryData;
-        const hasValidUrl = url && 
-                           url !== 'undefined' && 
-                           url !== 'null' && 
-                           !url.startsWith('#') &&
-                           (url.startsWith('http') || url.startsWith('s3://'));
-        
-        if (hasValidUrl) {
-          enhancedSummaries[type] = {
-            url: url,
-            ready: true,
-            generatedAt: new Date().toISOString(),
-            downloadUrl: url,
-            content: null,
-            hasContent: false,
-            source: 'legacy_string_url'
-          };
-          
-          console.log(`✅ Processed legacy URL summary: ${type}`);
+        try {
+          console.log(`📥 Fetching content for ${type} summary from ${summaryData.url}`);
+
+          // Try to use your getSummary method first
+          const content = await this.fetchSummaryFromS3(summaryData.url);
+
+          if (content && content.length > 0) {
+            summariesWithContent[type] = {
+              ...summaryData,
+              content: content,
+              hasContent: true,
+              fetchedAt: new Date().toISOString(),
+              url: summaryData.url // Keep the original URL
+            };
+
+            console.log(`✅ Fetched content for ${type}: ${content.length} characters`);
+          }
+
+        } catch (fetchError) {
+          console.warn(`⚠️ Could not fetch content for ${type}:`, fetchError.message);
+          // Keep the summary without content - don't remove it
         }
       }
     }
 
-    // Process legacy summary locations if needed
-    if (Object.keys(enhancedSummaries).length === 0 && Object.keys(summaryLocations).length > 0) {
-      console.log('📄 Processing legacy summary locations...');
-      
-      for (const [type, url] of Object.entries(summaryLocations)) {
-        const isValidUrl = url && 
-                          url !== 'undefined' && 
-                          url !== 'null' && 
-                          !url.startsWith('#') &&
-                          (url.startsWith('http') || url.startsWith('s3://'));
-        
-        if (isValidUrl) {
-          enhancedSummaries[type] = {
-            url: url,
-            ready: true,
-            generatedAt: new Date().toISOString(),
-            downloadUrl: url,
-            content: null,
-            hasContent: false,
-            source: 'legacy_location'
-          };
-          console.log(`✅ Added legacy summary ${type}`);
-        }
-      }
-    }
-
-    const result = {
-      summaries: enhancedSummaries,
-      summariesCount: Object.keys(enhancedSummaries).length,
-      contentAvailable: contentAvailable,
-      lastFetched: new Date().toISOString()
-    };
-
-    console.log('✅ Summary enhancement complete:', {
-      totalSummaries: result.summariesCount,
-      withContent: contentAvailable,
-      types: Object.keys(enhancedSummaries)
-    });
-
-    return result;
-
-  } catch (error) {
-    console.error('❌ Error enhancing summaries:', error);
-    return {
-      summaries: {},
-      summariesCount: 0,
-      contentAvailable: 0,
-      lastFetched: new Date().toISOString()
-    };
+    return summariesWithContent;
   }
-}
 
-// // 🆕 ADD: Convenience method for enhanced loading
-// async getNotebookWithSummaries(notebookId) {
-//   try {
-//     console.log(`📖 Fetching notebook with summaries: ${notebookId}`);
-    
-//     // Call the enhanced getNotebook with summary content options
-//     const notebook = await this.getNotebook(notebookId, {
-//       includeSummaryContent: true,  // Include summary content if available
-//       includeDownloadUrls: true,    // Include download URLs
-//       all: false                    // Don't get all chunks, just the main content
-//     });
-    
-//     console.log('✅ Retrieved notebook with enhanced summaries:', {
-//       notebookId: notebook.notebookId,
-//       title: notebook.title,
-//       summariesCount: notebook.summariesCount,
-//       summaryTypes: Object.keys(notebook.summaries || {}),
-//       contentAvailable: notebook.summaryContentAvailable
-//     });
-    
-//     return notebook;
-    
-//   } catch (error) {
-//     console.error('❌ getNotebookWithSummaries error:', error);
-    
-//     // Fallback to regular getNotebook
-//     console.log('🔄 Falling back to regular getNotebook...');
-//     return await this.getNotebook(notebookId);
-//   }
-// }
+  /**
+   * 🔧 ENHANCED: Update your existing fetchSummaryFromS3 method to handle S3 URLs better
+   */
+  async fetchSummaryFromS3(s3Url, notebookId = null, summaryType = null) {
+    try {
+      console.log(`📄 Fetching summary content from: ${s3Url}`);
 
-// /**
-//  * 🆕 NEW: Helper method to enhance summaries with content from getSummary Lambda
-//  * Add this new method to your NotebookService class
-//  */
-// async enhanceSummariesWithContent(notebookId, summaries, summaryLocations, includeSummaryContent = true) {
-//   try {
-//     console.log(`🔄 Enhancing summaries for notebook ${notebookId}`, {
-//       summariesCount: Object.keys(summaries).length,
-//       locationsCount: Object.keys(summaryLocations).length,
-//       includeSummaryContent
-//     });
+      // If we have specific notebook and summary type, try the getSummary endpoint first
+      if (notebookId && summaryType) {
+        try {
+          console.log('🚀 Trying getSummary endpoint first...');
+          const result = await this.getSummary(notebookId, summaryType, 'plain');
 
-//     const enhancedSummaries = {};
-//     let contentAvailable = false;
-//     let successfulFetches = 0;
+          if (result && result.content) {
+            console.log('✅ Got summary content from getSummary endpoint');
+            return result.content;
+          }
+        } catch (endpointError) {
+          console.log('⚠️ getSummary endpoint failed, trying direct S3 fetch:', endpointError.message);
+        }
+      }
 
-//     // Process existing summaries from main response
-//     for (const [type, summaryData] of Object.entries(summaries)) {
-//       enhancedSummaries[type] = {
-//         // Basic metadata from main response
-//         type: type,
-//         ready: true,
-//         generatedAt: summaryData.generatedAt || summaryData.lastModified || new Date().toISOString(),
-//         url: summaryData.s3Url || summaryData.url,
-//         downloadUrl: summaryData.downloadUrl,
-//         fileSize: summaryData.fileSize,
-//         fileSizeFormatted: summaryData.fileSizeFormatted,
-//         wordCount: summaryData.wordCount,
-        
-//         // Content from main response (if available)
-//         content: summaryData.content || null,
-//         preview: summaryData.preview || null,
-        
-//         // Additional metadata
-//         source: 'main_response'
-//       };
+      // Try to convert S3 URL to presigned URL if needed
+      if (s3Url.startsWith('s3://')) {
+        // For now, try direct fetch - you might need to implement presigned URL generation
+        // Or use your existing getSummary endpoint to get the content
+        throw new Error('S3 direct access not implemented - use getSummary endpoint');
+      }
 
-//       // 🆕 NEW: If content not available and includeSummaryContent is true, try getSummary Lambda
-//       if (!summaryData.content && includeSummaryContent) {
-//         try {
-//           console.log(`📄 Fetching content for ${type} summary via getSummary Lambda...`);
-          
-//           const lambdaResult = await this.getSummary(notebookId, type, 'json', false);
-          
-//           if (lambdaResult && lambdaResult.summary) {
-//             enhancedSummaries[type] = {
-//               ...enhancedSummaries[type],
-//               // Enhanced content from Lambda
-//               content: lambdaResult.summary.content,
-//               preview: lambdaResult.summary.preview,
-//               wordCount: lambdaResult.summary.wordCount || enhancedSummaries[type].wordCount,
-//               readingTime: lambdaResult.summary.estimatedReadingTime,
-//               characterCount: lambdaResult.summary.characterCount,
-//               lastModified: lambdaResult.summary.lastModified || enhancedSummaries[type].generatedAt,
-              
-//               // Lambda-specific metadata
-//               source: 'lambda_enhanced',
-//               fetchedAt: new Date().toISOString()
-//             };
-            
-//             contentAvailable = true;
-//             successfulFetches++;
-            
-//             console.log(`✅ Enhanced ${type} summary with Lambda content`);
-//           }
-          
-//         } catch (lambdaError) {
-//           console.log(`⚠️ Could not fetch ${type} summary content via Lambda:`, lambdaError.message);
-//           // Keep the summary without content - don't fail the whole process
-//         }
-//       } else if (summaryData.content) {
-//         contentAvailable = true;
-//       }
-//     }
+      // If it's already an HTTP URL, fetch directly
+      if (s3Url.startsWith('http')) {
+        const response = await fetch(s3Url, {
+          method: 'GET',
+          timeout: 30000
+        });
 
-//     // 🆕 NEW: Process summary locations that might not be in main summaries
-//     for (const [type, location] of Object.entries(summaryLocations)) {
-//       if (!enhancedSummaries[type]) {
-//         console.log(`📍 Found summary location for ${type} not in main summaries`);
-        
-//         enhancedSummaries[type] = {
-//           type: type,
-//           ready: true,
-//           url: location,
-//           source: 'location_only',
-//           generatedAt: new Date().toISOString() // Fallback timestamp
-//         };
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
 
-//         // Try to get content via getSummary Lambda if requested
-//         if (includeSummaryContent) {
-//           try {
-//             console.log(`📄 Fetching ${type} summary via location and getSummary Lambda...`);
-            
-//             const lambdaResult = await this.getSummary(notebookId, type, 'json', false);
-            
-//             if (lambdaResult && lambdaResult.summary) {
-//               enhancedSummaries[type] = {
-//                 ...enhancedSummaries[type],
-//                 content: lambdaResult.summary.content,
-//                 preview: lambdaResult.summary.preview,
-//                 wordCount: lambdaResult.summary.wordCount,
-//                 readingTime: lambdaResult.summary.estimatedReadingTime,
-//                 fileSize: lambdaResult.summary.fileSize,
-//                 fileSizeFormatted: lambdaResult.summary.fileSizeFormatted,
-//                 lastModified: lambdaResult.summary.lastModified,
-                
-//                 source: 'lambda_from_location',
-//                 fetchedAt: new Date().toISOString()
-//               };
-              
-//               contentAvailable = true;
-//               successfulFetches++;
-              
-//               console.log(`✅ Fetched ${type} summary content from location via Lambda`);
-//             }
-            
-//           } catch (lambdaError) {
-//             console.log(`⚠️ Could not fetch ${type} summary from location:`, lambdaError.message);
-//           }
-//         }
-//       }
-//     }
+        const content = await response.text();
+        console.log(`✅ Summary content fetched successfully (${content.length} characters)`);
+        return content;
+      }
 
-//     const result = {
-//       summaries: enhancedSummaries,
-//       summariesCount: Object.keys(enhancedSummaries).length,
-//       contentAvailable,
-//       lastFetched: new Date().toISOString(),
-//       successfulFetches,
-//       totalAvailable: Object.keys(summaryLocations).length + Object.keys(summaries).length
-//     };
+      throw new Error('Unsupported URL format');
 
-//     console.log(`✅ Summary enhancement complete:`, {
-//       totalSummaries: result.summariesCount,
-//       contentAvailable: result.contentAvailable,
-//       successfulFetches: result.successfulFetches,
-//       sources: Object.values(enhancedSummaries).map(s => s.source)
-//     });
+    } catch (error) {
+      console.error(`❌ Error fetching summary content:`, error);
+      throw new Error(`Failed to fetch summary: ${error.message}`);
+    }
+  }
 
-//     return result;
+  // 🔧 SIMPLIFIED: Enhanced summary processing function for Lambda response
+  async enhanceSummariesWithContent(notebookId, summaries = {}, summaryLocations = {}, includeSummaryContent = true) {
+    try {
+      console.log('🔍 Enhancing summaries with content:', {
+        notebookId,
+        summariesCount: Object.keys(summaries).length,
+        locationsCount: Object.keys(summaryLocations).length,
+        includeSummaryContent
+      });
 
-//   } catch (error) {
-//     console.error('❌ Error enhancing summaries:', error);
-    
-//     // Return basic summaries without enhancement rather than failing
-//     return {
-//       summaries: summaries || {},
-//       summariesCount: Object.keys(summaries || {}).length,
-//       contentAvailable: false,
-//       lastFetched: new Date().toISOString(),
-//       successfulFetches: 0,
-//       error: error.message
-//     };
-//   }
-// }
+      const enhancedSummaries = {};
+      let contentAvailable = 0;
+
+      // 🔧 NEW: Handle Lambda response format directly
+      // This function is now mainly for backward compatibility since getNotebook handles it
+      for (const [type, summaryData] of Object.entries(summaries)) {
+        console.log(`📄 Processing summary ${type}:`, summaryData);
+
+        // If summaryData is already enhanced (object with metadata)
+        if (typeof summaryData === 'object' && summaryData !== null) {
+          enhancedSummaries[type] = {
+            ...summaryData,
+            source: summaryData.source || 'enhanced_input'
+          };
+
+          if (summaryData.hasContent || summaryData.content) {
+            contentAvailable++;
+          }
+
+          console.log(`✅ Used pre-enhanced summary: ${type}`);
+          continue;
+        }
+
+        // If summaryData is just a URL string (legacy format)
+        if (typeof summaryData === 'string') {
+          const url = summaryData;
+          const hasValidUrl = url &&
+            url !== 'undefined' &&
+            url !== 'null' &&
+            !url.startsWith('#') &&
+            (url.startsWith('http') || url.startsWith('s3://'));
+
+          if (hasValidUrl) {
+            enhancedSummaries[type] = {
+              url: url,
+              ready: true,
+              generatedAt: new Date().toISOString(),
+              downloadUrl: url,
+              content: null,
+              hasContent: false,
+              source: 'legacy_string_url'
+            };
+
+            console.log(`✅ Processed legacy URL summary: ${type}`);
+          }
+        }
+      }
+
+      // Process legacy summary locations if needed
+      if (Object.keys(enhancedSummaries).length === 0 && Object.keys(summaryLocations).length > 0) {
+        console.log('📄 Processing legacy summary locations...');
+
+        for (const [type, url] of Object.entries(summaryLocations)) {
+          const isValidUrl = url &&
+            url !== 'undefined' &&
+            url !== 'null' &&
+            !url.startsWith('#') &&
+            (url.startsWith('http') || url.startsWith('s3://'));
+
+          if (isValidUrl) {
+            enhancedSummaries[type] = {
+              url: url,
+              ready: true,
+              generatedAt: new Date().toISOString(),
+              downloadUrl: url,
+              content: null,
+              hasContent: false,
+              source: 'legacy_location'
+            };
+            console.log(`✅ Added legacy summary ${type}`);
+          }
+        }
+      }
+
+      const result = {
+        summaries: enhancedSummaries,
+        summariesCount: Object.keys(enhancedSummaries).length,
+        contentAvailable: contentAvailable,
+        lastFetched: new Date().toISOString()
+      };
+
+      console.log('✅ Summary enhancement complete:', {
+        totalSummaries: result.summariesCount,
+        withContent: contentAvailable,
+        types: Object.keys(enhancedSummaries)
+      });
+
+      return result;
+
+    } catch (error) {
+      console.error('❌ Error enhancing summaries:', error);
+      return {
+        summaries: {},
+        summariesCount: 0,
+        contentAvailable: 0,
+        lastFetched: new Date().toISOString()
+      };
+    }
+  }
+
+  // // 🆕 ADD: Convenience method for enhanced loading
+  // async getNotebookWithSummaries(notebookId) {
+  //   try {
+  //     console.log(`📖 Fetching notebook with summaries: ${notebookId}`);
+
+  //     // Call the enhanced getNotebook with summary content options
+  //     const notebook = await this.getNotebook(notebookId, {
+  //       includeSummaryContent: true,  // Include summary content if available
+  //       includeDownloadUrls: true,    // Include download URLs
+  //       all: false                    // Don't get all chunks, just the main content
+  //     });
+
+  //     console.log('✅ Retrieved notebook with enhanced summaries:', {
+  //       notebookId: notebook.notebookId,
+  //       title: notebook.title,
+  //       summariesCount: notebook.summariesCount,
+  //       summaryTypes: Object.keys(notebook.summaries || {}),
+  //       contentAvailable: notebook.summaryContentAvailable
+  //     });
+
+  //     return notebook;
+
+  //   } catch (error) {
+  //     console.error('❌ getNotebookWithSummaries error:', error);
+
+  //     // Fallback to regular getNotebook
+  //     console.log('🔄 Falling back to regular getNotebook...');
+  //     return await this.getNotebook(notebookId);
+  //   }
+  // }
+
+  // /**
+  //  * 🆕 NEW: Helper method to enhance summaries with content from getSummary Lambda
+  //  * Add this new method to your NotebookService class
+  //  */
+  // async enhanceSummariesWithContent(notebookId, summaries, summaryLocations, includeSummaryContent = true) {
+  //   try {
+  //     console.log(`🔄 Enhancing summaries for notebook ${notebookId}`, {
+  //       summariesCount: Object.keys(summaries).length,
+  //       locationsCount: Object.keys(summaryLocations).length,
+  //       includeSummaryContent
+  //     });
+
+  //     const enhancedSummaries = {};
+  //     let contentAvailable = false;
+  //     let successfulFetches = 0;
+
+  //     // Process existing summaries from main response
+  //     for (const [type, summaryData] of Object.entries(summaries)) {
+  //       enhancedSummaries[type] = {
+  //         // Basic metadata from main response
+  //         type: type,
+  //         ready: true,
+  //         generatedAt: summaryData.generatedAt || summaryData.lastModified || new Date().toISOString(),
+  //         url: summaryData.s3Url || summaryData.url,
+  //         downloadUrl: summaryData.downloadUrl,
+  //         fileSize: summaryData.fileSize,
+  //         fileSizeFormatted: summaryData.fileSizeFormatted,
+  //         wordCount: summaryData.wordCount,
+
+  //         // Content from main response (if available)
+  //         content: summaryData.content || null,
+  //         preview: summaryData.preview || null,
+
+  //         // Additional metadata
+  //         source: 'main_response'
+  //       };
+
+  //       // 🆕 NEW: If content not available and includeSummaryContent is true, try getSummary Lambda
+  //       if (!summaryData.content && includeSummaryContent) {
+  //         try {
+  //           console.log(`📄 Fetching content for ${type} summary via getSummary Lambda...`);
+
+  //           const lambdaResult = await this.getSummary(notebookId, type, 'json', false);
+
+  //           if (lambdaResult && lambdaResult.summary) {
+  //             enhancedSummaries[type] = {
+  //               ...enhancedSummaries[type],
+  //               // Enhanced content from Lambda
+  //               content: lambdaResult.summary.content,
+  //               preview: lambdaResult.summary.preview,
+  //               wordCount: lambdaResult.summary.wordCount || enhancedSummaries[type].wordCount,
+  //               readingTime: lambdaResult.summary.estimatedReadingTime,
+  //               characterCount: lambdaResult.summary.characterCount,
+  //               lastModified: lambdaResult.summary.lastModified || enhancedSummaries[type].generatedAt,
+
+  //               // Lambda-specific metadata
+  //               source: 'lambda_enhanced',
+  //               fetchedAt: new Date().toISOString()
+  //             };
+
+  //             contentAvailable = true;
+  //             successfulFetches++;
+
+  //             console.log(`✅ Enhanced ${type} summary with Lambda content`);
+  //           }
+
+  //         } catch (lambdaError) {
+  //           console.log(`⚠️ Could not fetch ${type} summary content via Lambda:`, lambdaError.message);
+  //           // Keep the summary without content - don't fail the whole process
+  //         }
+  //       } else if (summaryData.content) {
+  //         contentAvailable = true;
+  //       }
+  //     }
+
+  //     // 🆕 NEW: Process summary locations that might not be in main summaries
+  //     for (const [type, location] of Object.entries(summaryLocations)) {
+  //       if (!enhancedSummaries[type]) {
+  //         console.log(`📍 Found summary location for ${type} not in main summaries`);
+
+  //         enhancedSummaries[type] = {
+  //           type: type,
+  //           ready: true,
+  //           url: location,
+  //           source: 'location_only',
+  //           generatedAt: new Date().toISOString() // Fallback timestamp
+  //         };
+
+  //         // Try to get content via getSummary Lambda if requested
+  //         if (includeSummaryContent) {
+  //           try {
+  //             console.log(`📄 Fetching ${type} summary via location and getSummary Lambda...`);
+
+  //             const lambdaResult = await this.getSummary(notebookId, type, 'json', false);
+
+  //             if (lambdaResult && lambdaResult.summary) {
+  //               enhancedSummaries[type] = {
+  //                 ...enhancedSummaries[type],
+  //                 content: lambdaResult.summary.content,
+  //                 preview: lambdaResult.summary.preview,
+  //                 wordCount: lambdaResult.summary.wordCount,
+  //                 readingTime: lambdaResult.summary.estimatedReadingTime,
+  //                 fileSize: lambdaResult.summary.fileSize,
+  //                 fileSizeFormatted: lambdaResult.summary.fileSizeFormatted,
+  //                 lastModified: lambdaResult.summary.lastModified,
+
+  //                 source: 'lambda_from_location',
+  //                 fetchedAt: new Date().toISOString()
+  //               };
+
+  //               contentAvailable = true;
+  //               successfulFetches++;
+
+  //               console.log(`✅ Fetched ${type} summary content from location via Lambda`);
+  //             }
+
+  //           } catch (lambdaError) {
+  //             console.log(`⚠️ Could not fetch ${type} summary from location:`, lambdaError.message);
+  //           }
+  //         }
+  //       }
+  //     }
+
+  //     const result = {
+  //       summaries: enhancedSummaries,
+  //       summariesCount: Object.keys(enhancedSummaries).length,
+  //       contentAvailable,
+  //       lastFetched: new Date().toISOString(),
+  //       successfulFetches,
+  //       totalAvailable: Object.keys(summaryLocations).length + Object.keys(summaries).length
+  //     };
+
+  //     console.log(`✅ Summary enhancement complete:`, {
+  //       totalSummaries: result.summariesCount,
+  //       contentAvailable: result.contentAvailable,
+  //       successfulFetches: result.successfulFetches,
+  //       sources: Object.values(enhancedSummaries).map(s => s.source)
+  //     });
+
+  //     return result;
+
+  //   } catch (error) {
+  //     console.error('❌ Error enhancing summaries:', error);
+
+  //     // Return basic summaries without enhancement rather than failing
+  //     return {
+  //       summaries: summaries || {},
+  //       summariesCount: Object.keys(summaries || {}).length,
+  //       contentAvailable: false,
+  //       lastFetched: new Date().toISOString(),
+  //       successfulFetches: 0,
+  //       error: error.message
+  //     };
+  //   }
+  // }
 
   /**
    * Upload files to a notebook - Updated for batch upload
@@ -1594,12 +1594,12 @@ async enhanceSummariesWithContent(notebookId, summaries = {}, summaryLocations =
     }
   }
 
-/**
-  * POST a YouTube link for transcript extraction and processing.
-  * Simplified workflow:
-  * 1. Extract transcript from local endpoint
-  * 2. Send transcript to Lambda for processing
-  */
+  /**
+    * POST a YouTube link for transcript extraction and processing.
+    * Simplified workflow:
+    * 1. Extract transcript from local endpoint
+    * 2. Send transcript to Lambda for processing
+    */
   async addYouTubeLink(notebookId, youtubeUrl, format = 'mp3', quality = '720p') {
     if (!notebookId) throw new Error('notebookId is required');
     if (!youtubeUrl) throw new Error('youtubeUrl is required');
@@ -1622,9 +1622,9 @@ async enhanceSummariesWithContent(notebookId, summaries = {}, summaryLocations =
       // Step 2: Send transcript to Lambda for processing
       console.log('Step 2: Sending transcript to Lambda...');
       const lambdaResult = await this.sendTranscriptToLambda(
-        transcriptData, 
-        notebookId, 
-        userEmail, 
+        transcriptData,
+        notebookId,
+        userEmail,
         authHeaders
       );
 
@@ -1678,11 +1678,11 @@ async enhanceSummariesWithContent(notebookId, summaries = {}, summaryLocations =
 
     } catch (error) {
       console.error('Transcript extraction failed:', error);
-      
+
       if (error.code === 'ECONNREFUSED') {
         throw new Error('Local transcript service is not running (localhost:5000)');
       }
-      
+
       throw new Error(`Failed to extract transcript: ${error.message}`);
     }
   }
@@ -2198,54 +2198,54 @@ async enhanceSummariesWithContent(notebookId, summaries = {}, summaryLocations =
     }
   }
 
- /**
- * 🔧 SIMPLIFIED: Get notebook with enhanced summaries (including content)
- * This method now simply calls getNotebook with the right options
- * @param {string} notebookId - ID of the notebook
- * @returns {Promise<object>} - Notebook with summaries and content
- */
-async getNotebookWithSummaries(notebookId) {
-  try {
-    console.log(`📖 Fetching notebook with summaries: ${notebookId}`);
-    
-    // 🔧 SIMPLIFIED: Just call getNotebook with summary content enabled
-    const notebook = await this.getNotebook(notebookId, {
-      includeSummaryContent: true,  // This tells Lambda to include summary content
-      includeDownloadUrls: true,    // Include download URLs
-      all: false                    // Don't get all chunks, just the main content
-    });
-    
-    console.log('✅ Retrieved notebook with enhanced summaries:', {
-      notebookId: notebook.notebookId,
-      title: notebook.title,
-      summariesCount: notebook.summariesCount,
-      summaryTypes: Object.keys(notebook.summaries || {}),
-      contentAvailable: notebook.summaryContentAvailable,
-      hasSummaries: notebook.hasSummaries
-    });
-    
-    return notebook;
-    
-  } catch (error) {
-    console.error('❌ getNotebookWithSummaries error:', error);
-    
-    // Fallback to regular getNotebook without summary content
-    console.log('🔄 Falling back to regular getNotebook...');
-    return await this.getNotebook(notebookId, {
+  /**
+  * 🔧 SIMPLIFIED: Get notebook with enhanced summaries (including content)
+  * This method now simply calls getNotebook with the right options
+  * @param {string} notebookId - ID of the notebook
+  * @returns {Promise<object>} - Notebook with summaries and content
+  */
+  async getNotebookWithSummaries(notebookId) {
+    try {
+      console.log(`📖 Fetching notebook with summaries: ${notebookId}`);
+
+      // 🔧 SIMPLIFIED: Just call getNotebook with summary content enabled
+      const notebook = await this.getNotebook(notebookId, {
+        includeSummaryContent: true,  // This tells Lambda to include summary content
+        includeDownloadUrls: true,    // Include download URLs
+        all: false                    // Don't get all chunks, just the main content
+      });
+
+      console.log('✅ Retrieved notebook with enhanced summaries:', {
+        notebookId: notebook.notebookId,
+        title: notebook.title,
+        summariesCount: notebook.summariesCount,
+        summaryTypes: Object.keys(notebook.summaries || {}),
+        contentAvailable: notebook.summaryContentAvailable,
+        hasSummaries: notebook.hasSummaries
+      });
+
+      return notebook;
+
+    } catch (error) {
+      console.error('❌ getNotebookWithSummaries error:', error);
+
+      // Fallback to regular getNotebook without summary content
+      console.log('🔄 Falling back to regular getNotebook...');
+      return await this.getNotebook(notebookId, {
+        includeSummaryContent: false
+      });
+    }
+  }
+
+  /**
+   * NEW: Get notebook without summary content (faster loading)
+   * Add this new method to your NotebookService class  
+   */
+  async getNotebookMetadataOnly(notebookId) {
+    return this.getNotebook(notebookId, {
       includeSummaryContent: false
     });
   }
-}
-
-/**
- * NEW: Get notebook without summary content (faster loading)
- * Add this new method to your NotebookService class  
- */
-async getNotebookMetadataOnly(notebookId) {
-  return this.getNotebook(notebookId, { 
-    includeSummaryContent: false 
-  });
-}
 
   /**
  * 🆕 Check summary generation status (works with your Lambda)
@@ -2486,248 +2486,247 @@ async getNotebookMetadataOnly(notebookId) {
  * @param {boolean} includeMetadata - Whether to include metadata analysis
  * @returns {Promise<object>} - Summary data
  */
-async getSummary(notebookId, summaryType, format = 'json', includeMetadata = true) {
-  try {
-    if (!notebookId) {
-      throw new Error('Notebook ID is required');
-    }
-
-    if (!summaryType) {
-      throw new Error('Summary type is required');
-    }
-
-    console.log(`📄 Getting ${summaryType} summary for notebook: ${notebookId}`);
-
-    // Get auth headers
-    const headers = await this.authService.getAuthHeaders();
-    if (!headers.Authorization) {
-      throw new Error('Authentication required - please login');
-    }
-
-    // Get user email
-    const userData = this.authService.getUserData();
-    const userEmail = userData?.email;
-    if (!userEmail || !userEmail.includes('@')) {
-      throw new Error('Valid user email required - please login again');
-    }
-
-    // Build query parameters
-    const queryParams = new URLSearchParams();
-    if (format !== 'json') queryParams.append('format', format);
-    if (!includeMetadata) queryParams.append('include_metadata', 'false');
-
-    const queryString = queryParams.toString();
-    const url = `${this.baseUrl}/getSummary/${notebookId}/${summaryType}${queryString ? `?${queryString}` : ''}`;
-
-    console.log('📄 Calling getSummary endpoint:', url);
-
-    // Make the API call
-    const response = await axios.get(url, {
-      headers: {
-        'Authorization': headers.Authorization,
-        'Content-Type': 'application/json',
-        'X-User-Email': userEmail,
-        'Accept': format === 'json' ? 'application/json' : format === 'html' ? 'text/html' : 'text/plain'
-      },
-      timeout: 30000, // 30 seconds
-      withCredentials: false
-    });
-
-    console.log('✅ getSummary response received:', {
-      status: response.status,
-      contentType: response.headers['content-type'],
-      dataType: typeof response.data
-    });
-
-    // Handle different response formats
-    if (format === 'html' || format === 'plain') {
-      // For HTML/plain text, return the raw content
-      return {
-        content: response.data,
-        format: format,
-        notebookId: notebookId,
-        summaryType: summaryType
-      };
-    } else {
-      // For JSON, return the structured data
-      return response.data;
-    }
-
-  } catch (error) {
-    console.error('❌ Error getting summary:', error);
-
-    if (error.response) {
-      const { status, data } = error.response;
-
-      if (status === 401) {
-        throw new Error('Please login to access summaries');
-      } else if (status === 403) {
-        throw new Error('You don\'t have permission to access this summary');
-      } else if (status === 404) {
-        const errorData = typeof data === 'string' ? { message: data } : data;
-        const availableTypes = errorData.available_types || [];
-        const suggestion = availableTypes.length > 0 
-          ? `Available types: ${availableTypes.join(', ')}`
-          : 'No summaries available for this notebook';
-        throw new Error(`Summary not found. ${suggestion}`);
-      } else if (status >= 500) {
-        throw new Error('Server error - please try again in a moment');
+  async getSummary(notebookId, summaryType, format = 'json', includeMetadata = true) {
+    try {
+      if (!notebookId) {
+        throw new Error('Notebook ID is required');
       }
 
-      const errorMsg = (typeof data === 'string' ? data : data?.message) || `HTTP ${status} error`;
-      throw new Error(errorMsg);
-    } else if (error.request) {
-      throw new Error('Network error - please check your connection');
-    } else {
-      throw new Error(`Failed to get summary: ${error.message}`);
-    }
-  }
-}
-
-/**
- * 🆕 ADD: Get all summaries for a notebook using Lambda endpoint
- * @param {string} notebookId - ID of the notebook
- * @param {string} format - Response format ('json', 'html', 'plain')
- * @param {boolean} includeMetadata - Whether to include metadata analysis
- * @returns {Promise<object>} - All summaries data
- */
-async getAllSummaries(notebookId, format = 'json', includeMetadata = true) {
-  try {
-    if (!notebookId) {
-      throw new Error('Notebook ID is required');
-    }
-
-    console.log(`📄 Getting all summaries for notebook: ${notebookId}`);
-
-    // Get auth headers
-    const headers = await this.authService.getAuthHeaders();
-    if (!headers.Authorization) {
-      throw new Error('Authentication required - please login');
-    }
-
-    // Get user email
-    const userData = this.authService.getUserData();
-    const userEmail = userData?.email;
-    if (!userEmail || !userEmail.includes('@')) {
-      throw new Error('Valid user email required - please login again');
-    }
-
-    // Build query parameters
-    const queryParams = new URLSearchParams();
-    if (format !== 'json') queryParams.append('format', format);
-    if (!includeMetadata) queryParams.append('include_metadata', 'false');
-
-    const queryString = queryParams.toString();
-    const url = `${this.baseUrl}/getSummary/${notebookId}${queryString ? `?${queryString}` : ''}`;
-
-    console.log('📄 Calling getAllSummaries endpoint:', url);
-
-    // Make the API call
-    const response = await axios.get(url, {
-      headers: {
-        'Authorization': headers.Authorization,
-        'Content-Type': 'application/json',
-        'X-User-Email': userEmail,
-        'Accept': format === 'json' ? 'application/json' : format === 'html' ? 'text/html' : 'text/plain'
-      },
-      timeout: 30000, // 30 seconds
-      withCredentials: false
-    });
-
-    console.log('✅ getAllSummaries response received:', {
-      status: response.status,
-      summaryCount: response.data?.totalCount || 'unknown'
-    });
-
-    // Handle different response formats
-    if (format === 'html' || format === 'plain') {
-      // For HTML/plain text, return the raw content
-      return {
-        content: response.data,
-        format: format,
-        notebookId: notebookId
-      };
-    } else {
-      // For JSON, return the structured data
-      return response.data;
-    }
-
-  } catch (error) {
-    console.error('❌ Error getting all summaries:', error);
-
-    if (error.response) {
-      const { status, data } = error.response;
-
-      if (status === 401) {
-        throw new Error('Please login to access summaries');
-      } else if (status === 403) {
-        throw new Error('You don\'t have permission to access summaries for this notebook');
-      } else if (status === 404) {
-        throw new Error('No summaries found for this notebook. Generate summaries first.');
-      } else if (status >= 500) {
-        throw new Error('Server error - please try again in a moment');
+      if (!summaryType) {
+        throw new Error('Summary type is required');
       }
 
-      const errorMsg = (typeof data === 'string' ? data : data?.message) || `HTTP ${status} error`;
-      throw new Error(errorMsg);
-    } else if (error.request) {
-      throw new Error('Network error - please check your connection');
-    } else {
-      throw new Error(`Failed to get summaries: ${error.message}`);
+      console.log(`📄 Getting ${summaryType} summary for notebook: ${notebookId}`);
+
+      // Get auth headers
+      const headers = await this.authService.getAuthHeaders();
+      if (!headers.Authorization) {
+        throw new Error('Authentication required - please login');
+      }
+
+      // Get user email
+      const userData = this.authService.getUserData();
+      const userEmail = userData?.email;
+      if (!userEmail || !userEmail.includes('@')) {
+        throw new Error('Valid user email required - please login again');
+      }
+
+      // Build query parameters
+      const queryParams = new URLSearchParams();
+      if (format !== 'json') queryParams.append('format', format);
+      if (!includeMetadata) queryParams.append('include_metadata', 'false');
+
+      const queryString = queryParams.toString();
+      const url = `${this.baseUrl}/getSummary/${notebookId}/${summaryType}${queryString ? `?${queryString}` : ''}`;
+
+      console.log('📄 Calling getSummary endpoint:', url);
+
+      // Make the API call
+      const response = await axios.get(url, {
+        headers: {
+          'Authorization': headers.Authorization,
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail,
+          'Accept': format === 'json' ? 'application/json' : format === 'html' ? 'text/html' : 'text/plain'
+        },
+        timeout: 30000, // 30 seconds
+        withCredentials: false
+      });
+
+      console.log('✅ getSummary response received:', {
+        status: response.status,
+        contentType: response.headers['content-type'],
+        dataType: typeof response.data
+      });
+
+      // Handle different response formats
+      if (format === 'html' || format === 'plain') {
+        // For HTML/plain text, return the raw content
+        return {
+          content: response.data,
+          format: format,
+          notebookId: notebookId,
+          summaryType: summaryType
+        };
+      } else {
+        // For JSON, return the structured data
+        return response.data;
+      }
+
+    } catch (error) {
+      console.error('❌ Error getting summary:', error);
+
+      if (error.response) {
+        const { status, data } = error.response;
+
+        if (status === 401) {
+          throw new Error('Please login to access summaries');
+        } else if (status === 403) {
+          throw new Error('You don\'t have permission to access this summary');
+        } else if (status === 404) {
+          const errorData = typeof data === 'string' ? { message: data } : data;
+          const availableTypes = errorData.available_types || [];
+          const suggestion = availableTypes.length > 0
+            ? `Available types: ${availableTypes.join(', ')}`
+            : 'No summaries available for this notebook';
+          throw new Error(`Summary not found. ${suggestion}`);
+        } else if (status >= 500) {
+          throw new Error('Server error - please try again in a moment');
+        }
+
+        const errorMsg = (typeof data === 'string' ? data : data?.message) || `HTTP ${status} error`;
+        throw new Error(errorMsg);
+      } else if (error.request) {
+        throw new Error('Network error - please check your connection');
+      } else {
+        throw new Error(`Failed to get summary: ${error.message}`);
+      }
     }
   }
-}
-
-// /**
-//  * 🔄 UPDATED: Update your existing fetchSummaryFromS3 method
-//  * Replace your existing fetchSummaryFromS3 method with this enhanced version
-//  */
-// async fetchSummaryFromS3(summaryUrl, notebookId = null, summaryType = null) {
-//   try {
-//     console.log(`📄 Fetching summary content from: ${summaryUrl}`);
-
-//     // 🆕 NEW: If we have notebookId and summaryType, try Lambda first
-//     if (notebookId && summaryType) {
-//       try {
-//         console.log('🚀 Trying getSummary Lambda first...');
-//         const lambdaResult = await this.getSummary(notebookId, summaryType, 'json');
-        
-//         if (lambdaResult && lambdaResult.summary && lambdaResult.summary.content) {
-//           console.log('✅ Got summary content from Lambda');
-//           return lambdaResult.summary.content;
-//         }
-//       } catch (lambdaError) {
-//         console.log('⚠️ Lambda getSummary failed, falling back to direct S3 fetch:', lambdaError.message);
-//         // Continue to direct S3 fetch below
-//       }
-//     }
-
-//     // Fallback: Direct fetch from the URL (works for presigned URLs)
-//     const response = await axios.get(summaryUrl, {
-//       timeout: 30000,
-//       responseType: 'text'
-//     });
-
-//     console.log(`✅ Summary content fetched successfully (${response.data.length} characters)`);
-//     return response.data;
-
-//   } catch (error) {
-//     console.error(`❌ Error fetching summary content:`, error);
-
-//     if (error.response) {
-//       if (error.response.status === 403) {
-//         throw new Error('Access denied - summary URL may have expired');
-//       } else if (error.response.status === 404) {
-//         throw new Error('Summary not found');
-//       }
-//     }
-
-//     throw new Error(`Failed to fetch summary: ${error.message}`);
-//   }
-// }
 
   /**
-   * 🆕 ADD: Send a chat message to the AI and get a response with conversation history
+   * 🆕 ADD: Get all summaries for a notebook using Lambda endpoint
+   * @param {string} notebookId - ID of the notebook
+   * @param {string} format - Response format ('json', 'html', 'plain')
+   * @param {boolean} includeMetadata - Whether to include metadata analysis
+   * @returns {Promise<object>} - All summaries data
+   */
+  async getAllSummaries(notebookId, format = 'json', includeMetadata = true) {
+    try {
+      if (!notebookId) {
+        throw new Error('Notebook ID is required');
+      }
+
+      console.log(`📄 Getting all summaries for notebook: ${notebookId}`);
+
+      // Get auth headers
+      const headers = await this.authService.getAuthHeaders();
+      if (!headers.Authorization) {
+        throw new Error('Authentication required - please login');
+      }
+
+      // Get user email
+      const userData = this.authService.getUserData();
+      const userEmail = userData?.email;
+      if (!userEmail || !userEmail.includes('@')) {
+        throw new Error('Valid user email required - please login again');
+      }
+
+      // Build query parameters
+      const queryParams = new URLSearchParams();
+      if (format !== 'json') queryParams.append('format', format);
+      if (!includeMetadata) queryParams.append('include_metadata', 'false');
+
+      const queryString = queryParams.toString();
+      const url = `${this.baseUrl}/getSummary/${notebookId}${queryString ? `?${queryString}` : ''}`;
+
+      console.log('📄 Calling getAllSummaries endpoint:', url);
+
+      // Make the API call
+      const response = await axios.get(url, {
+        headers: {
+          'Authorization': headers.Authorization,
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail,
+          'Accept': format === 'json' ? 'application/json' : format === 'html' ? 'text/html' : 'text/plain'
+        },
+        timeout: 30000, // 30 seconds
+        withCredentials: false
+      });
+
+      console.log('✅ getAllSummaries response received:', {
+        status: response.status,
+        summaryCount: response.data?.totalCount || 'unknown'
+      });
+
+      // Handle different response formats
+      if (format === 'html' || format === 'plain') {
+        // For HTML/plain text, return the raw content
+        return {
+          content: response.data,
+          format: format,
+          notebookId: notebookId
+        };
+      } else {
+        // For JSON, return the structured data
+        return response.data;
+      }
+
+    } catch (error) {
+      console.error('❌ Error getting all summaries:', error);
+
+      if (error.response) {
+        const { status, data } = error.response;
+
+        if (status === 401) {
+          throw new Error('Please login to access summaries');
+        } else if (status === 403) {
+          throw new Error('You don\'t have permission to access summaries for this notebook');
+        } else if (status === 404) {
+          throw new Error('No summaries found for this notebook. Generate summaries first.');
+        } else if (status >= 500) {
+          throw new Error('Server error - please try again in a moment');
+        }
+
+        const errorMsg = (typeof data === 'string' ? data : data?.message) || `HTTP ${status} error`;
+        throw new Error(errorMsg);
+      } else if (error.request) {
+        throw new Error('Network error - please check your connection');
+      } else {
+        throw new Error(`Failed to get summaries: ${error.message}`);
+      }
+    }
+  }
+
+  // /**
+  //  * 🔄 UPDATED: Update your existing fetchSummaryFromS3 method
+  //  * Replace your existing fetchSummaryFromS3 method with this enhanced version
+  //  */
+  // async fetchSummaryFromS3(summaryUrl, notebookId = null, summaryType = null) {
+  //   try {
+  //     console.log(`📄 Fetching summary content from: ${summaryUrl}`);
+
+  //     // 🆕 NEW: If we have notebookId and summaryType, try Lambda first
+  //     if (notebookId && summaryType) {
+  //       try {
+  //         console.log('🚀 Trying getSummary Lambda first...');
+  //         const lambdaResult = await this.getSummary(notebookId, summaryType, 'json');
+
+  //         if (lambdaResult && lambdaResult.summary && lambdaResult.summary.content) {
+  //           console.log('✅ Got summary content from Lambda');
+  //           return lambdaResult.summary.content;
+  //         }
+  //       } catch (lambdaError) {
+  //         console.log('⚠️ Lambda getSummary failed, falling back to direct S3 fetch:', lambdaError.message);
+  //         // Continue to direct S3 fetch below
+  //       }
+  //     }
+
+  //     // Fallback: Direct fetch from the URL (works for presigned URLs)
+  //     const response = await axios.get(summaryUrl, {
+  //       timeout: 30000,
+  //       responseType: 'text'
+  //     });
+
+  //     console.log(`✅ Summary content fetched successfully (${response.data.length} characters)`);
+  //     return response.data;
+
+  //   } catch (error) {
+  //     console.error(`❌ Error fetching summary content:`, error);
+
+  //     if (error.response) {
+  //       if (error.response.status === 403) {
+  //         throw new Error('Access denied - summary URL may have expired');
+  //       } else if (error.response.status === 404) {
+  //         throw new Error('Summary not found');
+  //       }
+  //     }
+
+  //     throw new Error(`Failed to fetch summary: ${error.message}`);
+  //   }
+  // }
+
+  /**
    * @param {string} notebookId - ID of the notebook
    * @param {string} message - The message/question to send
    * @param {Array} conversationHistory - Previous conversation messages
@@ -2849,6 +2848,393 @@ async getAllSummaries(notebookId, format = 'json', includeMetadata = true) {
         console.error('Error setting up request:', error.message);
         throw new Error(`Failed to send chat message: ${error.message}`);
       }
+    }
+  }
+
+  // Add these methods to your NotebookService class
+
+  /**
+   * 🆕 Save current chat conversation
+   * @param {string} notebookId - ID of the notebook
+   * @param {Array} chatHistory - Array of chat messages
+   * @param {string} chatTitle - Optional title for the chat
+   * @returns {Promise<object>} - Save result with chat ID
+   */
+  async saveChatHistory(notebookId, chatHistory, chatTitle = '', chatId = undefined) {
+    try {
+      if (!notebookId) throw new Error('Notebook ID is required');
+      if (!chatHistory || chatHistory.length === 0) throw new Error('Chat history is required');
+
+      const headers = await authService.getAuthHeaders();
+      if (!headers.Authorization) throw new Error('Authentication required - please login');
+      const userData = authService.getUserData();
+      const userEmail = userData?.email;
+      if (!userEmail || !userEmail.includes('@')) throw new Error('Valid user email required - please login again');
+
+      // Format chat history for Lambda
+      const formattedChatHistory = chatHistory.map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.message,
+        timestamp: msg.timestamp
+      }));
+
+      const payload = {
+        action: 'save_chat',
+        email: userEmail,
+        notebook_uuid: notebookId,
+        chat_history: formattedChatHistory,
+        chat_title: chatTitle
+      };
+      if (chatId) payload.chat_id = chatId;
+
+      const response = await axios.post(
+        `${this.baseUrl}${this.chatRoute}`,
+        payload,
+        {
+          headers: {
+            'Authorization': headers.Authorization,
+            'Content-Type': 'application/json',
+            'X-User-Email': userEmail,
+            'Accept': 'application/json'
+          },
+          timeout: 30000,
+          withCredentials: false
+        }
+      );
+
+      return {
+        success: true,
+        chat_id: response.data.chat_id,
+        title: response.data.title,
+        timestamp: response.data.timestamp,
+        message: response.data.message
+      };
+    } catch (error) {
+      console.error('❌ Error saving chat:', error);
+      if (error.response) {
+        const { status, data } = error.response;
+        if (status === 400) throw new Error(data.error || 'Invalid chat data');
+        if (status === 401) throw new Error('Please login to save chats');
+        if (status === 403) throw new Error('You don\'t have permission to save chats for this notebook');
+        if (status === 404) throw new Error('Notebook not found');
+        if (status >= 500) throw new Error('Server error - please try again in a moment');
+        throw new Error(data.error || data.message || `HTTP ${status} error`);
+      } else if (error.request) {
+        throw new Error('Network error - please check your connection');
+      } else {
+        throw new Error(`Failed to save chat: ${error.message}`);
+      }
+    }
+  }
+
+  /**
+   * 🆕 Get saved chats for a notebook - Updated to match new POST Lambda
+   * @param {string} notebookId - ID of the notebook
+   * @returns {Promise<Array>} - Array of saved chats
+   */
+  async getSavedChats(notebookId) {
+    try {
+      if (!notebookId) {
+        throw new Error('Notebook ID is required');
+      }
+
+      console.log(`📚 Getting saved chats for notebook: ${notebookId}`);
+
+      // Get auth headers
+      const headers = await authService.getAuthHeaders();
+      if (!headers.Authorization) {
+        throw new Error('Authentication required - please login');
+      }
+
+      // Get user email
+      const userData = authService.getUserData();
+      const userEmail = userData?.email;
+      if (!userEmail || !userEmail.includes('@')) {
+        throw new Error('Valid user email required - please login again');
+      }
+
+      // Build request body exactly as the Lambda expects
+      const requestBody = {
+        email: userEmail
+        // Note: notebookId goes in the URL path, not request body
+      };
+
+      console.log('📚 Request body:', {
+        email: userEmail,
+        notebookId: notebookId // This goes in path
+      });
+
+      // Call the getSavedChats Lambda endpoint - note it's now POST
+      const response = await axios.post(
+        `${this.baseUrl}/get_Saved_Chats/${notebookId}`,
+        requestBody,
+        {
+          headers: {
+            'Authorization': headers.Authorization,
+            'Content-Type': 'application/json',
+            'X-User-Email': userEmail,
+            'Accept': 'application/json'
+          },
+          timeout: 15000,
+          withCredentials: false
+        }
+      );
+
+      console.log('📚 Lambda response:', response.data);
+
+      // Handle the Lambda response format
+      const responseData = response.data;
+      const chats = responseData.chats || [];
+
+      console.log(`✅ Retrieved ${chats.length} saved chats`);
+
+      // Map the Lambda response to the format expected by the frontend
+      return chats.map(chat => ({
+        chat_id: chat.chat_id,
+        title: chat.title || 'Untitled Chat',
+        timestamp: chat.timestamp || chat.created_at,
+        created_at: chat.created_at,
+        updated_at: chat.updated_at,
+        version: chat.version || 1,
+        message_count: chat.message_count || 0,
+        word_count: chat.word_count || 0,
+        first_message_preview: chat.first_message_preview,
+        last_message_preview: chat.last_message_preview,
+        file_size: chat.file_size
+      }));
+
+    } catch (error) {
+      console.error('❌ Error getting saved chats:', error);
+
+      if (error.response?.status === 404) {
+        // No saved chats found - return empty array
+        return [];
+      }
+
+      if (error.response) {
+        const { status } = error.response;
+        if (status === 401) {
+          throw new Error('Please login to view saved chats');
+        } else if (status === 403) {
+          throw new Error('You don\'t have permission to view chats for this notebook');
+        }
+      }
+
+      // For network errors or other issues, return empty array
+      console.warn('Could not load saved chats, returning empty array');
+      return [];
+    }
+  }
+
+    /**
+   * 🆕 Load a specific saved chat - Updated to match new POST Lambda
+   * @param {string} notebookId - ID of the notebook
+   * @param {string} chatId - ID of the chat to load
+   * @returns {Promise<object>} - Chat data with history
+   */
+  async loadSavedChat(notebookId, chatId) {
+    try {
+      if (!notebookId || !chatId) {
+        throw new Error('Notebook ID and Chat ID are required');
+      }
+
+      console.log(`📖 Loading saved chat: ${chatId}`);
+
+      // Get auth headers
+      const headers = await authService.getAuthHeaders();
+      if (!headers.Authorization) {
+        throw new Error('Authentication required - please login');
+      }
+
+      // Get user email
+      const userData = authService.getUserData();
+      const userEmail = userData?.email;
+      if (!userEmail || !userEmail.includes('@')) {
+        throw new Error('Valid user email required - please login again');
+      }
+
+      // Build request body for specific chat exactly as Lambda expects
+      const requestBody = {
+        email: userEmail,
+        chat_id: chatId
+        // Note: notebookId goes in the URL path, not request body
+      };
+
+      console.log('📖 Request body:', {
+        email: userEmail,
+        chat_id: chatId,
+        notebookId: notebookId // This goes in path
+      });
+
+      // Call the same getSavedChats Lambda endpoint but with chat_id in body
+      const response = await axios.post(
+        `${this.baseUrl}/get_Saved_Chats/${notebookId}`,
+        requestBody,
+        {
+          headers: {
+            'Authorization': headers.Authorization,
+            'Content-Type': 'application/json',
+            'X-User-Email': userEmail,
+            'Accept': 'application/json'
+          },
+          timeout: 15000,
+          withCredentials: false
+        }
+      );
+
+      console.log('📖 Lambda response for specific chat:', response.data);
+
+      const chatData = response.data;
+
+      // Validate the response has the expected structure
+      if (!chatData.chat_id || !chatData.chat_history) {
+        throw new Error('Invalid chat data received from server');
+      }
+
+      console.log('✅ Chat loaded successfully');
+
+      // Convert the Lambda response to the format expected by the frontend
+      const formattedMessages = chatData.chat_history.map((msg, index) => ({
+        id: `${chatId}-${index}`,
+        message: msg.content,
+        sender: msg.role === 'user' ? 'user' : 'ai',
+        timestamp: msg.timestamp || chatData.timestamp,
+        type: 'message'
+      }));
+
+      return {
+        chat_id: chatData.chat_id,
+        title: chatData.title || 'Untitled Chat',
+        timestamp: chatData.timestamp,
+        created_at: chatData.created_at,
+        updated_at: chatData.updated_at,
+        version: chatData.version || 1,
+        message_count: chatData.message_count || formattedMessages.length,
+        word_count: chatData.word_count,
+        participants: chatData.participants,
+        retrieved_at: chatData.retrieved_at,
+        messages: formattedMessages
+      };
+
+    } catch (error) {
+      console.error('❌ Error loading saved chat:', error);
+
+      if (error.response) {
+        const { status } = error.response;
+        if (status === 404) {
+          throw new Error('Chat not found');
+        } else if (status === 401) {
+          throw new Error('Please login to load saved chats');
+        } else if (status === 403) {
+          throw new Error('You don\'t have permission to access this chat');
+        }
+      }
+
+      throw new Error(`Failed to load chat: ${error.message}`);
+    }
+  }
+
+
+  /**
+   * 🆕 Get saved chats with pagination and search - Updated for POST Lambda
+   * @param {string} notebookId - ID of the notebook
+   * @param {object} options - Options for pagination and search
+   * @param {number} options.limit - Number of chats to return (default: 50)
+   * @param {number} options.offset - Offset for pagination (default: 0)
+   * @param {string} options.search - Search query
+   * @returns {Promise<object>} - Paginated chat results
+   */
+  async getSavedChatsWithPagination(notebookId, options = {}) {
+    try {
+      if (!notebookId) {
+        throw new Error('Notebook ID is required');
+      }
+
+      const { limit = 50, offset = 0, search } = options;
+
+      console.log(`📚 Getting saved chats with pagination for notebook: ${notebookId}`);
+
+      // Get auth headers
+      const headers = await authService.getAuthHeaders();
+      if (!headers.Authorization) {
+        throw new Error('Authentication required - please login');
+      }
+
+      // Get user email
+      const userData = authService.getUserData();
+      const userEmail = userData?.email;
+      if (!userEmail || !userEmail.includes('@')) {
+        throw new Error('Valid user email required - please login again');
+      }
+
+      // Build request body exactly as the Lambda expects
+      const requestBody = {
+        email: userEmail,
+        limit: limit,
+        offset: offset
+      };
+
+      // Add search if provided
+      if (search) {
+        requestBody.search = search;
+      }
+
+      console.log('📚 Request body:', {
+        email: userEmail,
+        notebookId: notebookId,
+        limit,
+        offset,
+        search
+      });
+
+      // Call the getSavedChats Lambda endpoint
+      const response = await axios.post(
+        `${this.baseUrl}/get_Saved_Chats/${notebookId}`,
+        requestBody,
+        {
+          headers: {
+            'Authorization': headers.Authorization,
+            'Content-Type': 'application/json',
+            'X-User-Email': userEmail,
+            'Accept': 'application/json'
+          },
+          timeout: 15000,
+          withCredentials: false
+        }
+      );
+
+      console.log('📚 Lambda response:', response.data);
+
+      // Return the full response including pagination metadata
+      return response.data;
+
+    } catch (error) {
+      console.error('❌ Error getting saved chats with pagination:', error);
+
+      if (error.response?.status === 404) {
+        // No saved chats found
+        return {
+          chats: [],
+          pagination: {
+            total: 0,
+            limit: options.limit || 50,
+            offset: options.offset || 0,
+            has_more: false,
+            next_offset: null
+          }
+        };
+      }
+
+      if (error.response) {
+        const { status } = error.response;
+        if (status === 401) {
+          throw new Error('Please login to view saved chats');
+        } else if (status === 403) {
+          throw new Error('You don\'t have permission to view chats for this notebook');
+        }
+      }
+
+      throw new Error(`Failed to get chats: ${error.message}`);
     }
   }
 }

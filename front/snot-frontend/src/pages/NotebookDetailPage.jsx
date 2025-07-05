@@ -47,7 +47,67 @@ export default function NotebookDetailPage() {
   const [chatMessages, setChatMessages] = useState([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [conversationId, setConversationId] = useState(null);
+  const [currentChatId, setCurrentChatId] = useState(null); // Track the current chat's id
   const chatContainerRef = useRef(null);
+
+  // Chat saving state
+  const [showSaveChatModal, setShowSaveChatModal] = useState(false);
+  const [chatTitle, setChatTitle] = useState('');
+  const [isSavingChat, setIsSavingChat] = useState(false);
+  const [savedChats, setSavedChats] = useState([]);
+  const [showSavedChatsDropdown, setShowSavedChatsDropdown] = useState(false);
+  const [isLoadingChats, setIsLoadingChats] = useState(false);
+
+  // 🆕 Enhanced: Add search functionality for saved chats
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [isSearchingChats, setIsSearchingChats] = useState(false);
+
+  /**
+   * 🆕 Search saved chats
+   */
+  const searchSavedChats = async (searchQuery) => {
+    if (!notebook.notebookId) return;
+
+    setIsSearchingChats(true);
+
+    try {
+      console.log('🔍 Searching saved chats for:', searchQuery);
+
+      const searchOptions = {
+        search: searchQuery,
+        limit: 50
+      };
+
+      const chats = await notebookService.getSavedChats(notebook.notebookId, searchOptions);
+      setSavedChats(chats);
+
+      console.log(`🔍 Found ${chats.length} chats matching "${searchQuery}"`);
+    } catch (error) {
+      console.error('❌ Error searching saved chats:', error);
+      setFileErrors(prev => [...prev, `Search failed: ${error.message}`]);
+    } finally {
+      setIsSearchingChats(false);
+    }
+  };
+
+  /**
+   * Handle chat search input changes
+   */
+  const handleChatSearchChange = (e) => {
+    const query = e.target.value;
+    setChatSearchQuery(query);
+
+    // Debounce search
+    if (query.trim()) {
+      const timeoutId = setTimeout(() => {
+        searchSavedChats(query);
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    } else {
+      // If search is cleared, reload all chats
+      loadSavedChats();
+    }
+  };
 
   // Summary viewing state
   const [generatedSummaries, setGeneratedSummaries] = useState({});
@@ -59,8 +119,6 @@ export default function NotebookDetailPage() {
   const [summaryProgress, setSummaryProgress] = useState(null);
   const [isPollingProgress, setIsPollingProgress] = useState(false);
   const [summaryProgressInterval, setSummaryProgressInterval] = useState(null);
-  const [summaryStartTime, setSummaryStartTime] = useState(null);
-  const [summaryTaskId, setSummaryTaskId] = useState(null);
 
   // Summary page view state
   const [showSummaryPage, setShowSummaryPage] = useState(false);
@@ -84,6 +142,136 @@ export default function NotebookDetailPage() {
   const hasContentSources = () => {
     return files.length > 0 || links.length > 0;
   };
+
+  /**
+   * Handle saving the current chat conversation
+   */
+  const handleSaveChat = async () => {
+    if (chatMessages.length === 0) {
+      setFileErrors(prev => [...prev, 'No messages to save']);
+      return;
+    }
+
+    setIsSavingChat(true);
+
+    try {
+      // Auto-generate title if not provided
+      let finalTitle = chatTitle.trim();
+      if (!finalTitle) {
+        // Use first user message as title
+        const firstUserMessage = chatMessages.find(msg => msg.sender === 'user');
+        if (firstUserMessage) {
+          finalTitle = firstUserMessage.message.substring(0, 50);
+          if (firstUserMessage.message.length > 50) {
+            finalTitle += '...';
+          }
+        } else {
+          finalTitle = `Chat - ${new Date().toLocaleDateString()}`;
+        }
+      }
+
+      console.log('💾 Saving chat with title:', finalTitle, 'and chat_id:', currentChatId);
+
+      const result = await notebookService.saveChatHistory(
+        notebook.notebookId,
+        chatMessages,
+        finalTitle,
+        currentChatId // Pass chat_id for update if present
+      );
+
+      console.log('✅ Chat saved successfully:', result);
+
+      // If the backend returns the chat_id, update our state
+      if (result && result.chat_id) {
+        setCurrentChatId(result.chat_id);
+      }
+
+      // Close modal and reset
+      setShowSaveChatModal(false);
+      setChatTitle('');
+
+      // Show success message
+      addChatMessage(
+        `💾 Chat saved as "${result.title}"`,
+        'system',
+        'message'
+      );
+
+      // Refresh saved chats list
+      loadSavedChats();
+
+    } catch (error) {
+      console.error('❌ Error saving chat:', error);
+      setFileErrors(prev => [...prev, `Failed to save chat: ${error.message}`]);
+    } finally {
+      setIsSavingChat(false);
+    }
+  };
+
+  /**
+   * Load saved chats for the current notebook
+   */
+  const loadSavedChats = async () => {
+    if (!notebook.notebookId) return;
+
+    setIsLoadingChats(true);
+
+    try {
+      console.log('📚 Loading saved chats...');
+      const chats = await notebookService.getSavedChats(notebook.notebookId);
+      setSavedChats(chats);
+      console.log(`✅ Loaded ${chats.length} saved chats`);
+    } catch (error) {
+      console.error('❌ Error loading saved chats:', error);
+      setSavedChats([]);
+    } finally {
+      setIsLoadingChats(false);
+    }
+  };
+
+  /**
+   * Load a specific saved chat
+   */
+  const handleLoadSavedChat = async (chatId) => {
+    setIsLoadingChats(true);
+
+    try {
+      console.log('📖 Loading saved chat:', chatId);
+
+      const chatData = await notebookService.loadSavedChat(notebook.notebookId, chatId);
+
+      // Replace current chat messages with loaded ones
+      setChatMessages(chatData.messages);
+      setCurrentChatId(chatId); // Track the loaded chat's id
+
+      // Show success message
+      addChatMessage(
+        `📖 Loaded chat: "${chatData.title}"`,
+        'system',
+        'message'
+      );
+
+      setShowSavedChatsDropdown(false);
+
+      console.log('✅ Chat loaded successfully');
+
+    } catch (error) {
+      console.error('❌ Error loading saved chat:', error);
+      setFileErrors(prev => [...prev, `Failed to load chat: ${error.message}`]);
+    } finally {
+      setIsLoadingChats(false);
+    }
+  };
+
+  // Load saved chats when component mounts or notebook changes
+  useEffect(() => {
+    const loadChats = async () => {
+      if (notebook.notebookId && notebook.notebookId !== 'temp-loading') {
+        loadSavedChats();
+      }
+    };
+    loadChats();
+  }, [notebook.notebookId]); // Remove loadSavedChats from dependency
 
   const hasSummariesForChat = () => {
     const availableSummaries = Object.entries(generatedSummaries).filter(([type, data]) => {
@@ -147,12 +335,12 @@ export default function NotebookDetailPage() {
     'header', 'bold', 'italic', 'underline', 'list', 'bullet', 'link'
   ];
 
-  // Function to count words in HTML content
-  const getWordCount = (htmlContent) => {
-    if (!htmlContent) return 0;
-    const text = htmlContent.replace(/<[^>]*>/g, ' ');
-    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
-  };
+  // Function to count words in HTML content (used in ReactQuill)
+  // const getWordCount = (htmlContent) => {
+  //   if (!htmlContent) return 0;
+  //   const text = htmlContent.replace(/<[^>]*>/g, ' ');
+  //   return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+  // };
 
   // Enhanced Chat API function with conversation history
   const sendChatMessage = async (message) => {
@@ -443,6 +631,7 @@ export default function NotebookDetailPage() {
   const clearConversation = () => {
     setChatMessages([]);
     setConversationId(null);
+    setCurrentChatId(null); // Reset chat id when starting a new conversation
     // Note: We don't clear generatedSummaries so users can still access them
   };
 
@@ -455,37 +644,16 @@ export default function NotebookDetailPage() {
     });
   };
 
-  // Function to render source information
+  // Function to render source information - DISABLED for cleaner chat
   const renderSourceInfo = (sources) => {
-    if (!sources || sources.length === 0) return null;
-
-    return (
-      <div style={styles.sourcesInfo}>
-        <div style={styles.sourcesHeader}>📚 Sources:</div>
-        {sources.slice(0, 3).map((source, index) => (
-          <div key={index} style={styles.sourceItem}>
-            <span style={styles.sourceNumber}>{index + 1}.</span>
-            <span style={styles.sourceText}>
-              {source.filename} ({source.content_type})
-              {source.similarity_score && (
-                <span style={styles.sourceScore}>
-                  - {(source.similarity_score * 100).toFixed(0)}% match
-                </span>
-              )}
-            </span>
-          </div>
-        ))}
-      </div>
-    );
+    // Return null to hide all source information
+    return null;
   };
 
-  // Updated handleSummarize function 
   const handleSummarize = async (summaryType) => {
     setShowSummaryDropdown(false);
     setIsGeneratingSummary(true);
     setSummaryProgress(null);
-    setSummaryStartTime(new Date());
-    setSummaryTaskId(null);
 
     try {
       console.log(`Starting ${summaryType} summary with progress tracking...`);
@@ -494,7 +662,6 @@ export default function NotebookDetailPage() {
       const startResult = await notebookService.startSummary(notebook.notebookId, [summaryType]);
 
       console.log(`✅ Summary started:`, startResult);
-      setSummaryTaskId(startResult.taskId);
 
       // Step 2: Start polling for progress
       setIsPollingProgress(true);
@@ -627,7 +794,6 @@ export default function NotebookDetailPage() {
     setIsPollingProgress(false);
     setIsGeneratingSummary(false);
     setSummaryProgress(null);
-    setSummaryTaskId(null);
 
     console.log('✅ All polling state reset');
   };
@@ -650,6 +816,9 @@ export default function NotebookDetailPage() {
     }
 
     if (progress.status === 'completed') {
+      // Show a brief success notification
+      console.log(`✨ ${summaryType.charAt(0).toUpperCase() + summaryType.slice(1)} summary completed successfully!`);
+
       // Properly update generatedSummaries state to show in UI immediately
       if (progress.summaries && Object.keys(progress.summaries).length > 0) {
         const updatedSummaries = {};
@@ -754,10 +923,6 @@ export default function NotebookDetailPage() {
       } else {
         console.log('⚠️ No summaries in progress data');
       }
-
-      // Don't add chat messages, just log completion
-      const elapsedMsg = progress.elapsedTime ? ` (completed in ${progress.elapsedTime})` : '';
-      console.log(`✨ ${summaryType.charAt(0).toUpperCase() + summaryType.slice(1)} summary completed successfully!${elapsedMsg}`);
 
     } else if (progress.status === 'partial_success') {
       // Handle partial success similarly...
@@ -988,55 +1153,75 @@ export default function NotebookDetailPage() {
     );
   };
 
-  // Progress bar component
+  // Progress modal component - Now a small dismissible popup
   const renderSummaryProgress = () => {
     if (!summaryProgress || !isPollingProgress) return null;
 
-    const { status, progressSummary, elapsedTime, estimatedTimeRemaining, message, taskId } = summaryProgress;
+    const { status, progressSummary, elapsedTime, estimatedTimeRemaining, message } = summaryProgress;
 
     if (status !== 'processing') return null;
 
-    const { completed = 0, processing = 0, pending = 0, total = 1 } = progressSummary || {};
+    const { completed = 0, processing = 0, total = 1 } = progressSummary || {};
     const progressPercentage = total > 0 ? Math.round(((completed + (processing * 0.5)) / total) * 100) : 0;
 
     return (
-      <>
-        {/* Backdrop */}
-        <div style={styles.progressBackdrop}></div>
+      <div style={styles.summaryProgressPopup}>
+        <div style={styles.progressPopupHeader}>
+          <div style={styles.progressPopupTitle}>
+            <span style={styles.progressIcon}>⚡</span>
+            Generating Summary...
+          </div>
+          <button
+            onClick={() => {
+              setIsPollingProgress(false);
+              setIsGeneratingSummary(false);
+              setSummaryProgress(null);
+              // Note: This just hides the popup, generation continues in background
+            }}
+            style={styles.progressPopupClose}
+            className="progress-popup-close"
+            title="Hide progress (generation continues)"
+          >
+            ✕
+          </button>
+        </div>
 
-        {/* Progress Modal */}
-        <div style={styles.progressContainer}>
-          <div style={styles.progressHeader}>
-            <div style={styles.progressTitle}>
-              <span style={styles.progressIcon}>⚡</span>
-              Generating Summary...
-            </div>
-            <div style={styles.progressStats}>
+        <div style={styles.progressPopupContent}>
+          <div style={styles.progressPopupStats}>
+            <span style={{ fontWeight: '600', color: '#0f172a' }}>
               {completed}/{total} completed
-            </div>
+            </span>
           </div>
 
           <div style={styles.progressBar}>
             <div
               style={{
-                ...styles.progressBarFill,
-                width: `${Math.min(progressPercentage, 95)}%` // Cap at 95% until fully done
+                height: '8px',
+                background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
+                borderRadius: '4px',
+                transition: 'width 0.5s ease',
+                width: `${Math.min(progressPercentage, 95)}%`,
+                backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%)',
+                backgroundSize: '16px 16px',
+                animation: 'progressStripes 1s linear infinite'
               }}
             />
           </div>
 
-          <div style={styles.progressDetails}>
-            <div style={styles.progressText}>
-              {message || 'Processing your content...'}
-            </div>
-            <div style={styles.progressTime}>
-              {elapsedTime && `⏱️ ${elapsedTime}`}
-              {estimatedTimeRemaining && ` • ~${estimatedTimeRemaining} remaining`}
-              {taskId && (
-                <span style={styles.taskId}> • Task: {taskId.substring(0, 8)}...</span>
+          <div style={styles.progressPopupText}>
+            {message || 'Summary generation in progress'}
+          </div>
+
+          {(elapsedTime || estimatedTimeRemaining) && (
+            <div style={styles.progressPopupTime}>
+              {elapsedTime && (
+                <span>⏱️ {elapsedTime}</span>
+              )}
+              {estimatedTimeRemaining && (
+                <span>• ~{estimatedTimeRemaining} remaining</span>
               )}
             </div>
-          </div>
+          )}
 
           {summaryProgress.progress && (
             <div style={styles.progressTypeDetails}>
@@ -1047,8 +1232,8 @@ export default function NotebookDetailPage() {
                   </span>
                   <span style={{
                     ...styles.progressTypeStatus,
-                    color: typeProgress.status === 'completed' ? ' #10b981' :
-                      typeProgress.status === 'generating' ? ' #3b82f6' : ' #6b7280'
+                    color: typeProgress.status === 'completed' ? '#10b981' :
+                      typeProgress.status === 'generating' ? '#3b82f6' : '#6b7280'
                   }}>
                     {typeProgress.status === 'completed' ? '✓ Done' :
                       typeProgress.status === 'generating' ? '⚡ Generating...' :
@@ -1059,158 +1244,265 @@ export default function NotebookDetailPage() {
             </div>
           )}
         </div>
-      </>
+      </div>
     );
   };
 
-  // Chat Section Renderer
-  const renderChatSection = () => {
-    const chatState = getChatState();
-    const summariesAvailable = chatState.state === 'available';
+  // Save Chat Modal Component
+  const renderSaveChatModal = () => {
+    if (!showSaveChatModal) return null;
 
     return (
-      <div style={styles.chatSection}>
-        <div style={styles.chatContainer}>
-          <div style={styles.chatHeader}>
-            <h3 style={styles.chatTitle}>
-              {chatState.title}
-            </h3>
-            <div style={styles.chatHeaderActions}>
-              {/* View Summaries dropdown - only show if summaries available */}
-              {summariesAvailable && Object.keys(generatedSummaries).length > 0 && (
-                <div style={styles.summariesDropdown}>
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        const summaryType = e.target.value;
-                        const summaryData = generatedSummaries[summaryType];
-                        if (summaryData?.url) {
-                          viewSummary(summaryType, summaryData.url);
-                        }
-                      }
-                      e.target.value = ''; // Reset select
-                    }}
-                    style={styles.summariesSelect}
-                    className="summaries-select"
-                    defaultValue=""
-                  >
-                    <option value="">📄 View Summaries</option>
-                    {Object.entries(generatedSummaries)
-                      .filter(([type, data]) => {
-                        const hasValidUrl = data.url && !data.url.startsWith('#');
-                        return data.ready && hasValidUrl;
-                      })
-                      .map(([type, data]) => (
-                        <option key={type} value={type}>
-                          {type.charAt(0).toUpperCase() + type.slice(1)} Summary
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Clear chat button - only show if chat has messages and summaries available */}
-              {chatMessages.length > 0 && (
-                <button onClick={clearConversation} style={styles.clearChatButton} className="clear-chat-button">
-                  Clear Conversation
-                </button>
-              )}
-            </div>
+      <div style={styles.saveChatModal}>
+        <div style={styles.saveChatModalContent}>
+          <div style={styles.saveChatModalHeader}>
+            <h3 style={styles.saveChatModalTitle}>💾 Save Conversation</h3>
+            <button
+              onClick={() => {
+                setShowSaveChatModal(false);
+                setChatTitle('');
+              }}
+              style={styles.saveChatModalClose}
+            >
+              ✕
+            </button>
           </div>
 
-          {/* Chat Messages - only show if summaries available */}
-          {chatMessages.length > 0 && (
-            <div style={styles.chatMessages} ref={chatContainerRef}>
-              {chatMessages.map((message) => (
-                <div key={message.id} style={styles.chatMessage}>
-                  <div style={{
-                    ...styles.chatMessageContent,
-                    ...(message.sender === 'user' ? styles.chatMessageUser : {}),
-                    ...(message.sender === 'ai' ? styles.chatMessageAI : {}),
-                    ...(message.sender === 'system' ? styles.chatMessageSystem : {}),
-                    ...(message.type === 'error' ? styles.chatMessageError : {}),
-                    ...(message.type === 'summary' ? styles.chatMessageSummary : {}),
-                    ...(message.type === 'sources' ? styles.chatMessageSources : {})
-                  }}>
-                    <div style={styles.chatMessageText}>
-                      {message.message}
-                    </div>
-
-                    {/* Display sources for AI messages */}
-                    {message.sender === 'ai' && message.metadata?.sources && (
-                      renderSourceInfo(message.metadata.sources)
-                    )}
-
-                    <div style={styles.chatMessageTime}>
-                      {formatChatTime(message.timestamp)}
-                      {message.metadata?.chunks_found && (
-                        <span style={styles.chatMessageMeta}>
-                          • {message.metadata.chunks_found} sources • {message.metadata.search_method}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {/* Loading indicator for AI responses */}
-              {isChatLoading && (
-                <div style={styles.chatMessage}>
-                  <div style={{ ...styles.chatMessageContent, ...styles.chatMessageAI }}>
-                    <div style={styles.chatTypingIndicator}>
-                      <div style={styles.typingDot}></div>
-                      <div style={styles.typingDot}></div>
-                      <div style={styles.typingDot}></div>
-                    </div>
-                  </div>
-                </div>
-              )}
+          <div style={styles.saveChatModalBody}>
+            <div style={styles.saveChatInfoText}>
+              💬 Saving {chatMessages.length} messages from this conversation
             </div>
-          )}
 
-          {/* Chat Form - conditional rendering based on summary availability */}
-          <form onSubmit={handleChatSubmit} style={styles.chatForm}>
-            <div style={styles.chatInputContainer}>
+            <div style={styles.saveChatInputContainer}>
+              <label style={styles.saveChatLabel}>Chat Title (optional)</label>
               <input
                 type="text"
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                placeholder={chatState.placeholder}
-                style={styles.chatInput}
-                disabled={isChatLoading}
+                value={chatTitle}
+                onChange={(e) => setChatTitle(e.target.value)}
+                placeholder="Enter a title for this chat..."
+                style={styles.saveChatInput}
+                maxLength={100}
+                autoFocus
               />
+              <div style={styles.saveChatInputHint}>
+                If left empty, we'll use your first message as the title
+              </div>
+            </div>
+
+            <div style={styles.saveChatModalActions}>
               <button
-                type="submit"
-                style={{
-                  ...styles.chatSendButton,
-                  ...((!chatMessage.trim() || isChatLoading || chatState.disabled) ? styles.chatSendButtonDisabled : {})
+                onClick={() => {
+                  setShowSaveChatModal(false);
+                  setChatTitle('');
                 }}
-                disabled={!chatMessage.trim() || isChatLoading}
+                style={styles.saveChatCancelButton}
+                disabled={isSavingChat}
               >
-                {isChatLoading ? (
-                  <div style={styles.buttonSpinner}></div>
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveChat}
+                style={{
+                  ...styles.saveChatConfirmButton,
+                  ...(isSavingChat ? styles.saveChatConfirmButtonLoading : {})
+                }}
+                disabled={isSavingChat}
+              >
+                {isSavingChat ? (
+                  <>
+                    <div style={styles.buttonSpinner}></div>
+                    Saving...
+                  </>
                 ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
-                  </svg>
+                  <>
+                    💾 Save Chat
+                  </>
                 )}
               </button>
             </div>
-          </form>
-
-          {/* Status message - different based on availability */}
-          {chatState.note && (
-            <div style={styles.chatNote}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.chatNoteIcon}>
-                <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11M11,9H13V7H11" />
-              </svg>
-              {chatState.note}
-            </div>
-          )}
+          </div>
         </div>
       </div>
     );
   };
+
+  // Saved Chats Dropdown Component
+  const renderSavedChatsDropdown = () => {
+    if (!showSavedChatsDropdown) return null;
+
+    // DEBUG: Add border, background, zIndex, minWidth for visibility
+    const debugDropdownStyle = {
+      ...styles.savedChatsDropdown,
+      border: '2px solid #3b82f6',
+      background: '#fff',
+      zIndex: 9999,
+      minWidth: 320,
+      minHeight: 120,
+      boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+      position: 'absolute',
+      right: 0,
+      top: 40,
+    };
+
+    // DEBUG: Show a message if savedChats is empty
+    if (!isLoadingChats && savedChats.length === 0) {
+      return (
+        <div style={debugDropdownStyle}>
+          <div style={{padding: 16, color: '#1d4ed8', fontWeight: 600}}>
+            No saved chats found. (DEBUG)
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={debugDropdownStyle}>
+        <div style={styles.savedChatsDropdownHeader}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.savedChatsIcon}>
+            <path d="M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M5,7H19V5H5V7M5,11H19V9H5V11M5,15H19V13H5V15M5,19H19V17H5V19Z" />
+          </svg>
+          Saved Chats ({savedChats.length})
+        </div>
+
+        <div style={styles.savedChatsContent}>
+          {isLoadingChats ? (
+            <div style={styles.savedChatsLoading}>
+              <div style={styles.buttonSpinner}></div>
+              Loading saved chats...
+            </div>
+          ) : (
+            <div style={styles.savedChatsList}>
+              {savedChats.map((chat) => (
+                <div
+                  key={chat.chat_id}
+                  style={styles.savedChatItem}
+                  onClick={() => handleLoadSavedChat(chat.chat_id)}
+                  className="saved-chat-item"
+                >
+                  <div style={styles.savedChatItemHeader}>
+                    <div style={styles.savedChatItemTitle}>{chat.title}</div>
+                    <div style={styles.savedChatItemDate}>
+                      {new Date(chat.timestamp).toLocaleDateString()}
+                    </div>
+                  </div>
+
+                  <div style={styles.savedChatItemMeta}>
+                    💬 {chat.message_count} messages
+                    {chat.word_count && (
+                      <> • 📝 {chat.word_count.toLocaleString()} words</>
+                    )}
+                    • ⏰ {new Date(chat.timestamp).toLocaleTimeString()}
+                  </div>
+                  <div style={styles.savedChatItemMeta}>
+                    {chat.message_count} messages • {new Date(chat.timestamp).toLocaleTimeString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {savedChats.length > 0 && (
+          <div style={styles.savedChatsFooter}>
+            <button
+              onClick={() => setShowSavedChatsDropdown(!showSavedChatsDropdown)}
+              style={styles.savedChatsButton}
+              className="saved-chats-button"
+              title={`View ${savedChats.length} saved chats`}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M5,7H19V5H5V7M5,11H19V9H5V11M5,15H19V13H5V15M5,19H19V17H5V19Z" />
+              </svg>
+              📚 Chats ({savedChats.length})
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Updated Chat Header Actions
+  const renderChatHeaderActions = () => (
+    <div style={styles.chatHeaderActions}>
+      {/* View Summaries dropdown - only show if summaries available */}
+      {getChatState().state === 'available' && Object.keys(generatedSummaries).length > 0 && (
+        <div style={styles.summariesDropdown}>
+          <select
+            onChange={(e) => {
+              if (e.target.value) {
+                const summaryType = e.target.value;
+                const summaryData = generatedSummaries[summaryType];
+                if (summaryData?.url) {
+                  viewSummary(summaryType, summaryData.url);
+                }
+              }
+              e.target.value = '';
+            }}
+            style={styles.summariesSelect}
+            className="summaries-select"
+            defaultValue=""
+          >
+            <option value="">📄 View Summaries</option>
+            {Object.entries(generatedSummaries)
+              .filter(([type, data]) => {
+                const hasValidUrl = data.url && !data.url.startsWith('#');
+                return data.ready && hasValidUrl;
+              })
+              .map(([type, data]) => (
+                <option key={type} value={type}>
+                  {type.charAt(0).toUpperCase() + type.slice(1)} Summary
+                </option>
+              ))}
+          </select>
+        </div>
+      )}
+
+      {/* Saved Chats Button - show if there are saved chats or current messages */}
+      {(savedChats.length > 0 || chatMessages.length > 0) && (
+        <div style={styles.savedChatsContainer}>
+          <button
+            onClick={() => setShowSavedChatsDropdown(!showSavedChatsDropdown)}
+            style={styles.savedChatsButton}
+            className="saved-chats-button"
+            title={`View ${savedChats.length} saved chats`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M5,7H19V5H5V7M5,11H19V9H5V11M5,15H19V13H5V15M5,19H19V17H5V19Z" />
+            </svg>
+            📚 Chats ({savedChats.length})
+          </button>
+          {renderSavedChatsDropdown()}
+        </div>
+      )}
+
+      {/* Save Chat Button - only show if there are messages to save */}
+      {chatMessages.length > 0 && (
+        <button
+          onClick={() => setShowSaveChatModal(true)}
+          style={styles.saveChatButton}
+          className="save-chat-button"
+          title="Save current conversation"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z" />
+          </svg>
+          💾 Save
+        </button>
+      )}
+
+      {/* Clear chat button - only show if chat has messages */}
+      {chatMessages.length > 0 && (
+        <button
+          onClick={clearConversation}
+          style={styles.clearChatButton}
+          className="clear-chat-button"
+          title="Clear current conversation"
+        >
+          🗑️ Clear
+        </button>
+      )}
+    </div>
+  );
 
   // Cleanup effects with better dependency handling
   useEffect(() => {
@@ -1269,13 +1561,13 @@ export default function NotebookDetailPage() {
         return data.ready && data.url && !data.url.startsWith('#');
       }).length
     });
-  }, [files, links, generatedSummaries]);
+  }, [files.length, links.length, generatedSummaries]); // Fix dependencies
 
-  const handleSummaryDropdownClose = (e) => {
-    if (!e.target.closest('.summary-dropdown-container')) {
-      setShowSummaryDropdown(false);
-    }
-  };
+  // const handleSummaryDropdownClose = (e) => {
+  //   if (!e.target.closest('.summary-dropdown-container')) {
+  //     setShowSummaryDropdown(false);
+  //   }
+  // };
 
   // File validation function
   const validateFiles = (fileList) => {
@@ -1509,7 +1801,7 @@ export default function NotebookDetailPage() {
     // Debounce the save operation
     const timeoutId = setTimeout(saveSummaryData, 1000);
     return () => clearTimeout(timeoutId);
-  }, [generatedSummaries, notebook.notebookId]); // Trigger when summaries change
+  }, [generatedSummaries, notebook.notebookId, notebook.title, content, links]); // Include all dependencies
 
   // Enhanced: Update your handleSave function to include summary data
   const handleSave = async () => {
@@ -1631,21 +1923,6 @@ export default function NotebookDetailPage() {
       hour: 'numeric',
       minute: '2-digit'
     });
-  };
-
-  // Drag and drop handlers (removed from content area)
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    // Only handle drag over for file input, not content area
-  };
-
-  const handleDragLeave = () => {
-    // Only handle drag leave for file input, not content area
-  };
-
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    // Only handle drop for file input, not content area
   };
 
   // File input change handler
@@ -1796,16 +2073,16 @@ export default function NotebookDetailPage() {
     status: 'pending'
   });
 
-  const handleAddLink = (e) => {
-    e.preventDefault();
-    if (!newLink) return;
-    if (!isValidUrl(newLink)) {
-      setFileErrors(prev => [...prev, '❌ Invalid URL']);
-      return;
-    }
-    setLinkToAdd(newLink.trim());
-    setShowLinkModal(true);
-  };
+  // const handleAddLink = (e) => {
+  //   e.preventDefault();
+  //   if (!newLink) return;
+  //   if (!isValidUrl(newLink)) {
+  //     setFileErrors(prev => [...prev, '❌ Invalid URL']);
+  //     return;
+  //   }
+  //   setLinkToAdd(newLink.trim());
+  //   setShowLinkModal(true);
+  // };
 
   // Enhanced link confirmation with better state management
   const handleLinkConfirm = async () => {
@@ -1950,23 +2227,10 @@ export default function NotebookDetailPage() {
       // Send message to AI
       const aiResponse = await sendChatMessage(userMessage);
 
-      // Add AI response to chat with metadata
-      const responseMetadata = {
-        sources: aiResponse.sources,
-        chunks_found: aiResponse.chunks_found,
-        search_method: aiResponse.search_method
-      };
+      // Add AI response to chat WITHOUT metadata for cleaner display
+      addChatMessage(aiResponse.answer, 'ai', 'message');
 
-      addChatMessage(aiResponse.answer, 'ai', 'message', responseMetadata);
-
-      // Optionally add sources information as a separate system message
-      if (aiResponse.sources && aiResponse.sources.length > 0) {
-        const sourcesText = `📚 Sources used: ${aiResponse.sources.map((s, i) =>
-          `${i + 1}. ${s.filename} (${s.content_type})`
-        ).join(', ')}`;
-
-        addChatMessage(sourcesText, 'system', 'sources', { sources: aiResponse.sources });
-      }
+      // Remove the separate sources information message - keeping responses clean
 
     } catch (error) {
       console.error('❌ Chat error:', error);
@@ -2024,7 +2288,6 @@ export default function NotebookDetailPage() {
       </svg>
     );
   };
-
 
   const getYouTubeVideoId = (url) => {
     const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
@@ -2103,7 +2366,6 @@ export default function NotebookDetailPage() {
     }
   };
 
-
   if (isLoading) {
     return (
       <div style={styles.container}>
@@ -2125,245 +2387,289 @@ export default function NotebookDetailPage() {
     );
   }
 
+  // Complete JSX Structure
   return (
     <div style={styles.container}>
       <Sidebar />
-
       <main style={styles.main}>
-        {/* Header with Back and Save */}
-        <header style={styles.header}>
-          <div style={styles.headerLeft}>
-            <button onClick={handleBack} style={styles.backButton}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-              </svg>
-              Back to Notebooks
-            </button>
-          </div>
-          <div style={styles.headerRight}>
-            <button
-              onClick={handleSave}
-              style={{
-                ...styles.saveButton,
-                ...(isSaving ? styles.savingButton : {})
-              }}
-              disabled={isSaving}
-            >
-              {isSaving ? 'Saving...' : 'Save'}
-            </button>
-          </div>
-        </header>
-
-        {/* NEW: Toolbar and Notebook Info Section */}
-        <div style={styles.toolbarSection}>
-          <div style={styles.titleContainer}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" style={styles.notebookIcon}>
-              <path d="M19,3H14.82C14.4,1.84 13.3,1 12,1C10.7,1 9.6,1.84 9.18,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M12,2.75A1.25,1.25 0 0,1 13.25,4A1.25,1.25 0 0,1 12,5.25A1.25,1.25 0 0,1 10.75,4A1.25,1.25 0 0,1 12,2.75Z" />
-            </svg>
-            <div style={styles.titleContent}>
-              <input
-                type="text"
-                value={notebook.title}
-                onChange={(e) => setNotebook({ ...notebook, title: e.target.value })}
-                style={styles.titleInput}
-                placeholder="Untitled Notebook"
-              />
+        {/* CONDITIONAL HEADER - Minimal for Summary Reading, Full for Notebook */}
+        {showSummaryPage && currentSummaryPage ? (
+          // MINIMAL READING MODE HEADER
+          <header style={styles.readingModeHeader}>
+            <div style={styles.readingHeaderLeft}>
+              <button
+                onClick={handleBack}
+                style={styles.readingBackButton}
+                className="reading-back-button"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                </svg>
+                Back to Notebooks
+              </button>
+              <div style={styles.readingNotebookTitle}>
+                <svg style={styles.readingNotebookIcon} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19,3H14.82C14.4,1.84 13.3,1 12,1C10.7,1 9.6,1.84 9.18,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M12,2.75A1.25,1.25 0 0,1 13.25,4A1.25,1.25 0 0,1 12,5.25A1.25,1.25 0 0,1 10.75,4A1.25,1.25 0 0,1 12,2.75Z" />
+                </svg>
+                {notebook.title}
+              </div>
             </div>
-          </div>
-
-          <div style={styles.toolbar}>
-            <div style={styles.toolbarActionsSection}>
-              <span style={styles.sectionLabel}>Notebook Actions:</span>
-              <div style={styles.toolbarButtons}>
-                {/* Upload Files Button */}
-                <button
-                  onClick={() => document.getElementById('fileInput')?.click()}
-                  style={styles.toolbarButton}
-                  className="toolbar-button"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={styles.toolbarButtonIcon}>
-                    <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
+            <div style={styles.readingHeaderRight}>
+              <span style={styles.readingInfoItem}>
+                📊 Sources: {files.length + links.length}
+              </span>
+              <span style={styles.readingInfoItem}>
+                📄 Files: {files.length}
+              </span>
+              <span style={styles.readingInfoItem}>
+                🔗 Links: {links.length}
+              </span>
+            </div>
+          </header>
+        ) : (
+          // FULL NOTEBOOK HEADER (Normal Mode)
+          <>
+            {/* Header with Back and Save */}
+            <header style={styles.header}>
+              <div style={styles.headerLeft}>
+                <button onClick={handleBack} style={styles.backButton}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
                   </svg>
-                  Add Files
+                  Back to Notebooks
                 </button>
+              </div>
+              <div style={styles.headerRight}>
+                <button
+                  onClick={handleSave}
+                  style={{
+                    ...styles.saveButton,
+                    ...(isSaving ? styles.savingButton : {})
+                  }}
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </header>
 
-                {/* Add Link Button */}
-                <div className="link-dropdown-container" style={styles.linkContainer}>
-                  <button
-                    onClick={() => setShowLinkDropdown(!showLinkDropdown)}
-                    style={styles.toolbarButton}
-                    className="toolbar-button"
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={styles.toolbarButtonIcon}>
-                      <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z" />
+            {/* Toolbar and Notebook Info Section */}
+            <div style={styles.toolbarSection}>
+              <div style={styles.titleContainer}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" style={styles.notebookIcon}>
+                  <path d="M19,3H14.82C14.4,1.84 13.3,1 12,1C10.7,1 9.6,1.84 9.18,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M12,2.75A1.25,1.25 0 0,1 13.25,4A1.25,1.25 0 0,1 12,5.25A1.25,1.25 0 0,1 10.75,4A1.25,1.25 0 0,1 12,2.75Z" />
+                </svg>
+                <div style={styles.titleContent}>
+                  <input
+                    type="text"
+                    value={notebook.title}
+                    onChange={(e) => setNotebook({ ...notebook, title: e.target.value })}
+                    style={styles.titleInput}
+                    placeholder="Untitled Notebook"
+                  />
+                </div>
+              </div>
+
+              <div style={styles.toolbar}>
+                <div style={styles.toolbarActionsSection}>
+                  <span style={styles.sectionLabel}>
+                    <svg style={styles.sectionIcon} viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19,3H14.82C14.4,1.84 13.3,1 12,1C10.7,1 9.6,1.84 9.18,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M12,2.75A1.25,1.25 0 0,1 13.25,4A1.25,1.25 0 0,1 12,5.25A1.25,1.25 0 0,1 10.75,4A1.25,1.25 0 0,1 12,2.75Z" />
                     </svg>
-                    Add Link
-                  </button>
+                    Notebook Actions
+                  </span>
+                  <div style={styles.toolbarButtons}>
+                    {/* Upload Files Button */}
+                    <button
+                      onClick={() => document.getElementById('fileInput')?.click()}
+                      style={styles.toolbarButton}
+                      className="toolbar-button"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={styles.toolbarButtonIcon}>
+                        <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
+                      </svg>
+                      Add Files
+                    </button>
 
-                  {showLinkDropdown && (
-                    <div style={styles.linkDropdown}>
-                      <div style={styles.linkDropdownHeader}>
-                        <svg style={styles.linkDropdownIcon} viewBox="0 0 24 24" fill="currentColor">
+                    {/* Add Link Button */}
+                    <div className="link-dropdown-container" style={styles.linkContainer}>
+                      <button
+                        onClick={() => setShowLinkDropdown(!showLinkDropdown)}
+                        style={styles.toolbarButton}
+                        className="toolbar-button"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={styles.toolbarButtonIcon}>
                           <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z" />
                         </svg>
-                        Add Web Link or Video
-                      </div>
+                        Add Link
+                      </button>
 
-                      <div style={styles.linkInputContainer}>
-                        <input
-                          type="url"
-                          value={linkInputValue}
-                          onChange={(e) => setLinkInputValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleLinkDropdownConfirm();
-                            }
-                            if (e.key === 'Escape') {
-                              setShowLinkDropdown(false);
-                              setLinkInputValue('');
-                            }
-                          }}
-                          placeholder="Paste your YouTube URL here"
-                          style={styles.linkInput}
-                          autoFocus
-                        />
-                      </div>
+                      {showLinkDropdown && (
+                        <div style={styles.linkDropdown}>
+                          <div style={styles.linkDropdownHeader}>
+                            <svg style={styles.linkDropdownIcon} viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z" />
+                            </svg>
+                            Add Web Link or Video
+                          </div>
 
-                      <div style={styles.linkDropdownActions}>
-                        <button
-                          onClick={() => {
-                            setShowLinkDropdown(false);
-                            setLinkInputValue('');
-                          }}
-                          style={styles.linkCancelButton}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleLinkDropdownConfirm}
-                          style={{
-                            ...styles.linkConfirmButton,
-                            ...((!linkInputValue.trim()) ? styles.linkConfirmButtonDisabled : {})
-                          }}
-                          disabled={!linkInputValue.trim()}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" />
-                          </svg>
-                          Add Link
-                        </button>
-                      </div>
+                          <div style={styles.linkInputContainer}>
+                            <input
+                              type="url"
+                              value={linkInputValue}
+                              onChange={(e) => setLinkInputValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleLinkDropdownConfirm();
+                                }
+                                if (e.key === 'Escape') {
+                                  setShowLinkDropdown(false);
+                                  setLinkInputValue('');
+                                }
+                              }}
+                              placeholder="Paste your YouTube URL here"
+                              style={styles.linkInput}
+                              autoFocus
+                            />
+                          </div>
 
-                      <div style={styles.linkDropdownNote}>
-                        <svg style={styles.linkDropdownNoteIcon} viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11M11,9H13V7H11" />
-                        </svg>
-                        Supports YouTube videos
-                      </div>
+                          <div style={styles.linkDropdownActions}>
+                            <button
+                              onClick={() => {
+                                setShowLinkDropdown(false);
+                                setLinkInputValue('');
+                              }}
+                              style={styles.linkCancelButton}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleLinkDropdownConfirm}
+                              style={{
+                                ...styles.linkConfirmButton,
+                                ...((!linkInputValue.trim()) ? styles.linkConfirmButtonDisabled : {})
+                              }}
+                              disabled={!linkInputValue.trim()}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" />
+                              </svg>
+                              Add Link
+                            </button>
+                          </div>
+
+                          <div style={styles.linkDropdownNote}>
+                            <svg style={styles.linkDropdownNoteIcon} viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11M11,9H13V7H11" />
+                            </svg>
+                            Supports YouTube videos
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
+
+                    {/* Summarize Dropdown */}
+                    <div className="summary-dropdown-container" style={styles.summaryContainer}>
+                      <button
+                        onClick={() => setShowSummaryDropdown(!showSummaryDropdown)}
+                        style={{
+                          ...styles.toolbarButton,
+                          ...(isGeneratingSummary ? styles.toolbarButtonLoading : {})
+                        }}
+                        disabled={isGeneratingSummary || (files.length === 0 && links.length === 0)}
+                        className="toolbar-button"
+                      >
+                        {isGeneratingSummary ? (
+                          <>
+                            <div style={styles.summarySpinner}></div>
+                            {isPollingProgress ? 'Generating...' : 'Starting...'}
+                          </>
+                        ) : (
+                          <>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={styles.toolbarButtonIcon}>
+                              <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                            </svg>
+                            Summarize
+                          </>
+                        )}
+                      </button>
+
+                      {showSummaryDropdown && !isGeneratingSummary && (
+                        <div style={styles.summaryDropdown}>
+                          <div style={styles.summaryDropdownHeader}>
+                            Choose Summary Type
+                          </div>
+
+                          <button
+                            onClick={() => handleSummarize('casual')}
+                            style={styles.summaryOption}
+                          >
+                            <div style={styles.summaryOptionTitle}>Casual</div>
+                            <div style={styles.summaryOptionDesc}>Conversational and easy to understand</div>
+                          </button>
+
+                          <button
+                            onClick={() => handleSummarize('academic')}
+                            style={styles.summaryOption}
+                          >
+                            <div style={styles.summaryOptionTitle}>Academic</div>
+                            <div style={styles.summaryOptionDesc}>Detailed analysis with key findings</div>
+                          </button>
+
+                          <button
+                            onClick={() => handleSummarize('simple')}
+                            style={styles.summaryOption}
+                          >
+                            <div style={styles.summaryOptionTitle}>Beginner Friendly</div>
+                            <div style={styles.summaryOptionDesc}>Simple bullet points and essential facts</div>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                {/* Summarize Dropdown */}
-                <div className="summary-dropdown-container" style={styles.summaryContainer}>
-                  <button
-                    onClick={() => setShowSummaryDropdown(!showSummaryDropdown)}
-                    style={{
-                      ...styles.toolbarButton,
-                      ...(isGeneratingSummary ? styles.toolbarButtonLoading : {})
-                    }}
-                    disabled={isGeneratingSummary || (files.length === 0 && links.length === 0)}
-                    className="toolbar-button"
-                  >
-                    {isGeneratingSummary ? (
-                      <>
-                        <div style={styles.summarySpinner}></div>
-                        {isPollingProgress ? 'Generating...' : 'Starting...'}
-                      </>
-                    ) : (
-                      <>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={styles.toolbarButtonIcon}>
-                          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
-                        </svg>
-                        Summarize
-                      </>
-                    )}
-                  </button>
-
-                  {showSummaryDropdown && !isGeneratingSummary && (
-                    <div style={styles.summaryDropdown}>
-                      <div style={styles.summaryDropdownHeader}>
-                        Choose Summary Type
-                      </div>
-
-                      <button
-                        onClick={() => handleSummarize('casual')}
-                        style={styles.summaryOption}
-                      >
-                        <div style={styles.summaryOptionTitle}>Casual</div>
-                        <div style={styles.summaryOptionDesc}>Conversational and easy to understand</div>
-                      </button>
-
-                      <button
-                        onClick={() => handleSummarize('academic')}
-                        style={styles.summaryOption}
-                      >
-                        <div style={styles.summaryOptionTitle}>Academic</div>
-                        <div style={styles.summaryOptionDesc}>Detailed analysis with key findings</div>
-                      </button>
-
-                      <button
-                        onClick={() => handleSummarize('simple')}
-                        style={styles.summaryOption}
-                      >
-                        <div style={styles.summaryOptionTitle}>Beginner Friendly</div>
-                        <div style={styles.summaryOptionDesc}>Simple bullet points and essential facts</div>
-                      </button>
+                <div style={styles.notebookInfoSection}>
+                  <span style={styles.sectionLabel}>Notebook Info:</span>
+                  <div style={styles.notebookInfo}>
+                    <div style={styles.notebookInfoItem}>
+                      <span style={styles.notebookInfoLabel}>Sources:</span>
+                      <span style={styles.notebookInfoValue}>{files.length + links.length}</span>
                     </div>
-                  )}
+                    <div style={styles.notebookInfoSeparator}>•</div>
+                    <div style={styles.notebookInfoItem}>
+                      <span style={styles.notebookInfoLabel}>Files:</span>
+                      <span style={styles.notebookInfoValue}>{files.length}</span>
+                    </div>
+                    <div style={styles.notebookInfoSeparator}>•</div>
+                    <div style={styles.notebookInfoItem}>
+                      <span style={styles.notebookInfoLabel}>Links:</span>
+                      <span style={styles.notebookInfoValue}>{links.length}</span>
+                    </div>
+                    <div style={styles.notebookInfoSeparator}>•</div>
+                    <div style={styles.notebookInfoItem}>
+                      <span style={styles.notebookInfoLabel}>Last updated:</span>
+                      <span style={styles.notebookInfoValue}>
+                        {lastSaved ? formatDate(lastSaved) : formatDate(notebook.lastUpdated)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div style={styles.notebookInfoSection}>
-              <span style={styles.sectionLabel}>Notebook Info:</span>
-              <div style={styles.notebookInfo}>
-                <div style={styles.notebookInfoItem}>
-                  <span style={styles.notebookInfoLabel}>Sources:</span>
-                  <span style={styles.notebookInfoValue}>{files.length + links.length}</span>
-                </div>
-                <div style={styles.notebookInfoSeparator}>•</div>
-                <div style={styles.notebookInfoItem}>
-                  <span style={styles.notebookInfoLabel}>Files:</span>
-                  <span style={styles.notebookInfoValue}>{files.length}</span>
-                </div>
-                <div style={styles.notebookInfoSeparator}>•</div>
-                <div style={styles.notebookInfoItem}>
-                  <span style={styles.notebookInfoLabel}>Links:</span>
-                  <span style={styles.notebookInfoValue}>{links.length}</span>
-                </div>
-                <div style={styles.notebookInfoSeparator}>•</div>
-                <div style={styles.notebookInfoItem}>
-                  <span style={styles.notebookInfoLabel}>Last updated:</span>
-                  <span style={styles.notebookInfoValue}>
-                    {lastSaved ? formatDate(lastSaved) : formatDate(notebook.lastUpdated)}
-                  </span>
-                </div>
-              </div>
+              {/* Hidden file input */}
+              <input
+                id="fileInput"
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.csv,.xlsx,.xls"
+                onChange={handleFileInputChange}
+                style={{ display: 'none' }}
+              />
             </div>
-          </div>
-
-          {/* Hidden file input */}
-          <input
-            id="fileInput"
-            type="file"
-            multiple
-            accept=".pdf,.doc,.docx,.csv,.xlsx,.xls"
-            onChange={handleFileInputChange}
-            style={{ display: 'none' }}
-          />
-        </div>
+          </>
+        )}
 
         {/* Error Display */}
         {fileErrors.length > 0 && (
@@ -2378,11 +2684,11 @@ export default function NotebookDetailPage() {
           </div>
         )}
 
-        {/* Main Content Area */}
+        {/* Main Content Area - 3 Column Layout */}
         <div style={styles.contentLayout}>
           {/* Conditional rendering for summary page vs main notebook view */}
           {showSummaryPage && currentSummaryPage ? (
-            /* Summary Page View */
+            /* Summary Page View - spans full width */
             <div style={styles.summaryPageContainer}>
               <div style={styles.summaryPageHeader}>
                 <button onClick={closeSummaryPage} style={styles.backToNotebookButton}>
@@ -2454,105 +2760,112 @@ export default function NotebookDetailPage() {
               </div>
             </div>
           ) : (
-            /* Main Notebook View */
+            /* Main 3-Column Notebook View */
             <>
-              {/* Content Area */}
-              <div style={styles.centralArea}>
-                {/* Welcome Section or Sources Display */}
-                <div style={styles.sourcesSection}>
+              {/* Left Panel - Sources */}
+              <div style={styles.leftPanel}>
+                <div style={styles.sourcesPanel}>
+                  <div style={styles.sourcesPanelHeader}>
+                    <h3 style={styles.sourcesPanelTitle}>Sources</h3>
+                    <div style={styles.sourcesCount}>
+                      {files.length + links.length}
+                    </div>
+                  </div>
+
                   {files.length === 0 && links.length === 0 ? (
-                    <div style={styles.welcomeContainer}>
-                      <div style={styles.welcomeContent}>
-                        <div style={styles.welcomeIcon}>
-                          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path d="M19,3H14.82C14.4,1.84 13.3,1 12,1C10.7,1 9.6,1.84 9.18,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M12,2.75A1.25,1.25 0 0,1 13.25,4A1.25,1.25 0 0,1 12,5.25A1.25,1.25 0 0,1 10.75,4A1.25,1.25 0 0,1 12,2.75Z" />
-                          </svg>
-                        </div>
-                        <h2 style={styles.welcomeTitle}>Welcome to your Smart Notebook</h2>
-                        <p style={styles.welcomeDescription}>
-                          Get started by using the toolbar above to add files, create links, or generate summaries.
-                          Your content will appear here as you build your knowledge base.
-                        </p>
-                        <div style={styles.welcomeFeatures}>
-                          <div style={styles.featureItem} className="feature-item">
-                            <div style={styles.featureIcon}>
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
-                              </svg>
-                            </div>
-                            <span style={styles.featureText}>Upload documents and files</span>
-                          </div>
-                          <div style={styles.featureItem} className="feature-item">
-                            <div style={styles.featureIcon}>
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z" />
-                              </svg>
-                            </div>
-                            <span style={styles.featureText}>Add web links and videos</span>
-                          </div>
-                          <div style={styles.featureItem} className="feature-item">
-                            <div style={styles.featureIcon}>
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
-                              </svg>
-                            </div>
-                            <span style={styles.featureText}>Generate intelligent summaries</span>
-                          </div>
-                        </div>
+                    <div style={styles.noSourcesMessage}>
+                      <div style={styles.noSourcesIcon}>
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M19,3H14.82C14.4,1.84 13.3,1 12,1C10.7,1 9.6,1.84 9.18,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M12,2.75A1.25,1.25 0 0,1 13.25,4A1.25,1.25 0 0,1 12,5.25A1.25,1.25 0 0,1 10.75,4A1.25,1.25 0 0,1 12,2.75Z" />
+                        </svg>
                       </div>
+                      <p style={styles.noSourcesText}>No sources yet</p>
+                      <p style={styles.noSourcesSubtext}>Add files or links using the toolbar above</p>
                     </div>
                   ) : (
-                    <div style={styles.sourcesContainer}>
-                      {/* Files List */}
+                    <div style={styles.sourcesContent}>
+                      {/* Files Section */}
                       {files.length > 0 && (
-                        <div style={styles.filesList}>
-                          <div style={styles.sectionHeader}>
-                            <h3 style={styles.sectionTitle}>Files</h3>
-                            <span style={styles.sectionCount}>{files.length}</span>
+                        <div style={styles.sourcesSection}>
+                          <div style={styles.sourcesSectionHeader}>
+                            <div style={styles.sourcesSectionTitle}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.sourcesSectionIcon}>
+                                <path d="M6,2H14L20,8V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V4A2,2 0 0,1 6,2M18,20V9H13V4H6V20H18Z" />
+                              </svg>
+                              Files
+                            </div>
+                            <span style={styles.sourcesSectionCount}>{files.length}</span>
                           </div>
-                          <div style={styles.itemsGrid}>
+                          <div style={styles.sourcesItems}>
                             {files.map(file => (
-                              <div key={file.id} style={styles.modernFileItem} className="modern-file-item">
-                                <div style={styles.fileIconContainer}>
+                              <div
+                                key={file.id}
+                                style={{
+                                  ...styles.sourceItem,
+                                  cursor: file.downloadUrl && file.isValid !== false ? 'pointer' : 'default'
+                                }}
+                                className="source-item"
+                                onClick={() => {
+                                  if (file.downloadUrl && file.isValid !== false) {
+                                    window.open(file.downloadUrl, '_blank');
+                                  }
+                                }}
+                                title={file.downloadUrl && file.isValid !== false ? `Click to download ${file.name}` : file.name}
+                              >
+                                <div style={styles.sourceItemIcon}>
                                   <div style={{
-                                    ...styles.modernFileIcon,
+                                    ...styles.fileTypeIcon,
                                     backgroundColor: getFileTypeColor(file.extension || file.type)
                                   }}>
                                     {getFileTypeIcon(file.extension || file.type)}
                                   </div>
                                 </div>
-                                <div style={styles.fileContent}>
-                                  <div style={styles.fileName}>{file.name}</div>
-                                  <div style={styles.fileMetadata}>
+                                <div style={styles.sourceItemContent}>
+                                  <div style={styles.sourceItemTitle}>{file.name}</div>
+                                  <div style={styles.sourceItemMeta}>
                                     <span>{file.sizeFormatted || `${(file.size / 1024 / 1024).toFixed(1)} MB`}</span>
                                     {file.uploadedAt && (
                                       <>
-                                        <span style={styles.metadataSeparator}>•</span>
+                                        <span style={styles.sourceItemSeparator}>•</span>
                                         <span>{new Date(file.uploadedAt).toLocaleDateString()}</span>
+                                      </>
+                                    )}
+                                    {file.downloadUrl && file.isValid !== false && (
+                                      <>
+                                        <span style={styles.sourceItemSeparator}>•</span>
+                                        <span style={{ color: '#059669', fontWeight: '600', fontSize: '0.7rem' }}>
+                                          View Here
+                                        </span>
                                       </>
                                     )}
                                   </div>
                                 </div>
-                                <div style={styles.fileActions}>
+                                <div style={styles.sourceItemActions}>
                                   {file.downloadUrl && file.isValid !== false && (
                                     <button
-                                      onClick={() => window.open(file.downloadUrl, '_blank')}
-                                      style={styles.modernActionButton}
-                                      className="modern-action-button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.open(file.downloadUrl, '_blank');
+                                      }}
+                                      style={styles.sourceActionButton}
+                                      className="source-action-button"
                                       title="Download"
                                     >
-                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
                                       </svg>
                                     </button>
                                   )}
                                   <button
-                                    onClick={() => removeFile(file.id)}
-                                    style={styles.modernRemoveButton}
-                                    className="modern-remove-button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeFile(file.id);
+                                    }}
+                                    style={styles.sourceRemoveButton}
+                                    className="source-remove-button"
                                     title="Remove"
                                   >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                                       <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
                                     </svg>
                                   </button>
@@ -2563,76 +2876,78 @@ export default function NotebookDetailPage() {
                         </div>
                       )}
 
-                      {/* Links List */}
+                      {/* Links Section */}
                       {links.length > 0 && (
-                        <div style={styles.linksList}>
-                          <div style={styles.sectionHeader}>
-                            <h3 style={styles.sectionTitle}>Links</h3>
-                            <span style={styles.sectionCount}>{links.length}</span>
+                        <div style={styles.sourcesSection}>
+                          <div style={styles.sourcesSectionHeader}>
+                            <div style={styles.sourcesSectionTitle}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.sourcesSectionIcon}>
+                                <path d="M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29,15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1,13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z" />
+                              </svg>
+                              Links
+                            </div>
+                            <span style={styles.sourcesSectionCount}>{links.length}</span>
                           </div>
-                          <div style={styles.itemsGrid}>
+                          <div style={styles.sourcesItems}>
                             {links.map(link => (
-                              <div key={link.id} style={styles.modernLinkItem} className="modern-link-item">
-                                <div style={styles.linkIconContainer}>
+                              <div key={link.id} style={styles.sourceItem} className="source-item">
+                                <div style={styles.sourceItemIcon}>
                                   {renderLinkThumbnail(link)}
                                 </div>
-
-                                <div style={styles.linkContent}>
+                                <div style={styles.sourceItemContent}>
                                   <a
                                     href={link.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    style={styles.linkTitle}
-                                    className="modern-link-text"
+                                    style={styles.sourceItemLink}
+                                    className="source-item-link"
                                     title={`${getVideoTitle(link)} - ${link.url}`}
                                   >
                                     {getVideoTitle(link)}
                                   </a>
-
-                                  <div style={styles.linkUrl}>
-                                    {getDomainFromUrl(link.url)}
-                                  </div>
-
-                                  <div style={styles.linkStatus}>
-                                    {link.status === 'processing' && (
-                                      <>
-                                        <div style={{
-                                          ...styles.statusIndicator,
-                                          backgroundColor: '#f59e0b',
-                                          animation: 'pulse 2s infinite'
-                                        }}></div>
-                                        <span style={styles.statusProcessing}>Processing...</span>
-                                      </>
-                                    )}
-                                    {link.status === 'completed' && (
-                                      <>
-                                        <div style={{
-                                          ...styles.statusIndicator,
-                                          backgroundColor: '#10b981'
-                                        }}></div>
-                                        <span style={styles.statusCompleted}>Ready</span>
-                                      </>
-                                    )}
-                                    {link.status === 'error' && (
-                                      <>
-                                        <div style={{
-                                          ...styles.statusIndicator,
-                                          backgroundColor: '#ef4444'
-                                        }}></div>
-                                        <span style={styles.statusError}>Error</span>
-                                      </>
-                                    )}
+                                  <div style={styles.sourceItemMeta}>
+                                    <span>{getDomainFromUrl(link.url)}</span>
+                                    <span style={styles.sourceItemSeparator}>•</span>
+                                    <div style={styles.linkStatusBadge}>
+                                      {link.status === 'processing' && (
+                                        <>
+                                          <div style={{
+                                            ...styles.statusDot,
+                                            backgroundColor: '#f59e0b',
+                                            animation: 'pulse 2s infinite'
+                                          }}></div>
+                                          <span style={styles.statusProcessing}>Processing</span>
+                                        </>
+                                      )}
+                                      {link.status === 'completed' && (
+                                        <>
+                                          <div style={{
+                                            ...styles.statusDot,
+                                            backgroundColor: '#10b981'
+                                          }}></div>
+                                          <span style={styles.statusCompleted}>Ready</span>
+                                        </>
+                                      )}
+                                      {link.status === 'error' && (
+                                        <>
+                                          <div style={{
+                                            ...styles.statusDot,
+                                            backgroundColor: '#ef4444'
+                                          }}></div>
+                                          <span style={styles.statusError}>Error</span>
+                                        </>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-
-                                <div style={styles.linkActions}>
+                                <div style={styles.sourceItemActions}>
                                   <button
                                     onClick={() => removeLink(link.id)}
-                                    style={styles.modernRemoveButton}
-                                    className="modern-remove-button"
+                                    style={styles.sourceRemoveButton}
+                                    className="source-remove-button"
                                     title="Remove"
                                   >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                                       <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
                                     </svg>
                                   </button>
@@ -2647,8 +2962,122 @@ export default function NotebookDetailPage() {
                 </div>
               </div>
 
-              {/* Right Sidebar */}
-              <div style={styles.rightSidebar}>
+              {/* Middle Panel - Chat */}
+              <div style={styles.middlePanel}>
+                <div style={styles.chatPanel}>
+                  <div style={styles.chatPanelHeader}>
+                    <h3 style={styles.chatPanelTitle}>
+                      {getChatState().title}
+                    </h3>
+                    {renderChatHeaderActions()}
+                  </div>
+
+                  {/* Chat Messages */}
+                  <div style={styles.chatMessages} ref={chatContainerRef}>
+                    {chatMessages.length > 0 ? (
+                      chatMessages.map((message) => (
+                        <div key={message.id} style={styles.chatMessage}>
+                          <div style={{
+                            ...styles.chatMessageContent,
+                            ...(message.sender === 'user' ? styles.chatMessageUser : {}),
+                            ...(message.sender === 'ai' ? styles.chatMessageAI : {}),
+                            ...(message.sender === 'system' ? styles.chatMessageSystem : {}),
+                            ...(message.type === 'error' ? styles.chatMessageError : {}),
+                            ...(message.type === 'summary' ? styles.chatMessageSummary : {}),
+                            ...(message.type === 'sources' ? styles.chatMessageSources : {})
+                          }}>
+                            <div style={styles.chatMessageText}>
+                              {message.message}
+                            </div>
+
+                            {/* Display sources for AI messages */}
+                            {message.sender === 'ai' && message.metadata?.sources && (
+                              renderSourceInfo(message.metadata.sources)
+                            )}
+
+                            <div style={styles.chatMessageTime}>
+                              {formatChatTime(message.timestamp)}
+                              {message.metadata?.chunks_found && (
+                                <span style={styles.chatMessageMeta}>
+                                  • {message.metadata.chunks_found} sources • {message.metadata.search_method}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={styles.chatEmptyState}>
+                        <div style={styles.chatEmptyIcon}>
+                          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                        </div>
+                        <p style={styles.chatEmptyText}>No conversation yet</p>
+                        <p style={styles.chatEmptySubtext}>Ask me anything about your sources</p>
+                      </div>
+                    )}
+
+                    {/* Loading indicator for AI responses */}
+                    {isChatLoading && (
+                      <div style={styles.chatMessage}>
+                        <div style={{ ...styles.chatMessageContent, ...styles.chatMessageAI }}>
+                          <div style={styles.chatTypingIndicator}>
+                            <div style={styles.typingDot}></div>
+                            <div style={styles.typingDot}></div>
+                            <div style={styles.typingDot}></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Chat Form */}
+                  <div style={styles.chatForm}>
+                    <form onSubmit={handleChatSubmit} style={styles.chatFormInner}>
+                      <div style={styles.chatInputContainer}>
+                        <input
+                          type="text"
+                          value={chatMessage}
+                          onChange={(e) => setChatMessage(e.target.value)}
+                          placeholder={getChatState().placeholder}
+                          style={styles.chatInput}
+                          disabled={isChatLoading}
+                        />
+                        <button
+                          type="submit"
+                          style={{
+                            ...styles.chatSendButton,
+                            ...((!chatMessage.trim() || isChatLoading || getChatState().disabled) ? styles.chatSendButtonDisabled : {})
+                          }}
+                          disabled={!chatMessage.trim() || isChatLoading}
+                        >
+                          {isChatLoading ? (
+                            <div style={styles.buttonSpinner}></div>
+                          ) : (
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+
+                    {/* Status message */}
+                    {getChatState().note && (
+                      <div style={styles.chatNote}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.chatNoteIcon}>
+                          <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11M11,9H13V7H11" />
+                        </svg>
+                        {getChatState().note}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Panel - Notes and Summaries */}
+              <div style={styles.rightPanel}>
                 {/* Notes Section */}
                 <div style={styles.notesSection}>
                   <h3 style={styles.notesSectionTitle}>Quick Notes</h3>
@@ -2672,80 +3101,6 @@ export default function NotebookDetailPage() {
           )}
         </div>
 
-        {/* Chat Section */}
-        {renderChatSection()}
-
-        {/* Summary View Modal */}
-        {showSummaryView && selectedSummaryType && (
-          <div style={styles.summaryModal}>
-            <div style={styles.summaryModalContent}>
-              <div style={styles.summaryModalHeader}>
-                <h2 style={styles.summaryModalTitle}>
-                  📄 {selectedSummaryType.charAt(0).toUpperCase() + selectedSummaryType.slice(1)} Summary
-                </h2>
-                <button
-                  onClick={() => toggleSummaryView(null)}
-                  style={styles.summaryModalClose}
-                  className="summary-modal-close"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div style={styles.summaryModalBody}>
-                {generatedSummaries[selectedSummaryType]?.content ? (
-                  <div style={styles.summaryContent}>
-                    <div style={styles.summaryMeta}>
-                      <span style={styles.summaryMetaItem}>
-                        📅 Generated: {new Date(generatedSummaries[selectedSummaryType].generatedAt || Date.now()).toLocaleString()}
-                      </span>
-                      <span style={styles.summaryMetaItem}>
-                        📊 Type: {selectedSummaryType}
-                      </span>
-                    </div>
-
-                    <div style={styles.summaryText}>
-                      {generatedSummaries[selectedSummaryType].content}
-                    </div>
-
-                    <div style={styles.summaryActions}>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(generatedSummaries[selectedSummaryType].content);
-                        }}
-                        style={styles.summaryCopyButton}
-                        className="summary-copy-button"
-                      >
-                        📋 Copy Summary
-                      </button>
-                      <button
-                        onClick={() => {
-                          const blob = new Blob([generatedSummaries[selectedSummaryType].content], { type: 'text/plain' });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `${notebook.title}_${selectedSummaryType}_summary.txt`;
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }}
-                        style={styles.summaryDownloadButton}
-                        className="summary-download-button"
-                      >
-                        💾 Download Summary
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={styles.summaryLoading}>
-                    <div style={styles.summaryLoadingSpinner}></div>
-                    <p>Loading summary...</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Upload Confirmation Modal */}
         <UploadConfirmationModal
           isOpen={showUploadModal}
@@ -2762,6 +3117,9 @@ export default function NotebookDetailPage() {
           link={linkToAdd}
           isAdding={isAddingLink}
         />
+
+        {/* Save Chat Modal */}
+        {renderSaveChatModal()}
 
         {/* Progress Modal */}
         {isPollingProgress && renderSummaryProgress()}
