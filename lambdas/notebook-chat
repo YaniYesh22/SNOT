@@ -1,0 +1,560 @@
+# ENHANCED CHAT LAMBDA WITH IMPROVED PROMPT AND SOURCE HANDLING
+import json
+import boto3
+import logging
+import numpy as np
+import time
+import hashlib
+from typing import Dict, Any, List
+from datetime import datetime, timedelta
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Initialize AWS clients
+s3_client = boto3.client('s3')
+bedrock_client = boto3.client('bedrock-runtime')
+dynamodb = boto3.resource('dynamodb')
+
+# Rate limiting storage
+rate_limit_table = None
+try:
+    rate_limit_table = dynamodb.Table('chat-rate-limits')
+except:
+    logger.warning("Rate limit table not found, using in-memory rate limiting")
+
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Rate-limited chat handler with enhanced prompt and source handling
+    """
+    try:
+        # Parse request
+        if 'body' in event:
+            body = json.loads(event['body']) if isinstance(event['body'], str) else event['body']
+        else:
+            body = event
+        
+        email = body.get('email')
+        notebook_uuid = body.get('notebook_uuid')
+        question = body.get('question', '').strip()
+        conversation_history = body.get('conversation_history', [])
+        
+        if not all([email, notebook_uuid, question]):
+            return create_api_response(400, {
+                'error': 'Missing required parameters',
+                'required': ['email', 'notebook_uuid', 'question']
+            })
+        
+        # Check rate limits BEFORE processing
+        rate_limit_check = check_user_rate_limit(email, notebook_uuid)
+        if not rate_limit_check['allowed']:
+            return create_api_response(429, {
+                'error': 'Rate limit exceeded',
+                'message': f"Please wait {rate_limit_check['wait_time']} seconds before sending another message.",
+                'retry_after': rate_limit_check['wait_time'],
+                'rate_limit': rate_limit_check
+            })
+        
+        # Record this request
+        record_request(email, notebook_uuid)
+        
+        logger.info(f"Processing chat request for {email}, notebook {notebook_uuid}")
+        
+        # Load vector database
+        vector_db = load_vector_db('smart-notebook-media', email, notebook_uuid)
+        if not vector_db or not vector_db.get('chunks'):
+            return create_api_response(400, {
+                'answer': 'No vector database found. Please process your notebook files first.',
+                'error': 'no_vector_db'
+            })
+        
+        # Search for relevant chunks
+        relevant_chunks = search_relevant_chunks(vector_db, question)
+        
+        if not relevant_chunks:
+            return create_api_response(200, {
+                'answer': "I couldn't find relevant information in your notebook to answer this question. Could you try rephrasing your question or asking about a different topic covered in your materials?",
+                'question': question,
+                'chunks_found': 0
+            })
+        
+        # Generate response with enhanced rate limiting
+        try:
+            answer = generate_chat_response_with_enhanced_retry(
+                question=question,
+                context=build_context_from_chunks(relevant_chunks),
+                conversation_history=conversation_history,
+                user_id=f"{email}_{notebook_uuid}",
+                relevant_chunks=relevant_chunks  # Pass chunks for better context
+            )
+        except RateLimitException as e:
+            return create_api_response(429, {
+                'error': 'Bedrock rate limit',
+                'message': 'The AI service is currently busy. Please wait a moment and try again.',
+                'retry_after': 10,
+                'suggestion': 'Try again in 10-15 seconds'
+            })
+        
+        # Build enhanced source information
+        sources = build_enhanced_source_information(relevant_chunks)
+        
+        return create_api_response(200, {
+            'answer': answer,
+            'question': question,
+            'notebook_uuid': notebook_uuid,
+            'sources': sources,
+            'chunks_found': len(relevant_chunks),
+            'rate_limit_status': get_rate_limit_status(email, notebook_uuid)
+        })
+        
+    except Exception as e:
+        logger.error(f"Chat error: {str(e)}")
+        return create_api_response(500, {'error': str(e)})
+
+def generate_chat_response_with_enhanced_retry(
+    question: str, 
+    context: str, 
+    conversation_history: List[Dict], 
+    user_id: str,
+    relevant_chunks: List[Dict],
+    max_retries: int = 2
+) -> str:
+    """
+    Enhanced retry logic with improved prompt
+    """
+    base_delay = 5
+    max_delay = 30
+    
+    for attempt in range(max_retries + 1):
+        try:
+            # Build conversation messages
+            messages = []
+            for msg in conversation_history[-6:]:  # Keep last 6 messages for context
+                if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                    messages.append({
+                        "role": msg['role'],
+                        "content": [{"text": msg['content']}]
+                    })
+            
+            messages.append({
+                "role": "user",
+                "content": [{"text": question}]
+            })
+            
+            # Enhanced system message with better instructions
+            system_message = build_enhanced_system_prompt(context, relevant_chunks)
+            
+            # Call Bedrock Converse API
+            logger.info(f"Bedrock attempt {attempt + 1}/{max_retries + 1} for user {user_id}")
+            
+            response = bedrock_client.converse(
+                modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                messages=messages,
+                system=[{"text": system_message}],
+                inferenceConfig={
+                    "maxTokens": 2500,  # Increased for more detailed responses
+                    "temperature": 0.4,  # Slightly more creative
+                    "topP": 0.9
+                }
+            )
+            
+            answer = response['output']['message']['content'][0]['text']
+            logger.info(f"Bedrock call successful on attempt {attempt + 1}")
+            return answer.strip()
+            
+        except Exception as e:
+            error_str = str(e)
+            
+            if 'ThrottlingException' in error_str or 'Too many requests' in error_str:
+                if attempt < max_retries:
+                    delay = min(base_delay * (2 ** attempt), max_delay)
+                    jitter = delay * 0.1 * (0.5 - hash(user_id) % 100 / 100)
+                    total_delay = delay + jitter
+                    
+                    logger.warning(f"Bedrock throttling for {user_id}. Retrying in {total_delay:.1f}s")
+                    time.sleep(total_delay)
+                    continue
+                else:
+                    logger.error(f"Max retries exceeded for {user_id}")
+                    raise RateLimitException("Bedrock rate limit exceeded")
+            
+            elif 'ValidationException' in error_str:
+                return "I had trouble understanding your question format. Could you please rephrase it?"
+            elif 'ModelNotReadyException' in error_str:
+                return "I'm still warming up. Please try again in just a moment."
+            else:
+                logger.error(f"Bedrock error: {error_str}")
+                return f"I encountered an unexpected error. Please try asking your question again."
+    
+    raise RateLimitException("Unable to generate response after retries")
+
+def build_enhanced_system_prompt(context: str, relevant_chunks: List[Dict]) -> str:
+    """
+    Build an enhanced system prompt for better AI responses
+    """
+    # Extract source types and names for context
+    source_info = []
+    for chunk in relevant_chunks[:3]:
+        metadata = chunk.get('metadata', {})
+        source_type = get_source_type(metadata)
+        display_name = get_display_name(metadata)
+        source_info.append(f"- {display_name} ({source_type})")
+    
+    sources_list = "\n".join(source_info) if source_info else "- Various notebook materials"
+    
+    return f"""You are an intelligent study assistant helping a student understand their notebook materials. You have access to content from their personal learning resources and should provide helpful, accurate, and contextual responses.
+
+**Your Role & Personality:**
+- Act as a knowledgeable tutor who is patient, encouraging, and thorough
+- Explain concepts clearly and adapt your explanations to the student's apparent level
+- Connect ideas across different sources when relevant
+- Ask clarifying questions when the student's question is ambiguous
+- Encourage deeper thinking with follow-up questions when appropriate
+
+**Available Sources:**
+{sources_list}
+
+**Content to Reference:**
+{context}
+
+**Instructions for Your Response:**
+1. **Answer Comprehensively**: Provide complete, well-structured answers that fully address the question
+2. **Use Natural Language**: Write conversationally, as if speaking to a student in person
+3. **Reference Sources Thoughtfully**: When you mention information from sources, reference them naturally (e.g., "According to your video on X..." or "In the document about Y...")
+4. **Provide Examples**: Use concrete examples from the materials when possible
+5. **Connect Concepts**: Link related ideas across different sources in your notebook
+6. **Encourage Learning**: End with a thought-provoking question or suggestion for further exploration when appropriate
+7. **Be Honest About Limitations**: If the provided materials don't contain enough information to fully answer a question, say so and suggest what additional information might be helpful
+
+**Response Style:**
+- Use clear paragraphs and logical flow
+- Include relevant details but avoid overwhelming the student
+- Use formatting (like bullet points or numbered lists) when it helps clarity
+- Maintain an encouraging and supportive tone
+- Keep responses focused but comprehensive
+
+Remember: You're helping this student learn and understand their own materials better. Be their ideal study partner."""
+
+def get_source_type(metadata: Dict) -> str:
+    """
+    Determine the type of source based on metadata
+    """
+    filename = metadata.get('filename', '').lower()
+    original_name = metadata.get('original_name', '').lower()
+    source_type = metadata.get('source_type', '').lower()
+    
+    # Check explicit source type first
+    if source_type:
+        if 'youtube' in source_type:
+            return 'YouTube Video'
+        elif 'pdf' in source_type:
+            return 'PDF Document'
+        elif 'audio' in source_type:
+            return 'Audio Recording'
+        elif 'image' in source_type:
+            return 'Image/Screenshot'
+        elif 'note' in source_type:
+            return 'Text Note'
+    
+    # Infer from filename/extension
+    if any(ext in filename for ext in ['.mp4', '.avi', '.mov', '.mkv']):
+        return 'Video'
+    elif any(ext in filename for ext in ['.pdf']):
+        return 'PDF Document'
+    elif any(ext in filename for ext in ['.mp3', '.wav', '.m4a', '.aac']):
+        return 'Audio Recording'
+    elif any(ext in filename for ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']):
+        return 'Image'
+    elif any(ext in filename for ext in ['.txt', '.md', '.doc', '.docx']):
+        return 'Text Document'
+    elif any(ext in filename for ext in ['.json']):
+        return 'Data File'
+    elif 'youtube' in filename or 'yt_' in filename:
+        return 'YouTube Video'
+    else:
+        return 'Document'
+
+def get_display_name(metadata: Dict) -> str:
+    """
+    Get the proper display name for a source, avoiding AWS S3 paths
+    """
+    # Priority order for getting the display name
+    original_name = metadata.get('original_name', '')
+    title = metadata.get('title', '')
+    video_title = metadata.get('video_title', '')
+    filename = metadata.get('filename', '')
+    
+    # For YouTube videos, prefer video title
+    if video_title and ('youtube' in metadata.get('source_type', '').lower() or 'yt_' in filename):
+        return video_title
+    
+    # For other content, prefer original name or title
+    if original_name and not original_name.startswith('notebooks/'):
+        return original_name
+    
+    if title and not title.startswith('notebooks/'):
+        return title
+    
+    # Clean up filename if that's all we have
+    if filename:
+        # Remove S3 path prefixes
+        clean_name = filename.split('/')[-1]  # Get just the filename
+        
+        # Remove common processing suffixes
+        clean_name = clean_name.replace('_processed', '').replace('_chunk_', '_')
+        
+        # Remove file extensions for display
+        if '.' in clean_name:
+            clean_name = '.'.join(clean_name.split('.')[:-1])
+        
+        return clean_name
+    
+    return 'Untitled Document'
+
+def build_enhanced_source_information(chunks: List[Dict]) -> List[Dict]:
+    """
+    Build enhanced source information with proper display names
+    """
+    sources = []
+    seen_sources = set()  # Avoid duplicate sources
+    
+    for i, chunk in enumerate(chunks[:5]):  # Show up to 5 sources
+        metadata = chunk.get('metadata', {})
+        display_name = get_display_name(metadata)
+        source_type = get_source_type(metadata)
+        
+        # Create a unique identifier to avoid duplicates
+        source_id = f"{display_name}_{source_type}"
+        if source_id in seen_sources:
+            continue
+        
+        seen_sources.add(source_id)
+        
+        source_info = {
+            'source_number': len(sources) + 1,
+            'name': display_name,
+            'type': source_type,
+            'similarity_score': chunk.get('similarity_score', 0),
+            'preview': chunk['text'][:200].strip() + "..." if len(chunk['text']) > 200 else chunk['text'].strip()
+        }
+        
+        # Add additional metadata if available
+        if metadata.get('page_number'):
+            source_info['page'] = metadata['page_number']
+        if metadata.get('timestamp'):
+            source_info['timestamp'] = metadata['timestamp']
+        if metadata.get('duration'):
+            source_info['duration'] = metadata['duration']
+        
+        sources.append(source_info)
+    
+    return sources
+
+def build_context_from_chunks(chunks: List[Dict]) -> str:
+    """
+    Build enhanced context from chunks with better formatting
+    """
+    if not chunks:
+        return "No relevant content found."
+    
+    context_parts = []
+    for i, chunk in enumerate(chunks[:4]):  # Use top 4 chunks
+        metadata = chunk.get('metadata', {})
+        display_name = get_display_name(metadata)
+        source_type = get_source_type(metadata)
+        
+        # Add source header
+        header = f"--- Source {i+1}: {display_name} ({source_type}) ---"
+        
+        # Add location information if available
+        location_info = []
+        if metadata.get('page_number'):
+            location_info.append(f"Page {metadata['page_number']}")
+        if metadata.get('timestamp'):
+            location_info.append(f"Time: {metadata['timestamp']}")
+        
+        if location_info:
+            header += f" [{', '.join(location_info)}]"
+        
+        # Clean and format the text
+        text = chunk['text'].strip()
+        
+        context_parts.append(f"{header}\n{text}")
+    
+    return '\n\n'.join(context_parts)
+
+# Keep all your existing rate limiting functions unchanged
+def check_user_rate_limit(email: str, notebook_uuid: str) -> Dict:
+    """Check if user has exceeded rate limits"""
+    user_key = f"{email}_{notebook_uuid}"
+    current_time = datetime.now()
+    
+    try:
+        if rate_limit_table:
+            response = rate_limit_table.get_item(Key={'user_id': user_key})
+            user_data = response.get('Item', {})
+        else:
+            user_data = {}
+        
+        last_request_time = user_data.get('last_request_time')
+        requests_this_minute = user_data.get('requests_this_minute', 0)
+        requests_this_hour = user_data.get('requests_this_hour', 0)
+        minute_window = user_data.get('minute_window')
+        hour_window = user_data.get('hour_window')
+        
+        if last_request_time:
+            last_request_time = datetime.fromisoformat(last_request_time)
+        if minute_window:
+            minute_window = datetime.fromisoformat(minute_window)
+        if hour_window:
+            hour_window = datetime.fromisoformat(hour_window)
+        
+        if last_request_time and (current_time - last_request_time).total_seconds() < 3:
+            wait_time = 3 - (current_time - last_request_time).total_seconds()
+            return {
+                'allowed': False,
+                'reason': 'Too frequent requests',
+                'wait_time': int(wait_time) + 1
+            }
+        
+        if not minute_window or (current_time - minute_window).total_seconds() >= 60:
+            requests_this_minute = 0
+            minute_window = current_time
+        
+        if not hour_window or (current_time - hour_window).total_seconds() >= 3600:
+            requests_this_hour = 0
+            hour_window = current_time
+        
+        if requests_this_minute >= 10:
+            return {
+                'allowed': False,
+                'reason': 'Minute limit exceeded',
+                'wait_time': 60 - int((current_time - minute_window).total_seconds())
+            }
+        
+        if requests_this_hour >= 50:
+            return {
+                'allowed': False,
+                'reason': 'Hour limit exceeded',
+                'wait_time': 3600 - int((current_time - hour_window).total_seconds())
+            }
+        
+        return {'allowed': True}
+        
+    except Exception as e:
+        logger.error(f"Rate limit check error: {e}")
+        return {'allowed': True}
+
+def record_request(email: str, notebook_uuid: str):
+    """Record a request for rate limiting"""
+    user_key = f"{email}_{notebook_uuid}"
+    current_time = datetime.now()
+    
+    try:
+        if rate_limit_table:
+            response = rate_limit_table.get_item(Key={'user_id': user_key})
+            user_data = response.get('Item', {})
+            
+            minute_window = user_data.get('minute_window')
+            hour_window = user_data.get('hour_window')
+            
+            if minute_window:
+                minute_window = datetime.fromisoformat(minute_window)
+            if hour_window:
+                hour_window = datetime.fromisoformat(hour_window)
+            
+            requests_this_minute = user_data.get('requests_this_minute', 0)
+            requests_this_hour = user_data.get('requests_this_hour', 0)
+            
+            if not minute_window or (current_time - minute_window).total_seconds() >= 60:
+                requests_this_minute = 0
+                minute_window = current_time
+            
+            if not hour_window or (current_time - hour_window).total_seconds() >= 3600:
+                requests_this_hour = 0
+                hour_window = current_time
+            
+            requests_this_minute += 1
+            requests_this_hour += 1
+            
+            rate_limit_table.put_item(Item={
+                'user_id': user_key,
+                'last_request_time': current_time.isoformat(),
+                'requests_this_minute': requests_this_minute,
+                'requests_this_hour': requests_this_hour,
+                'minute_window': minute_window.isoformat(),
+                'hour_window': hour_window.isoformat(),
+                'ttl': int((current_time + timedelta(days=1)).timestamp())
+            })
+    except Exception as e:
+        logger.error(f"Failed to record request: {e}")
+
+def get_rate_limit_status(email: str, notebook_uuid: str) -> Dict:
+    """Get current rate limit status for user"""
+    user_key = f"{email}_{notebook_uuid}"
+    
+    try:
+        if rate_limit_table:
+            response = rate_limit_table.get_item(Key={'user_id': user_key})
+            user_data = response.get('Item', {})
+            
+            return {
+                'requests_this_minute': user_data.get('requests_this_minute', 0),
+                'requests_this_hour': user_data.get('requests_this_hour', 0),
+                'limits': {
+                    'per_minute': 10,
+                    'per_hour': 50,
+                    'min_interval': 3
+                }
+            }
+    except Exception as e:
+        logger.error(f"Failed to get rate limit status: {e}")
+    
+    return {'requests_this_minute': 0, 'requests_this_hour': 0}
+
+class RateLimitException(Exception):
+    pass
+
+def load_vector_db(bucket: str, email: str, notebook_uuid: str) -> Dict:
+    """Load vector database from S3"""
+    try:
+        key = f"notebooks/{email}/{notebook_uuid}/vectors/vector_db.json"
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        return json.loads(response['Body'].read().decode('utf-8'))
+    except Exception as e:
+        logger.error(f"Error loading vector DB: {e}")
+        return {}
+
+def search_relevant_chunks(vector_db: Dict, question: str) -> List[Dict]:
+    """Search for relevant chunks"""
+    chunks = vector_db.get('chunks', [])
+    if not chunks:
+        return []
+    
+    relevant_chunks = []
+    question_lower = question.lower()
+    
+    for chunk in chunks:
+        text_lower = chunk.get('text', '').lower()
+        score = sum(1 for word in question_lower.split() if word in text_lower)
+        if score > 0:
+            chunk_copy = chunk.copy()
+            chunk_copy['similarity_score'] = score
+            relevant_chunks.append(chunk_copy)
+    
+    relevant_chunks.sort(key=lambda x: x['similarity_score'], reverse=True)
+    return relevant_chunks[:8]  # Return more chunks for better context
+
+def create_api_response(status_code: int, body: Dict) -> Dict:
+    """Create API response"""
+    return {
+        'statusCode': status_code,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-User-Email',
+            'Access-Control-Allow-Methods': 'POST,OPTIONS'
+        },
+        'body': json.dumps(body, default=str)
+    }
