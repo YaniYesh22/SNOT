@@ -1,479 +1,753 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from 'react-router-dom';
+//topicmappage.jsx
+import React, { useState, useEffect } from "react";
+import Sidebar from "../components/Sidebar";
 import TopicMapVisualization from "../components/TopicMapVisualization";
-// import ConnectionsService from "../services/ConnectionsService"; // Service is now used in the hook
-import { useConnectionsData } from "../hooks/useConnectionsData"; // Import the custom hook
-import { styles } from "../styles/TopicMapPageStyles"; // Assuming this is a local style object for the page
-import { debounce } from 'lodash';
+import connectionsService from "../services/ConnectionsService";
 
-
-const EnhancedTopicMapPage = () => {
-  // Filter state - these will be managed by the page and passed to the hook
+export default function TopicMapPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategories, setSelectedCategories] = useState([]);
-  const [minSimilarity, setMinSimilarity] = useState(0.2);
-  const [timeRange, setTimeRange] = useState('all');
-  const [maxConnections, setMaxConnections] = useState(100); // Default value
-  const [connectionTypes, setConnectionTypes] = useState(['smart_similarity', 'explicit']);
-  const [includeSmartClusters, setIncludeSmartClusters] = useState(true);
-  const [includeNetworkIntelligence, setIncludeNetworkIntelligence] = useState(true);
-  const [sortBy, setSortBy] = useState('relevance'); // Added sortBy state
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('relevance');
+  const [minSimilarity, setMinSimilarity] = useState(0.1);
+  const [connectionsData, setConnectionsData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [networkStats, setNetworkStats] = useState(null);
 
-  // UI state - remains in the page component
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [selectedNode, setSelectedNode] = useState(null); // For interacting with the visualization
-  const [hoveredNode, setHoveredNode] = useState(null);   // For interacting with the visualization
-  const [showNetworkInsights, setShowNetworkInsights] = useState(true);
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-
-  const navigate = useNavigate();
-
-  // Memoize filter object to pass to the hook, preventing unnecessary re-fetches if filters don't change
-  const currentFilters = useMemo(() => ({
-    minSimilarity,
-    timeRange,
-    maxConnections,
-    connectionTypes,
-    includeSmartClusters,
-    includeNetworkIntelligence,
-    // searchTerm and selectedCategories are for client-side filtering in TopicMapVisualization,
-    // but if the hook needed them for fetching, they'd be here.
-  }), [minSimilarity, timeRange, maxConnections, connectionTypes, includeSmartClusters, includeNetworkIntelligence]);
-
-  // Use the custom hook for data fetching
-  const {
-    connectionsData,
-    isLoading,
-    error,
-    hasRealData,
-    loadConnectionsData
-  } = useConnectionsData(currentFilters);
-
-
-  // Debounced search term update
-  const debouncedSetSearchTerm = useMemo(() => debounce(setSearchTerm, 300), []);
-
-  // Initial data load and reload when filters change
+  // Load connections data on component mount
   useEffect(() => {
-    loadConnectionsData(currentFilters);
-  }, [loadConnectionsData, currentFilters]);
+    loadConnectionsData();
+  }, [minSimilarity]);
 
+  const loadConnectionsData = async () => {
+    try {
+      console.log("=== TopicMapPage Debug - Loading Data ===");
+      setLoading(true);
+      setError(null);
 
-  // Handle search input change
-  const handleSearchChange = (e) => {
-    debouncedSetSearchTerm(e.target.value);
-  };
+      const data = await connectionsService.getConnections({
+        minSimilarity: minSimilarity,
+        includeTagGroups: true
+      });
 
-  // Handle category selection
-  const handleCategoryChange = (category) => {
-    setSelectedCategories(prevSelectedCategories =>
-      prevSelectedCategories.includes(category)
-        ? prevSelectedCategories.filter(c => c !== category)
-        : [...prevSelectedCategories, category]
-    );
-    // Data will refetch due to currentFilters changing if selectedCategories were part of its deps for fetching
-    // Since category filtering is client-side in TopicMapVisualization, no explicit reload needed here
-    // that isn't already handled by prop changes to the visualization.
-  };
+      console.log("Raw data from connectionsService:", data);
+      console.log("Data structure check:");
+      console.log("- data.notebooks exists:", !!data.notebooks);
+      console.log("- data.notebooks length:", data.notebooks?.length || 0);
+      console.log("- data.connections exists:", !!data.connections);
+      console.log("- data.connections length:", data.connections?.length || 0);
+      console.log("- Sample notebook:", data.notebooks?.[0]);
+      console.log("- Sample connection:", data.connections?.[0]);
 
-  // Handle node selection (navigates to notebook detail)
-  const handleNodeSelect = useCallback((node) => {
-    setSelectedNode(node); // For potential local UI changes if needed
-    if (node && node.id) {
-      navigate(`/notebook/${node.id}`);
+      setConnectionsData(data);
+      console.log("Set connectionsData state with:", data);
+
+      // Generate network statistics
+      const stats = connectionsService.analyzeNetwork(data);
+      setNetworkStats(stats);
+      console.log("Generated network stats:", stats);
+
+    } catch (err) {
+      console.error('=== TopicMapPage Error ===');
+      console.error('Error loading connections:', err);
+      console.error('Error details:', {
+        message: err.message,
+        stack: err.stack
+      });
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      console.log("=== TopicMapPage Debug - Loading Complete ===");
     }
-  }, [navigate]);
+  };
 
-  // Handle node hover (passed to visualization)
-  const handleNodeHover = useCallback((node) => {
-    setHoveredNode(node);
-  }, []);
+  // Also add this useEffect to monitor connectionsData changes
+  useEffect(() => {
+    console.log("=== TopicMapPage State Change ===");
+    console.log("connectionsData updated:", connectionsData);
+    console.log("loading:", loading);
+    console.log("error:", error);
+  }, [connectionsData, loading, error]);
 
-  // Toggle sidebar
-  const toggleSidebar = useCallback(() => {
-    setSidebarCollapsed(prev => !prev);
-  }, []);
+  // Get unique categories from notebooks - FIXED with better null checks
+  const getCategories = () => {
+    if (!connectionsData?.notebooks || !Array.isArray(connectionsData.notebooks)) {
+      return ['all'];
+    }
 
-  // Get available categories from connectionsData for filter UI
-  const availableCategories = useMemo(() => {
-    if (!connectionsData?.notebooks) return [];
-    const categoriesSet = new Set();
+    const categories = new Set(['all']);
+    
     connectionsData.notebooks.forEach(notebook => {
-      // Assuming tags are the categories. Adjust if there's a specific 'categories' field.
-      if (notebook.tags) {
-        notebook.tags.forEach(tag => categoriesSet.add(tag));
+      // Add null checks for notebook and tags
+      if (notebook && notebook.tags && Array.isArray(notebook.tags)) {
+        notebook.tags.forEach(tag => {
+          if (tag && typeof tag === 'string' && tag.trim()) {
+            categories.add(tag.trim());
+          }
+        });
       }
     });
-    return Array.from(categoriesSet).sort();
-  }, [connectionsData]);
 
-  // Get network insights - remains the same, uses connectionsData from hook
-  const networkInsights = useMemo(() => {
-    if (!connectionsData?.networkIntelligence) return null;
-    return connectionsData.networkIntelligence;
-  }, [connectionsData]);
-
-  // Get smart clusters - remains the same
-  const smartClusters = useMemo(() => {
-    if (!connectionsData?.smartClusters) return []; // Ensure it's an array
-    return connectionsData.smartClusters;
-  }, [connectionsData]);
-
-  // Get quick stats - remains the same
-  const quickStats = useMemo(() => {
-    if (!connectionsData) return null;
-    // Ensure stats object and averageSimilarity exist, providing defaults if not
-    const avgSim = connectionsData.stats?.averageSimilarity !== undefined
-                   ? connectionsData.stats.averageSimilarity
-                   : 0;
-    return {
-      totalNotebooks: connectionsData.notebooks?.length || 0,
-      totalConnections: connectionsData.connections?.length || 0,
-      averageSimilarity: avgSim,
-      // Ensure smartClusters is an array before accessing its length
-      clusterCount: Array.isArray(connectionsData.smartClusters) ? connectionsData.smartClusters.length : 0
-    };
-  }, [connectionsData]);
-
-  // Helper function to create filter control props
-  const createFilterControlProps = (id, value, onChange, type = "checkbox", options = {}) => ({
-    id,
-    type,
-    checked: type === "checkbox" ? value : undefined,
-    value: type !== "checkbox" ? value : undefined,
-    onChange,
-    ...options,
-  });
-
-
-  // Render loading state
-  if (isLoading && !connectionsData) { // Show loading only if there's no data yet
+    return Array.from(categories).sort();
   };
 
-  // Get smart clusters
-  const getSmartClusters = () => {
-    if (!connectionsData?.smartClusters) return [];
-    return connectionsData.smartClusters;
+  // Handle search input
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
   };
 
-  // Get quick stats
-  const getQuickStats = () => {
-    if (!connectionsData) return null;
-    return {
-      totalNotebooks: connectionsData.notebooks?.length || 0,
-      totalConnections: connectionsData.connections?.length || 0,
-      averageSimilarity: connectionsData.stats?.averageSimilarity || 0,
-      clusterCount: connectionsData.smartClusters?.length || 0
-    };
+  // Handle category filter change
+  const handleCategoryChange = (e) => {
+    setCategoryFilter(e.target.value);
   };
 
-  // Render loading state
-  if (isLoading) {
+  // Handle sort change
+  const handleSortChange = (e) => {
+    setSortBy(e.target.value);
+  };
+
+  // Handle similarity threshold change
+  const handleSimilarityChange = (e) => {
+    const newSimilarity = parseFloat(e.target.value);
+    setMinSimilarity(newSimilarity);
+  };
+
+  // Get filtered and sorted notebooks for display - FIXED with better null checks
+  const getFilteredNotebooks = () => {
+    if (!connectionsData?.notebooks || !Array.isArray(connectionsData.notebooks)) {
+      return [];
+    }
+
+    let filtered = connectionsData.notebooks;
+
+    // Apply search filter
+    if (searchTerm.trim()) {
+      filtered = connectionsService.searchNotebooks(searchTerm, connectionsData);
+    }
+
+    // Apply category filter
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(notebook => {
+        if (!notebook || !notebook.tags || !Array.isArray(notebook.tags)) {
+          return false;
+        }
+        return notebook.tags.some(tag => 
+          tag && typeof tag === 'string' && 
+          tag.toLowerCase().includes(categoryFilter.toLowerCase())
+        );
+      });
+    }
+
+    // Apply sorting - FIXED with null checks
+    switch (sortBy) {
+      case 'connections':
+        // Sort by number of connections
+        const connectionCounts = {};
+        if (connectionsData.connections && Array.isArray(connectionsData.connections)) {
+          connectionsData.connections.forEach(conn => {
+            if (conn && conn.source && conn.target) {
+              connectionCounts[conn.source] = (connectionCounts[conn.source] || 0) + 1;
+              connectionCounts[conn.target] = (connectionCounts[conn.target] || 0) + 1;
+            }
+          });
+        }
+        filtered.sort((a, b) => {
+          const countA = connectionCounts[a?.notebookId] || 0;
+          const countB = connectionCounts[b?.notebookId] || 0;
+          return countB - countA;
+        });
+        break;
+      case 'alphabetical':
+        filtered.sort((a, b) => {
+          const titleA = a?.title || '';
+          const titleB = b?.title || '';
+          return titleA.localeCompare(titleB);
+        });
+        break;
+      case 'wordcount':
+        filtered.sort((a, b) => {
+          const wordCountA = a?.wordCount || 0;
+          const wordCountB = b?.wordCount || 0;
+          return wordCountB - wordCountA;
+        });
+        break;
+      case 'recent':
+        filtered.sort((a, b) => {
+          const dateA = new Date(a?.updatedAt || 0);
+          const dateB = new Date(b?.updatedAt || 0);
+          return dateB - dateA;
+        });
+        break;
+      default: // relevance
+        // Keep original order or sort by word count as relevance proxy
+        filtered.sort((a, b) => {
+          const wordCountA = a?.wordCount || 0;
+          const wordCountB = b?.wordCount || 0;
+          return wordCountB - wordCountA;
+        });
+    }
+
+    return filtered;
+  };
+
+  if (loading) {
     return (
       <div style={styles.container}>
-        <div style={styles.loadingContainer}>
-          <div style={styles.loadingSpinner}></div>
-          <p style={styles.loadingText}>Loading connections...</p>
-        </div>
+        <Sidebar />
+        <main style={styles.main}>
+          <div style={styles.loadingContainer}>
+            <div style={styles.loadingSpinner}></div>
+            <p style={styles.loadingText}>Loading topic map...</p>
+          </div>
+        </main>
       </div>
     );
   }
 
-  // Render error state
-  if (error && !connectionsData) { // Show full page error only if there's no data to display
+  if (error) {
     return (
-      <div style={styles.container}> {/* Assuming styles.container is defined in TopicMapPageStyles.js */}
-        <div style={styles.errorContainer}>
-          <h2 style={styles.errorTitle}>Error Loading Connections</h2>
-          <p style={styles.errorMessage}>{error}</p>
-          <button 
-            style={styles.retryButton}
-            onClick={() => loadConnectionsData(currentFilters)}
-          >
-            Retry
-          </button>
-        </div>
+      <div style={styles.container}>
+        <Sidebar />
+        <main style={styles.main}>
+          <div style={styles.errorContainer}>
+            <h2 style={styles.errorTitle}>Unable to Load Topic Map</h2>
+            <p style={styles.errorText}>{error}</p>
+            <button onClick={loadConnectionsData} style={styles.retryButton}>
+              Try Again
+            </button>
+          </div>
+        </main>
       </div>
     );
   }
 
-  // If there's an error but we have some (possibly stale or fallback) data, we can show it with an error message.
-  // This part is optional and depends on desired UX. For now, we prioritize showing data if available.
+  const filteredNotebooks = getFilteredNotebooks();
+  const categories = getCategories();
 
   return (
-    <div style={styles.container}> {/* Using styles from TopicMapPageStyles.js */}
-      {/* Sidebar */}
-      <div style={{
-        ...styles.sidebar,
-        width: sidebarCollapsed ? '60px' : '300px'
-      }}>
-        {/* Sidebar Header */}
-        <div style={styles.sidebarHeader}>
-          {!sidebarCollapsed && (
-            <h2 style={styles.sidebarTitle}>Topic Map</h2>
-          )}
-          <button 
-            style={styles.sidebarToggle}
-            onClick={toggleSidebar}
-          >
-            {sidebarCollapsed ? '→' : '←'}
-          </button>
-        </div>
+    <div style={styles.container}>
+      <Sidebar />
 
-        {/* Search */}
-        {!sidebarCollapsed && (
-          <div style={styles.searchContainer}>
-            <input
-              type="text"
-              placeholder="Search notebooks..."
-              style={styles.searchInput}
-              onChange={handleSearchChange} // Use updated handler
-              defaultValue={searchTerm} // Controlled by debounced update
-            />
-          </div>
-        )}
-
-        {/* Quick Stats */}
-        {!sidebarCollapsed && quickStats && (
-          <div style={styles.statsGrid}>
-              <div style={styles.statCard}>
-                <h3 style={styles.statValue}>{quickStats?.totalNotebooks || 0}</h3>
-                <p style={styles.statLabel}>Notebooks</p>
-              </div>
-              <div style={styles.statCard}>
-                <h3 style={styles.statValue}>{quickStats?.totalConnections || 0}</h3>
-                <p style={styles.statLabel}>Connections</p>
-              </div>
-              <div style={styles.statCard}>
-                <h3 style={styles.statValue}>
-                  {((quickStats?.averageSimilarity || 0) * 100).toFixed(1)}%
-                </h3>
-                <p style={styles.statLabel}>Avg. Similarity</p>
-              </div>
-              <div style={styles.statCard}>
-                <h3 style={styles.statValue}>{quickStats?.clusterCount || 0}</h3>
-                <p style={styles.statLabel}>Clusters</p>
-              </div>
-            </div>
-        )}
-
-        {/* Error display within sidebar if data is partially loaded or stale */}
-        {error && connectionsData && (
-           <div style={{...styles.filterSection, background: '#fff0f0', border: '1px solid red', padding: '10px', borderRadius: '4px'}}>
-             <p style={{color: 'red', margin: 0}}>Error: {error}. Displaying cached/fallback data.</p>
-           </div>
-        )}
-
-
-        {/* Filters */}
-        {!sidebarCollapsed && (
-          <div style={styles.filtersContainer}>
-            <h3 style={styles.filtersTitle}>Filters</h3>
-            
-            {/* Categories */}
-            <div style={styles.filterSection}>
-              <h4 style={styles.filterLabel}>Categories</h4>
-              <div style={styles.categoriesList}>
-                {availableCategories.map(category => (
-                  <label key={category} style={styles.categoryItem}>
-                    <input
-                      type="checkbox"
-                      checked={selectedCategories.includes(category)}
-                      onChange={() => handleCategoryChange(category)}
-                    />
-                    {category}
-                  </label>
-                ))}
-              </div>
+      <main style={styles.main}>
+        <header style={styles.header}>
+          <div style={styles.headerContent}>
+            <div style={styles.titleSection}>
+              <h1 style={styles.title}>Topic Map Visualization</h1>
+              <p style={styles.description}>
+                Explore how concepts in your notebooks are connected. Click on topics to see their relationships.
+              </p>
             </div>
 
-            {/* Similarity Threshold */}
-            <div style={styles.filterSection}>
-              <h4 style={styles.filterLabel}>Min. Similarity</h4>
-              <input
-                type="range"
-                min="0.05"
-                max="1"
-                step="0.05"
-                value={minSimilarity}
-                onChange={(e) => setMinSimilarity(parseFloat(e.target.value))}
-                style={styles.slider}
-              />
-              <span style={styles.sliderValue}>
-                {(minSimilarity * 100).toFixed(0)}%
-              </span>
-            </div>
-
-            {/* Time Range */}
-            <div style={styles.filterSection}>
-              <h4 style={styles.filterLabel}>Time Range</h4>
-              <select
-                value={timeRange}
-                onChange={(e) => setTimeRange(e.target.value)}
-                style={styles.select}
-              >
-                <option value="all">All Time</option>
-                <option value="week">Last Week</option>
-                <option value="month">Last Month</option>
-                <option value="year">Last Year</option>
-              </select>
-            </div>
-
-            {/* Advanced Filters Toggle */}
-            <button
-              style={styles.advancedToggle}
-              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            >
-              {showAdvancedFilters ? 'Hide' : 'Show'} Advanced Filters
-            </button>
-
-            {/* Advanced Filters */}
-            {showAdvancedFilters && (
-              <div style={styles.advancedFilters}>
-                {/* Connection Types */}
-                <div style={styles.filterSection}>
-                  <h4 style={styles.filterLabel}>Connection Types</h4>
-                  <label style={styles.checkboxItem}>
-                    <input
-                      type="checkbox"
-                      checked={connectionTypes.includes('smart_similarity')}
-                      onChange={(e) => {
-                        setConnectionTypes(prev =>
-                          e.target.checked
-                            ? [...prev, 'smart_similarity']
-                            : prev.filter(t => t !== 'smart_similarity')
-                        );
-                      }}
-                    />
-                    Smart Similarity
-                  </label>
-                  <label style={styles.checkboxItem}>
-                    <input
-                      type="checkbox"
-                      checked={connectionTypes.includes('explicit')}
-                      onChange={(e) => {
-                        setConnectionTypes(prev =>
-                          e.target.checked
-                            ? [...prev, 'explicit']
-                            : prev.filter(t => t !== 'explicit')
-                        );
-                      }}
-                    />
-                    Explicit
-                  </label>
+            {/* Statistics Summary - FIXED with null checks */}
+            {networkStats && (
+              <div style={styles.statsContainer}>
+                <div style={styles.statItem}>
+                  <span style={styles.statNumber}>{networkStats.totalNotebooks || 0}</span>
+                  <span style={styles.statLabel}>Notebooks</span>
                 </div>
-
-                {/* Max Connections */}
-                <div style={styles.filterSection}>
-                  <h4 style={styles.filterLabel}>Max Connections</h4>
-                  <input
-                    type="number"
-                    min="10"
-                    max="1000"
-                    step="10"
-                    value={maxConnections}
-                    onChange={(e) => setMaxConnections(parseInt(e.target.value))}
-                    style={styles.numberInput}
-                  />
+                <div style={styles.statItem}>
+                  <span style={styles.statNumber}>{networkStats.totalConnections || 0}</span>
+                  <span style={styles.statLabel}>Connections</span>
                 </div>
-
-                {/* Additional Options */}
-                <div style={styles.filterSection}>
-                  <label style={styles.checkboxItem}>
-                    <input
-                      type="checkbox"
-                      checked={includeSmartClusters}
-                      onChange={(e) => setIncludeSmartClusters(e.target.checked)}
-                    />
-                    Include Smart Clusters
-                  </label>
-                  <label style={styles.checkboxItem}>
-                    <input
-                      type="checkbox"
-                      checked={includeNetworkIntelligence}
-                      onChange={(e) => setIncludeNetworkIntelligence(e.target.checked)}
-                    />
-                    Include Network Intelligence
-                  </label>
+                <div style={styles.statItem}>
+                  <span style={styles.statNumber}>
+                    {(networkStats.isolatedNotebooks && Array.isArray(networkStats.isolatedNotebooks)) 
+                      ? networkStats.isolatedNotebooks.length 
+                      : 0}
+                  </span>
+                  <span style={styles.statLabel}>Isolated</span>
+                </div>
+                <div style={styles.statItem}>
+                  <span style={styles.statNumber}>
+                    {Math.round((networkStats.networkDensity || networkStats.density || 0) * 100)}%
+                  </span>
+                  <span style={styles.statLabel}>Density</span>
                 </div>
               </div>
             )}
           </div>
-        )}
+        </header>
 
-        {/* Action Buttons */}
-        <div style={styles.actionButtons}>
-          <button
-            style={styles.actionButton}
-            onClick={loadConnectionsData}
-          >
-            Refresh
-          </button>
-          {!sidebarCollapsed && (
-            <button
-              style={styles.actionButton}
-              onClick={() => setShowNetworkInsights(!showNetworkInsights)}
-            >
-              {showNetworkInsights ? 'Hide' : 'Show'} Insights
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div style={styles.main}>
-        {/* Visualization */}
-        <div style={styles.visualizationWrapper}>
-          {connectionsData && ( // Render visualization only if data is available
-            <TopicMapVisualization
-              connectionsData={connectionsData} // Pass the connectionsData from the hook
-              searchTerm={searchTerm}
-              selectedCategories={selectedCategories} // Pass selectedCategories array
-              sortBy={sortBy}
-              minSimilarity={minSimilarity}
-              connectionType={connectionTypes.join(',')} // Assuming TopicMapVisualization expects a string if not 'all'
-              showLabels={true} // Example, manage this via state if needed
-              showMetrics={true} // Example, manage this via state if needed
-              onNodeSelect={handleNodeSelect}
-              onNodeHover={handleNodeHover}
-              // selectedNode and hoveredNode are for a different feature, not directly props for data filtering
-            />
-          )}
-        </div>
-
-        {/* Network Insights - ensure networkInsights and its properties are checked before rendering */}
-        {showNetworkInsights && networkInsights && (
-          <div style={styles.networkInsights}>
-            <h3 style={styles.insightsTitle}>Network Insights</h3>
-            <div style={styles.insightsGrid}>
-              <div style={styles.insightCard}>
-                <h4 style={styles.insightLabel}>Central Topics</h4>
-                <ul style={styles.insightList}>
-                  {networkInsights.centralTopics?.map(topic => (
-                    <li key={topic.id} style={styles.insightItem}>
-                      {topic.title}
-                    </li>
-                  ))}
-                </ul>
+        <section style={styles.controlsSection}>
+          <div style={styles.controls}>
+            {/* Search and Filters Row */}
+            <div style={styles.controlsRow}>
+              <div style={styles.searchContainer}>
+                <input
+                  type="text"
+                  placeholder="Search notebooks and tags..."
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  style={styles.searchInput}
+                />
+                <svg style={styles.searchIcon} width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                </svg>
               </div>
-              <div style={styles.insightCard}>
-                <h4 style={styles.insightLabel}>Emerging Clusters</h4>
-                <ul style={styles.insightList}>
-                  {/* Ensure smartClusters is an array before mapping */}
-                  {Array.isArray(smartClusters) && smartClusters.map(cluster => (
-                    <li key={cluster.id || cluster.name} style={styles.insightItem}> {/* Use name as key if id is missing */}
-                      {cluster.name}
-                    </li>
+
+              <div style={styles.filtersContainer}>
+                <select
+                  value={categoryFilter}
+                  onChange={handleCategoryChange}
+                  style={styles.filterSelect}
+                >
+                  <option value="all">All Categories</option>
+                  {categories.slice(1).map(category => (
+                    <option key={category} value={category}>{category}</option>
                   ))}
-                </ul>
+                </select>
+
+                <select
+                  value={sortBy}
+                  onChange={handleSortChange}
+                  style={styles.filterSelect}
+                >
+                  <option value="relevance">Sort by Relevance</option>
+                  <option value="connections">Most Connections</option>
+                  <option value="alphabetical">Alphabetical</option>
+                  <option value="wordcount">Word Count</option>
+                  <option value="recent">Recently Updated</option>
+                </select>
               </div>
-              {/* Add more insights display as needed */}
+            </div>
+
+            {/* Advanced Controls Row */}
+            <div style={styles.advancedControls}>
+              <div style={styles.sliderContainer}>
+                <label style={styles.sliderLabel}>
+                  Connection Sensitivity: {Math.round(minSimilarity * 100)}%
+                </label>
+                <input
+                  type="range"
+                  min="0.05"
+                  max="0.8"
+                  step="0.05"
+                  value={minSimilarity}
+                  onChange={handleSimilarityChange}
+                  style={styles.slider}
+                />
+                <div style={styles.sliderTicks}>
+                  <span>Loose</span>
+                  <span>Strict</span>
+                </div>
+              </div>
+
+              <div style={styles.resultCount}>
+                Showing {filteredNotebooks.length} of {connectionsData?.notebooks?.length || 0} notebooks
+              </div>
             </div>
           </div>
+        </section>
+
+        <section style={styles.visualizationSection}>
+          <div style={styles.visualizationContainer}>
+            <TopicMapVisualization
+              key={`viz-${connectionsData ? 'real' : 'none'}-${connectionsData?.notebooks?.length || 0}-${Date.now()}`}
+              connectionsData={connectionsData}
+              searchTerm={searchTerm}
+              categoryFilter={categoryFilter}
+              sortBy={sortBy}
+              minSimilarity={minSimilarity}
+            />
+          </div>
+        </section>
+
+        {/* Most Connected Notebooks - FIXED with null checks */}
+        {networkStats?.mostConnectedNotebooks && 
+         Array.isArray(networkStats.mostConnectedNotebooks) && 
+         networkStats.mostConnectedNotebooks.length > 0 && (
+          <section style={styles.insightsSection}>
+            <h3 style={styles.insightsTitle}>Network Insights</h3>
+
+            <div style={styles.insightsGrid}>
+              <div style={styles.insightCard}>
+                <h4 style={styles.insightCardTitle}>Most Connected Notebooks</h4>
+                <div style={styles.connectedList}>
+                  {networkStats.mostConnectedNotebooks.slice(0, 3).map((item, index) => (
+                    <div key={item.notebook?.notebookId || index} style={styles.connectedItem}>
+                      <span style={styles.connectedTitle}>
+                        {item.notebook?.title || 'Unknown'}
+                      </span>
+                      <span style={styles.connectedCount}>
+                        {item.connections || 0} connections
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={styles.insightCard}>
+                <h4 style={styles.insightCardTitle}>Tag Groups</h4>
+                <div style={styles.tagGroupsList}>
+                  {connectionsData?.tagGroups && typeof connectionsData.tagGroups === 'object' && 
+                   Object.entries(connectionsData.tagGroups).slice(0, 3).map(([tag, notebooks]) => (
+                    <div key={tag} style={styles.tagGroupItem}>
+                      <span style={styles.tagName}>{tag}</span>
+                      <span style={styles.tagCount}>
+                        {Array.isArray(notebooks) ? notebooks.length : 0} notebooks
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={styles.insightCard}>
+                <h4 style={styles.insightCardTitle}>Network Health</h4>
+                <div style={styles.healthMetrics}>
+                  <div style={styles.healthItem}>
+                    <span>Connection Strength</span>
+                    <span style={styles.healthValue}>
+                      {Math.round((networkStats.averageConnectionStrength || 0) * 100)}%
+                    </span>
+                  </div>
+                  <div style={styles.healthItem}>
+                    <span>Network Coverage</span>
+                    <span style={styles.healthValue}>
+                      {Math.round((1 - (
+                        (networkStats.isolatedNotebooks && Array.isArray(networkStats.isolatedNotebooks)) 
+                          ? networkStats.isolatedNotebooks.length 
+                          : 0
+                      ) / (networkStats.totalNotebooks || 1)) * 100)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         )}
-      </div>
+      </main>
     </div>
   );
-};
+}
 
-export default EnhancedTopicMapPage;
+const styles = {
+  container: {
+    display: "flex",
+    height: "100vh",
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  },
+  main: {
+    flexGrow: 1,
+    background: '#f9fafb',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden'
+  },
+  header: {
+    background: 'white',
+    borderBottom: '1px solid #e5e7eb',
+    padding: '2rem',
+    flexShrink: 0
+  },
+  headerContent: {
+    maxWidth: '1200px',
+    margin: '0 auto',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: '2rem'
+  },
+  titleSection: {
+    flex: 1
+  },
+  title: {
+    fontSize: '2rem',
+    fontWeight: '700',
+    color: '#111827',
+    margin: '0 0 0.5rem 0'
+  },
+  description: {
+    color: '#6b7280',
+    fontSize: '1.1rem',
+    margin: 0,
+    lineHeight: '1.5'
+  },
+  statsContainer: {
+    display: 'flex',
+    gap: '2rem'
+  },
+  statItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '0.25rem'
+  },
+  statNumber: {
+    fontSize: '1.5rem',
+    fontWeight: '700',
+    color: '#3b82f6'
+  },
+  statLabel: {
+    fontSize: '0.875rem',
+    color: '#6b7280',
+    fontWeight: '500'
+  },
+  controlsSection: {
+    background: 'white',
+    borderBottom: '1px solid #e5e7eb',
+    padding: '1.5rem 2rem',
+    flexShrink: 0
+  },
+  controls: {
+    maxWidth: '1200px',
+    margin: '0 auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem'
+  },
+  controlsRow: {
+    display: 'flex',
+    gap: '1rem',
+    alignItems: 'center',
+    flexWrap: 'wrap'
+  },
+  searchContainer: {
+    position: 'relative',
+    flex: '1',
+    minWidth: '300px',
+    maxWidth: '400px'
+  },
+  searchInput: {
+    padding: '0.75rem 1rem 0.75rem 2.5rem',
+    border: '1px solid #d1d5db',
+    borderRadius: '8px',
+    width: '100%',
+    fontSize: '0.95rem',
+    outline: 'none',
+    transition: 'border-color 0.2s ease'
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: '0.75rem',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: '#9ca3af',
+    pointerEvents: 'none'
+  },
+  filtersContainer: {
+    display: 'flex',
+    gap: '0.75rem',
+    flexWrap: 'wrap'
+  },
+  filterSelect: {
+    padding: '0.75rem 1rem',
+    border: '1px solid #d1d5db',
+    borderRadius: '8px',
+    background: 'white',
+    fontSize: '0.95rem',
+    color: '#374151',
+    cursor: 'pointer',
+    outline: 'none'
+  },
+  advancedControls: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '1rem',
+    padding: '1rem',
+    background: '#f9fafb',
+    borderRadius: '8px',
+    border: '1px solid #e5e7eb'
+  },
+  sliderContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+    minWidth: '200px'
+  },
+  sliderLabel: {
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    color: '#374151'
+  },
+  slider: {
+    width: '100%',
+    height: '6px',
+    borderRadius: '3px',
+    background: '#e5e7eb',
+    outline: 'none',
+    cursor: 'pointer'
+  },
+  sliderTicks: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '0.75rem',
+    color: '#9ca3af'
+  },
+  resultCount: {
+    fontSize: '0.875rem',
+    color: '#6b7280',
+    fontWeight: '500'
+  },
+  visualizationSection: {
+    flex: 1,
+    padding: '2rem',
+    overflow: 'hidden'
+  },
+  visualizationContainer: {
+    height: '100%',
+    maxWidth: '1200px',
+    margin: '0 auto',
+    background: 'white',
+    borderRadius: '12px',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+    border: '1px solid #e5e7eb'
+  },
+  insightsSection: {
+    background: 'white',
+    borderTop: '1px solid #e5e7eb',
+    padding: '2rem',
+    flexShrink: 0
+  },
+  insightsTitle: {
+    fontSize: '1.25rem',
+    fontWeight: '600',
+    color: '#111827',
+    margin: '0 0 1.5rem 0',
+    textAlign: 'center'
+  },
+  insightsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gap: '1.5rem',
+    maxWidth: '1200px',
+    margin: '0 auto'
+  },
+  insightCard: {
+    background: '#f9fafb',
+    border: '1px solid #e5e7eb',
+    borderRadius: '8px',
+    padding: '1.5rem'
+  },
+  insightCardTitle: {
+    fontSize: '1rem',
+    fontWeight: '600',
+    color: '#111827',
+    margin: '0 0 1rem 0'
+  },
+  connectedList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem'
+  },
+  connectedItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '0.5rem',
+    background: 'white',
+    borderRadius: '6px',
+    border: '1px solid #e5e7eb'
+  },
+  connectedTitle: {
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    color: '#111827',
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  connectedCount: {
+    fontSize: '0.75rem',
+    color: '#6b7280',
+    fontWeight: '500'
+  },
+  tagGroupsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem'
+  },
+  tagGroupItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '0.5rem',
+    background: 'white',
+    borderRadius: '6px',
+    border: '1px solid #e5e7eb'
+  },
+  tagName: {
+    fontSize: '0.875rem',
+    fontWeight: '500',
+    color: '#3b82f6',
+    textTransform: 'capitalize'
+  },
+  tagCount: {
+    fontSize: '0.75rem',
+    color: '#6b7280'
+  },
+  healthMetrics: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem'
+  },
+  healthItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '0.5rem',
+    background: 'white',
+    borderRadius: '6px',
+    border: '1px solid #e5e7eb'
+  },
+  healthValue: {
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    color: '#059669'
+  },
+  loadingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    color: '#6b7280'
+  },
+  loadingSpinner: {
+    width: '48px',
+    height: '48px',
+    border: '4px solid #f3f4f6',
+    borderTop: '4px solid #3b82f6',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+    marginBottom: '1rem'
+  },
+  loadingText: {
+    fontSize: '1.1rem',
+    fontWeight: '500'
+  },
+  errorContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    padding: '2rem',
+    textAlign: 'center'
+  },
+  errorTitle: {
+    fontSize: '1.5rem',
+    fontWeight: '600',
+    color: '#dc2626',
+    margin: '0 0 1rem 0'
+  },
+  errorText: {
+    fontSize: '1rem',
+    color: '#6b7280',
+    margin: '0 0 2rem 0',
+    maxWidth: '400px'
+  },
+  retryButton: {
+    padding: '0.75rem 1.5rem',
+    background: '#3b82f6',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s ease'
+  }
+};

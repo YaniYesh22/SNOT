@@ -3,11 +3,11 @@ import React, { useEffect, useState } from 'react';
 
 import authService from '../services/AuthService';
 
-export default function Sidebar() {
+export default function Sidebar({ isCollapsed, onToggleCollapse }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [userData, setUserData] = useState(null);
-  const [isExpanded, setIsExpanded] = useState(true); // Default to expanded
+
   
   useEffect(() => {
     // Get user data when the component mounts
@@ -50,12 +50,14 @@ export default function Sidebar() {
     return location.pathname === path;
   };
 
-  // Toggle function with event handling to prevent bubbling
+
+  // Toggle function calls parent handler
   const toggleSidebar = (e) => {
     e.stopPropagation();
-    console.log('Toggle function called');
-    setIsExpanded(prev => !prev);
-  };
+    if (onToggleCollapse) {
+      onToggleCollapse();
+    }
+  } 
 
   // Prevent click propagation on navigation links
   const handleNavClick = (e) => {
@@ -65,12 +67,12 @@ export default function Sidebar() {
   return (
     <aside style={{
       ...styles.sidebar,
-      width: isExpanded ? '280px' : '80px',
+      width: !isCollapsed ? '280px' : '80px',
       transition: 'width 0.3s ease'
     }}>
       {/* Header Section */}
       <div style={styles.header}>
-        {isExpanded ? (
+        {!isCollapsed ? (
           // Expanded header
           <>
             <div style={styles.logoSection}>
@@ -146,7 +148,7 @@ export default function Sidebar() {
       </div>
       
       {/* Navigation Section - Expanded */}
-      {isExpanded && (
+      {!isCollapsed && (
         <nav style={styles.navigation}>
           <div style={styles.navSection}>
             <span style={styles.navSectionTitle}>Workspace</span>
@@ -228,7 +230,7 @@ export default function Sidebar() {
       )}
       
       {/* Navigation Section - Collapsed (Icons only) */}
-      {!isExpanded && (
+      {isCollapsed && (
         <div style={styles.collapsedNavigation}>
           <div style={styles.collapsedNavGroup}>
             <Link
@@ -283,7 +285,7 @@ export default function Sidebar() {
       )}
       
       {/* Footer Section - Expanded */}
-      {isExpanded && (
+      {!isCollapsed && (
         <div style={styles.footer}>
           <button onClick={handleLogout} style={styles.logoutButton} className="logout-button" type="button">
             <div style={styles.logoutIcon}>
@@ -297,7 +299,7 @@ export default function Sidebar() {
       )}
 
       {/* Footer Section - Collapsed */}
-      {!isExpanded && (
+      {isCollapsed && (
         <div style={styles.collapsedFooter}>
           <button 
             onClick={handleLogout} 

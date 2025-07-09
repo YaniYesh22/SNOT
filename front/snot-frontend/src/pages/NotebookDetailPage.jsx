@@ -1,6 +1,8 @@
 import 'react-quill/dist/quill.snow.css';
 
+
 import React, { useEffect, useState, useRef } from 'react';
+
 import { useNavigate, useLocation } from 'react-router-dom';
 
 import ReactQuill from 'react-quill';
@@ -14,6 +16,9 @@ export default function NotebookDetailPage() {
   injectNotebookDetailCSS();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Sidebar collapsed state (collapsed by default for every notebook)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
 
   // Get notebookId from location state or URL params
   const locationNotebookId = location.state?.notebookId;
@@ -1605,6 +1610,9 @@ export default function NotebookDetailPage() {
 
   // Simplified: loadNotebookData compatible with Lambda response
   useEffect(() => {
+    // Always collapse sidebar on notebook load (generic for all notebooks)
+    setIsSidebarCollapsed(true);
+
     const loadNotebookData = async () => {
       if (!initialNotebookId || initialNotebookId === 'temp-loading') {
         setNotebook({
@@ -2369,7 +2377,10 @@ export default function NotebookDetailPage() {
   if (isLoading) {
     return (
       <div style={styles.container}>
-        <Sidebar />
+        <Sidebar
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+        />
         <main style={styles.main}>
           <div style={styles.loadingContainer}>
             <div style={styles.loadingSpinner}></div>
@@ -2390,7 +2401,10 @@ export default function NotebookDetailPage() {
   // Complete JSX Structure
   return (
     <div style={styles.container}>
-      <Sidebar />
+      <Sidebar
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+      />
       <main style={styles.main}>
         {/* CONDITIONAL HEADER - Minimal for Summary Reading, Full for Notebook */}
         {showSummaryPage && currentSummaryPage ? (

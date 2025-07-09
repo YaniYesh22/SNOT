@@ -1,9 +1,15 @@
 // Enhanced ConnectionsService.js
+import authService from './AuthService'; // Import your auth service
+
 class EnhancedConnectionsService {
   constructor() {
-      this.baseURL = process.env.REACT_APP_API_BASE_URL || 'https://api.yourapp.com';
+      // Fix the baseURL to use your actual API endpoint
+      this.baseURL = 'https://ch2l8cp5l3.execute-api.eu-central-1.amazonaws.com/dev';
       this.cache = new Map();
       this.cacheTimeout = 5 * 60 * 1000; // 5 minutes
+      
+      // Add auth service reference
+      this.authService = authService;
   }
 
   /**
@@ -27,6 +33,10 @@ class EnhancedConnectionsService {
           // Enhanced features
           if (options.includeSmartClusters !== false) {
               params.append('includeSmartClusters', 'true');
+          }
+          
+          if (options.includeTagGroups !== false) {
+              params.append('includeTagGroups', 'true');
           }
           
           if (options.includeNetworkIntelligence !== false) {
@@ -62,72 +72,286 @@ class EnhancedConnectionsService {
               this.cache.delete(cacheKey);
           }
 
-          // Get user email for authentication
+          // Try to get user email using auth service
           const userEmail = this.getUserEmail();
           if (!userEmail) {
-              throw new Error('User email not found. Please log in again.');
+              console.warn('No user email found, proceeding with fallback data');
+              return this.getFallbackData();
           }
 
           console.log("✓ Making API request to enhanced lambda");
           
-          const response = await fetch(`${this.baseURL}/getMapping/connections?${params}`, {
-              method: 'GET',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'X-User-Email': userEmail,
-                  'Accept': 'application/json'
-              }
-          });
+          // Try the enhanced API endpoint first
+          try {
+              const response = await fetch(`${this.baseURL}/getMapping/connections?${params}`, {
+                  method: 'GET',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'X-User-Email': userEmail,
+                      'Accept': 'application/json',
+                      'Authorization': await this.getAuthToken()
+                  }
+              });
 
-          if (!response.ok) {
-              const errorText = await response.text();
-              console.error("API Error Response:", errorText);
-              
-              if (response.status === 401) {
-                  throw new Error('Authentication failed. Please log in again.');
-              } else if (response.status === 403) {
-                  throw new Error('Access denied. Please check your permissions.');
-              } else if (response.status >= 500) {
-                  throw new Error('Server error occurred. Please try again later.');
+              if (response.ok) {
+                  const data = await response.json();
+                  console.log("✓ Received enhanced connections data from API");
+                  
+                  // Validate and enhance the response data
+                  const enhancedData = this.processConnectionsData(data);
+                  enhancedData.isDemoData = false;
+
+                  // Cache the enhanced data
+                  this.cache.set(cacheKey, {
+                      data: enhancedData,
+                      timestamp: Date.now()
+                  });
+
+                  return enhancedData;
               } else {
-                  throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+                  console.warn(`API request failed with status ${response.status}, falling back to notebook-based analysis`);
               }
+          } catch (apiError) {
+              console.warn('Enhanced API not available, falling back to notebook-based analysis:', apiError.message);
           }
 
-          const data = await response.json();
-          console.log("✓ Received enhanced connections data:", {
-              notebooks: data.notebooks?.length || 0,
-              connections: data.connections?.length || 0,
-              hasNetworkIntelligence: !!data.networkIntelligence,
-              hasSmartClusters: !!data.smartClusters
-          });
-
-          // Validate and enhance the response data
-          const enhancedData = this.processConnectionsData(data);
-          enhancedData.isDemoData = false; // Mark as real data
-
-          // Cache the enhanced data
-          this.cache.set(cacheKey, {
-              data: enhancedData,
-              timestamp: Date.now()
-          });
-
-          return enhancedData;
+          // Fallback: Use notebook service to build connections
+          return await this.buildConnectionsFromNotebooks(options);
 
       } catch (error) {
           console.error("❌ Enhanced ConnectionsService Error:", error);
           
           // Return graceful fallback data instead of throwing
           if (error.message.includes('Authentication') || error.message.includes('Access denied')) {
-              throw error; // Re-throw auth errors
+              console.warn('Authentication issue, returning fallback data');
           }
           
-          // For other errors, return minimal data structure
           console.warn("Returning fallback data due to error");
           const fallbackData = this.getFallbackData();
-          fallbackData.isDemoData = true; // Mark as demo data
+          fallbackData.isDemoData = true;
           return fallbackData;
       }
+  }
+
+  /**
+   * Build connections from notebook service when enhanced API is not available
+   */
+  async buildConnectionsFromNotebooks(options = {}) {
+      try {
+          console.log("Building connections from notebook service...");
+          
+          // Import notebook service dynamically to avoid circular dependencies
+          const { default: notebookService } = await import('./NotebookService');
+          
+          // Get all notebooks
+          const notebooks = await notebookService.getNotebooks();
+          
+          if (!notebooks || notebooks.length === 0) {
+              console.log('No notebooks found, returning demo data');
+              return this.getFallbackData();
+          }
+
+          console.log(`Found ${notebooks.length} notebooks, analyzing connections...`);
+
+          // Normalize notebook data
+          const normalizedNotebooks = this.normalizeNotebooks(notebooks);
+          
+          // Analyze connections
+          const connections = this.analyzeConnections(normalizedNotebooks, options.minSimilarity || 0.2);
+          
+          // Build tag groups if requested
+          const tagGroups = options.includeTagGroups ? this.groupNotebooksByTags(normalizedNotebooks) : {};
+          
+          // Calculate network metrics
+          const networkIntelligence = this.calculateBasicNetworkMetrics(normalizedNotebooks, connections);
+          
+          // Build smart clusters
+          const smartClusters = this.calculateBasicClusters(normalizedNotebooks, connections);
+
+          const result = {
+              notebooks: normalizedNotebooks,
+              connections: connections,
+              tagGroups: tagGroups,
+              networkIntelligence: networkIntelligence,
+              smartClusters: smartClusters,
+              statistics: {
+                  totalNotebooks: normalizedNotebooks.length,
+                  totalConnections: connections.length,
+                  source: 'notebook_service_fallback',
+                  processedAt: new Date().toISOString()
+              },
+              isDemoData: false
+          };
+
+          console.log("✓ Successfully built connections from notebooks:", {
+              notebooks: result.notebooks.length,
+              connections: result.connections.length,
+              tagGroups: Object.keys(result.tagGroups).length
+          });
+
+          return result;
+
+      } catch (error) {
+          console.error('Error building connections from notebooks:', error);
+          return this.getFallbackData();
+      }
+  }
+
+  /**
+   * Normalize notebook data for consistent structure
+   */
+  normalizeNotebooks(notebooks) {
+      return notebooks.map(notebook => {
+          // Handle different notebook ID formats
+          const notebookId = notebook.notebookId || notebook.id || notebook.NotebookId;
+          
+          // Handle different title formats
+          const title = notebook.title || notebook.Title || `Untitled (${notebookId?.substring(0, 8) || 'Unknown'})`;
+          
+          // Handle different tag formats
+          let tags = [];
+          if (Array.isArray(notebook.tags)) {
+              tags = notebook.tags.filter(tag => tag && tag.trim());
+          } else if (notebook.tags && typeof notebook.tags === 'string') {
+              tags = [notebook.tags];
+          } else if (notebook.Tags && Array.isArray(notebook.Tags)) {
+              tags = notebook.Tags.filter(tag => tag && tag.trim());
+          }
+          
+          // Ensure we have at least one tag
+          if (tags.length === 0) {
+              tags = ['Uncategorized'];
+          }
+
+          // Calculate word count
+          const wordCount = notebook.wordCount || 
+                          notebook.WordCount || 
+                          (notebook.content ? notebook.content.split(' ').length : 0) ||
+                          (notebook.Content ? notebook.Content.split(' ').length : 0) ||
+                          Math.floor(Math.random() * 2000) + 100; // Random fallback for demo
+
+          return {
+              notebookId: notebookId,
+              title: title,
+              tags: tags,
+              wordCount: wordCount,
+              content: notebook.content || notebook.Content || '',
+              connections: notebook.connections || [],
+              createdAt: notebook.createdAt || notebook.CreatedAt || new Date().toISOString(),
+              updatedAt: notebook.updatedAt || notebook.UpdatedAt || notebook.lastModified || new Date().toISOString(),
+              filesCount: notebook.filesCount || notebook.files?.length || 0,
+              linksCount: notebook.linksCount || notebook.links?.length || 0,
+              preview: notebook.preview || (notebook.content || notebook.Content || '').substring(0, 200) || ''
+          };
+      });
+  }
+
+  /**
+   * Analyze connections between notebooks based on tags and explicit connections
+   */
+  analyzeConnections(notebooks, minSimilarity = 0.2) {
+      const connections = [];
+      const processedPairs = new Set();
+
+      for (let i = 0; i < notebooks.length; i++) {
+          const notebook1 = notebooks[i];
+          
+          for (let j = i + 1; j < notebooks.length; j++) {
+              const notebook2 = notebooks[j];
+              
+              // Create unique pair identifier
+              const pairId = `${notebook1.notebookId}-${notebook2.notebookId}`;
+              if (processedPairs.has(pairId)) continue;
+              processedPairs.add(pairId);
+
+              // Check for explicit connections first
+              const hasExplicitConnection = 
+                  notebook1.connections.includes(notebook2.notebookId) ||
+                  notebook2.connections.includes(notebook1.notebookId);
+
+              if (hasExplicitConnection) {
+                  connections.push({
+                      source: notebook1.notebookId,
+                      target: notebook2.notebookId,
+                      type: 'explicit',
+                      strength: 1.0,
+                      strengthCategory: 'strong',
+                      commonTags: this.findCommonTags(notebook1.tags, notebook2.tags),
+                      factors: { explicit: true },
+                      metadata: { bidirectional: true }
+                  });
+                  continue;
+              }
+
+              // Calculate tag similarity
+              const similarity = this.calculateTagSimilarity(notebook1.tags, notebook2.tags);
+              
+              if (similarity >= minSimilarity) {
+                  connections.push({
+                      source: notebook1.notebookId,
+                      target: notebook2.notebookId,
+                      type: 'smart_similarity',
+                      strength: similarity,
+                      strengthCategory: this.categorizeStrength(similarity),
+                      commonTags: this.findCommonTags(notebook1.tags, notebook2.tags),
+                      factors: { tagSimilarity: similarity },
+                      metadata: { bidirectional: false }
+                  });
+              }
+          }
+      }
+
+      console.log(`Analyzed connections: ${connections.length} found`);
+      return connections;
+  }
+
+  /**
+   * Calculate similarity between two sets of tags
+   */
+  calculateTagSimilarity(tags1, tags2) {
+      if (!tags1.length || !tags2.length) return 0;
+
+      // Normalize tags to lowercase for comparison
+      const normalizedTags1 = tags1.map(tag => tag.toLowerCase());
+      const normalizedTags2 = tags2.map(tag => tag.toLowerCase());
+
+      // Find common tags
+      const commonTags = normalizedTags1.filter(tag => normalizedTags2.includes(tag));
+      
+      // Calculate Jaccard similarity: |intersection| / |union|
+      const union = new Set([...normalizedTags1, ...normalizedTags2]);
+      const similarity = commonTags.length / union.size;
+
+      return Math.round(similarity * 100) / 100; // Round to 2 decimal places
+  }
+
+  /**
+   * Find common tags between two notebooks
+   */
+  findCommonTags(tags1, tags2) {
+      const normalizedTags1 = tags1.map(tag => tag.toLowerCase());
+      const normalizedTags2 = tags2.map(tag => tag.toLowerCase());
+      
+      return tags1.filter(tag => normalizedTags2.includes(tag.toLowerCase()));
+  }
+
+  /**
+   * Group notebooks by their tags
+   */
+  groupNotebooksByTags(notebooks) {
+      const tagGroups = {};
+
+      notebooks.forEach(notebook => {
+          notebook.tags.forEach(tag => {
+              const normalizedTag = tag.toLowerCase();
+              if (!tagGroups[normalizedTag]) {
+                  tagGroups[normalizedTag] = [];
+              }
+              tagGroups[normalizedTag].push(notebook.notebookId);
+          });
+      });
+
+      return tagGroups;
   }
 
   /**
@@ -201,6 +425,7 @@ class EnhancedConnectionsService {
           connections: processedConnections,
           networkIntelligence: networkIntelligence,
           smartClusters: smartClusters,
+          tagGroups: rawData.tagGroups || this.groupNotebooksByTags(processedNotebooks),
           statistics: {
               ...rawData.statistics,
               totalNotebooks: processedNotebooks.length,
@@ -293,7 +518,7 @@ class EnhancedConnectionsService {
       }
 
       const maxPossibleConnections = (totalNodes * (totalNodes - 1)) / 2;
-      const density = totalConnections / maxPossibleConnections;
+      const density = maxPossibleConnections > 0 ? totalConnections / maxPossibleConnections : 0;
 
       // Calculate connection distribution
       const connectionCounts = new Map();
@@ -302,18 +527,40 @@ class EnhancedConnectionsService {
           connectionCounts.set(conn.target, (connectionCounts.get(conn.target) || 0) + 1);
       });
 
-      const avgConnections = Array.from(connectionCounts.values()).reduce((a, b) => a + b, 0) / totalNodes;
+      const avgConnections = totalNodes > 0 ? Array.from(connectionCounts.values()).reduce((a, b) => a + b, 0) / totalNodes : 0;
 
       // Analyze tags
       const allTags = notebooks.flatMap(nb => nb.tags || []);
       const uniqueTags = new Set(allTags.map(tag => tag.toLowerCase())).size;
-      const tagDiversity = uniqueTags / totalNodes;
+      const tagDiversity = totalNodes > 0 ? uniqueTags / totalNodes : 0;
+
+      // Find most connected notebooks
+      const mostConnectedNotebooks = notebooks
+          .map(notebook => ({
+              notebook,
+              connections: connectionCounts.get(notebook.notebookId) || 0
+          }))
+          .sort((a, b) => b.connections - a.connections)
+          .slice(0, 5);
+
+      // Find isolated notebooks
+      const connectedNotebooks = new Set();
+      connections.forEach(conn => {
+          connectedNotebooks.add(conn.source);
+          connectedNotebooks.add(conn.target);
+      });
+      const isolatedNotebooks = notebooks.filter(nb => !connectedNotebooks.has(nb.notebookId));
 
       return {
-          totalNodes,
-          totalConnections,
+          totalNodes: totalNodes,
+          totalConnections: totalConnections,
           density: Math.round(density * 10000) / 10000,
           averageConnections: Math.round(avgConnections * 100) / 100,
+          networkDensity: density, // For backward compatibility
+          isolatedNotebooks: isolatedNotebooks,
+          mostConnectedNotebooks: mostConnectedNotebooks,
+          averageConnectionStrength: connections.length > 0 ? 
+              connections.reduce((sum, conn) => sum + conn.strength, 0) / connections.length : 0,
           networkHealth: {
               connected: totalConnections > 0,
               wellConnected: density > 0.1,
@@ -394,6 +641,36 @@ class EnhancedConnectionsService {
   }
 
   /**
+   * Search notebooks by title or tags - for backward compatibility
+   */
+  searchNotebooks(searchTerm, connectionsData) {
+      if (!searchTerm.trim() || !connectionsData.notebooks) {
+          return connectionsData.notebooks || [];
+      }
+
+      const searchLower = searchTerm.toLowerCase();
+      
+      return connectionsData.notebooks.filter(notebook => {
+          // Search in title
+          if (notebook.title && notebook.title.toLowerCase().includes(searchLower)) {
+              return true;
+          }
+          
+          // Search in tags
+          if (notebook.tags && notebook.tags.some(tag => tag.toLowerCase().includes(searchLower))) {
+              return true;
+          }
+          
+          // Search in content preview
+          if (notebook.preview && notebook.preview.toLowerCase().includes(searchLower)) {
+              return true;
+          }
+          
+          return false;
+      });
+  }
+
+  /**
    * Generate network recommendations
    */
   generateNetworkRecommendations(data) {
@@ -413,18 +690,11 @@ class EnhancedConnectionsService {
       }
 
       // Check for isolated notebooks
-      const connectedNotebooks = new Set();
-      connections.forEach(conn => {
-          connectedNotebooks.add(conn.source);
-          connectedNotebooks.add(conn.target);
-      });
-
-      const isolatedCount = notebooks.length - connectedNotebooks.size;
-      if (isolatedCount > 0) {
+      if (networkIntelligence.isolatedNotebooks && networkIntelligence.isolatedNotebooks.length > 0) {
           recommendations.push({
               type: 'isolation',
               priority: 'medium',
-              message: `${isolatedCount} notebook(s) are isolated. Consider tagging them or creating connections.`,
+              message: `${networkIntelligence.isolatedNotebooks.length} notebook(s) are isolated. Consider tagging them or creating connections.`,
               action: 'Review and tag isolated notebooks'
           });
       }
@@ -452,8 +722,8 @@ class EnhancedConnectionsService {
       if (!networkIntelligence) return insights;
 
       // Identify most connected notebooks
-      if (networkIntelligence.hubs && networkIntelligence.hubs.length > 0) {
-          const topHub = networkIntelligence.hubs[0];
+      if (networkIntelligence.mostConnectedNotebooks && networkIntelligence.mostConnectedNotebooks.length > 0) {
+          const topHub = networkIntelligence.mostConnectedNotebooks[0];
           insights.push({
               type: 'hub',
               message: `"${topHub.notebook?.title || 'Unknown'}" is your most connected notebook with ${topHub.connections} connections.`,
@@ -490,17 +760,62 @@ class EnhancedConnectionsService {
    * Get fallback data when API fails
    */
   getFallbackData() {
+      // Generate some sample data for demonstration
+      const sampleNotebooks = [
+          { 
+              notebookId: 'demo-1', 
+              title: 'AI Research Notes', 
+              tags: ['AI', 'Research', 'Machine Learning'], 
+              wordCount: 1500,
+              preview: 'Notes on artificial intelligence and machine learning research...'
+          },
+          { 
+              notebookId: 'demo-2', 
+              title: 'Data Science Project', 
+              tags: ['Data Science', 'Python', 'Analytics'], 
+              wordCount: 2000,
+              preview: 'Project documentation for data science work...'
+          },
+          { 
+              notebookId: 'demo-3', 
+              title: 'Programming Best Practices', 
+              tags: ['Programming', 'Best Practices', 'Code'], 
+              wordCount: 1200,
+              preview: 'Guidelines and best practices for programming...'
+          },
+          { 
+              notebookId: 'demo-4', 
+              title: 'Research Papers Collection', 
+              tags: ['Research', 'Papers', 'Academic'], 
+              wordCount: 3000,
+              preview: 'Collection of research papers and analysis...'
+          }
+      ];
+
+      const sampleConnections = [
+          { source: 'demo-1', target: 'demo-4', type: 'smart_similarity', strength: 0.8, commonTags: ['Research'] },
+          { source: 'demo-1', target: 'demo-2', type: 'smart_similarity', strength: 0.6, commonTags: [] },
+          { source: 'demo-2', target: 'demo-3', type: 'smart_similarity', strength: 0.7, commonTags: ['Programming'] }
+      ];
+
       return {
-          notebooks: [],
-          connections: [],
-          networkIntelligence: this.getEmptyNetworkAnalysis(),
+          notebooks: sampleNotebooks,
+          connections: sampleConnections,
+          tagGroups: {
+              'ai': ['demo-1'],
+              'research': ['demo-1', 'demo-4'],
+              'data science': ['demo-2'],
+              'programming': ['demo-2', 'demo-3']
+          },
+          networkIntelligence: this.calculateBasicNetworkMetrics(sampleNotebooks, sampleConnections),
           smartClusters: { tagClusters: {}, statistics: { totalClusters: 0 } },
           statistics: {
-              totalNotebooks: 0,
-              totalConnections: 0,
+              totalNotebooks: sampleNotebooks.length,
+              totalConnections: sampleConnections.length,
               fallbackMode: true,
-              message: 'Unable to load data. Please check your connection and try again.'
-          }
+              message: 'Demo data displayed. Connect to your account to see real data.'
+          },
+          isDemoData: true
       };
   }
 
@@ -513,6 +828,10 @@ class EnhancedConnectionsService {
           totalConnections: 0,
           density: 0,
           averageConnections: 0,
+          networkDensity: 0,
+          isolatedNotebooks: [],
+          mostConnectedNotebooks: [],
+          averageConnectionStrength: 0,
           networkHealth: {
               connected: false,
               wellConnected: false,
@@ -529,39 +848,60 @@ class EnhancedConnectionsService {
   }
 
   /**
-   * Get user email from storage or auth context
+   * Get user email from auth service
    */
   getUserEmail() {
-      // This should be implemented based on your auth system
-      // Example implementations:
-      
-      // From localStorage
-      const stored = localStorage.getItem('userEmail') || localStorage.getItem('user');
-      if (stored) {
-          try {
-              const parsed = JSON.parse(stored);
-              return parsed.email || parsed;
-          } catch {
-              return stored.includes('@') ? stored : null;
+      try {
+          // Try to get from auth service first
+          if (this.authService && this.authService.getUserData) {
+              const userData = this.authService.getUserData();
+              if (userData && userData.email) {
+                  return userData.email;
+              }
           }
-      }
 
-      // From sessionStorage
-      const session = sessionStorage.getItem('userEmail') || sessionStorage.getItem('user');
-      if (session) {
-          try {
-              const parsed = JSON.parse(session);
-              return parsed.email || parsed;
-          } catch {
-              return session.includes('@') ? session : null;
+          // Fallback to localStorage/sessionStorage
+          const stored = localStorage.getItem('userEmail') || localStorage.getItem('user');
+          if (stored) {
+              try {
+                  const parsed = JSON.parse(stored);
+                  return parsed.email || (typeof parsed === 'string' && parsed.includes('@') ? parsed : null);
+              } catch {
+                  return stored.includes('@') ? stored : null;
+              }
           }
-      }
 
-      // From context or other auth providers
-      // return authContext.user?.email;
-      
-      console.warn('No user email found. Please implement getUserEmail() based on your auth system.');
-      return null;
+          const session = sessionStorage.getItem('userEmail') || sessionStorage.getItem('user');
+          if (session) {
+              try {
+                  const parsed = JSON.parse(session);
+                  return parsed.email || (typeof parsed === 'string' && parsed.includes('@') ? parsed : null);
+              } catch {
+                  return session.includes('@') ? session : null;
+              }
+          }
+
+          return null;
+      } catch (error) {
+          console.warn('Error getting user email:', error);
+          return null;
+      }
+  }
+
+  /**
+   * Get auth token
+   */
+  async getAuthToken() {
+      try {
+          if (this.authService && this.authService.getAuthHeaders) {
+              const headers = await this.authService.getAuthHeaders();
+              return headers.Authorization || '';
+          }
+          return '';
+      } catch (error) {
+          console.warn('Error getting auth token:', error);
+          return '';
+      }
   }
 
   /**
@@ -584,4 +924,7 @@ class EnhancedConnectionsService {
   }
 }
 
-export default EnhancedConnectionsService;
+// Create and export singleton instance
+const connectionsService = new EnhancedConnectionsService();
+
+export default connectionsService;
