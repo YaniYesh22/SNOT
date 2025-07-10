@@ -3,6 +3,7 @@ import 'react-quill/dist/quill.snow.css';
 
 import React, { useEffect, useState, useRef } from 'react';
 
+
 import { useNavigate, useLocation } from 'react-router-dom';
 
 import ReactQuill from 'react-quill';
@@ -12,10 +13,18 @@ import LinkConfirmationModal from '../components/LinkConfirmationModal';
 import notebookService from '../services/NotebookService';
 import { styles, injectNotebookDetailCSS } from '../styles/NotebookDetailPageStyles';
 
+
 export default function NotebookDetailPage() {
   injectNotebookDetailCSS();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // 🆕 State for custom instructions per summary type
+  const [customInstructions, setCustomInstructions] = useState({
+    academic: '',
+    casual: '',
+    simple: ''
+  });
 
   // Sidebar collapsed state (collapsed by default for every notebook)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
@@ -146,6 +155,208 @@ export default function NotebookDetailPage() {
   // Helper functions for chat control
   const hasContentSources = () => {
     return files.length > 0 || links.length > 0;
+  };
+
+  /**
+   * Format summary content with professional styling
+   */
+  const formatSummaryContent = (content) => {
+    if (!content) return null;
+
+    // Split content into lines for processing
+    const lines = content.split('\n');
+    const formattedElements = [];
+    let currentIndex = 0;
+
+    lines.forEach((line, index) => {
+      const trimmedLine = line.trim();
+      
+      if (!trimmedLine) {
+        // Empty line - add spacing
+        formattedElements.push(<div key={`empty-${index}`} style={{ height: '0.75rem' }} />);
+        return;
+      }
+
+      // Skip Method lines
+      if (trimmedLine.toLowerCase().includes('method:')) {
+        return;
+      }
+
+      // Skip Generated lines - we show this in the top metadata already
+      if (trimmedLine.startsWith('Generated:') || trimmedLine.includes('Generated:')) {
+        return;
+      }
+
+      // Main headers (## text) with consistent styling
+      if (trimmedLine.startsWith('## ')) {
+        const headerText = trimmedLine.replace(/^## /, '').replace(/^\s*[📋🎯🔬📊💡⚖️🌍🔗❓📝📚]\s*/, '');
+        formattedElements.push(
+          <div key={`h2-${index}`} style={{
+            marginTop: index === 0 ? 0 : '2rem',
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem'
+          }}>
+            <div style={{
+              background: '#475569',
+              color: 'white',
+              padding: '0.3rem 0.75rem',
+              borderRadius: '5px',
+              fontSize: '0.8rem',
+              fontWeight: '600',
+              textTransform: 'uppercase',
+              letterSpacing: '0.02em'
+            }}>
+              {headerText}
+            </div>
+            <div style={{
+              flex: 1,
+              height: '1px',
+              background: '#e2e8f0'
+            }}></div>
+          </div>
+        );
+        return;
+      }
+
+      // Sub headers (### text) with consistent styling
+      if (trimmedLine.startsWith('### ')) {
+        const headerText = trimmedLine.replace(/^### /, '');
+        formattedElements.push(
+          <h3 key={`h3-${index}`} style={{
+            fontSize: '1rem',
+            fontWeight: '600',
+            color: '#374151',
+            marginTop: '1.5rem',
+            marginBottom: '0.75rem',
+            padding: '0.25rem 0',
+            borderLeft: '3px solid #e2e8f0',
+            paddingLeft: '0.75rem',
+            background: 'rgba(241, 245, 249, 0.5)'
+          }}>
+            {headerText}
+          </h3>
+        );
+        return;
+      }
+
+      // Single # headers with consistent styling
+      if (trimmedLine.startsWith('# ')) {
+        const headerText = trimmedLine.replace(/^# /, '');
+        formattedElements.push(
+          <div key={`h1-${index}`} style={{
+            marginTop: index === 0 ? 0 : '1.5rem',
+            marginBottom: '1rem',
+            textAlign: 'center'
+          }}>
+            <h1 style={{
+              fontSize: '1.1rem',
+              fontWeight: '600',
+              color: '#374151',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              padding: '0.5rem 1rem',
+              borderRadius: '8px',
+              margin: '0',
+              display: 'inline-block'
+            }}>
+              {headerText}
+            </h1>
+          </div>
+        );
+        return;
+      }
+
+      // Bullet points (- text or • text)
+      if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('• ')) {
+        const bulletText = trimmedLine.replace(/^[-•]\s*/, '').replace(/^\s*[📋🎯🔬📊💡⚖️🌍🔗❓📝📚]\s*/, '');
+        const formattedText = formatInlineText(bulletText);
+        formattedElements.push(
+          <div key={`bullet-${index}`} style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            marginBottom: '0.75rem',
+            paddingLeft: '1.5rem'
+          }}>
+            <span style={{
+              color: '#64748b',
+              fontWeight: '500',
+              marginRight: '1rem',
+              marginTop: '0.125rem',
+              fontSize: '0.9rem'
+            }}>
+              •
+            </span>
+            <span style={{
+              flex: 1,
+              lineHeight: '1.6',
+              color: '#475569'
+            }}>
+              {formattedText}
+            </span>
+          </div>
+        );
+        return;
+      }
+
+      // Regular paragraphs
+      const formattedText = formatInlineText(trimmedLine);
+      formattedElements.push(
+        <p key={`p-${index}`} style={{
+          marginBottom: '1rem',
+          lineHeight: '1.7',
+          color: '#475569',
+          textAlign: 'left'
+        }}>
+          {formattedText}
+        </p>
+      );
+    });
+
+    return <div>{formattedElements}</div>;
+  };
+
+  /**
+   * Format inline text (bold, italic, etc.)
+   */
+  const formatInlineText = (text) => {
+    // Remove excessive emojis at the beginning of lines
+    let cleanText = text.replace(/^\s*[📋🎯🔬📊💡⚖️🌍🔗❓📝📚]\s*/, '');
+    
+    const parts = [];
+    let currentIndex = 0;
+    
+    // Handle bold text (**text**)
+    const boldRegex = /\*\*(.*?)\*\*/g;
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = boldRegex.exec(cleanText)) !== null) {
+      // Add text before bold
+      if (match.index > lastIndex) {
+        parts.push(cleanText.substring(lastIndex, match.index));
+      }
+      
+      // Add bold text
+      parts.push(
+        <strong key={`bold-${currentIndex++}`} style={{
+          fontWeight: '600',
+          color: '#1e293b'
+        }}>
+          {match[1]}
+        </strong>
+      );
+      
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text
+    if (lastIndex < cleanText.length) {
+      parts.push(cleanText.substring(lastIndex));
+    }
+    
+    return parts.length > 1 ? parts : cleanText;
   };
 
   /**
@@ -565,6 +776,12 @@ export default function NotebookDetailPage() {
 
   const openSummaryPage = async (summaryType, summaryUrl) => {
     try {
+      console.log(`📖 Opening summary page for ${summaryType}`, {
+        url: summaryUrl,
+        currentSummaries: Object.keys(generatedSummaries),
+        summaryData: generatedSummaries[summaryType]
+      });
+
       const summaryData = generatedSummaries[summaryType];
 
       if (!summaryData) {
@@ -618,8 +835,49 @@ export default function NotebookDetailPage() {
 
   // Function to close summary page and return to main notebook view
   const closeSummaryPage = () => {
+    console.log(`🔙 Closing summary page for ${currentSummaryPage}`, {
+      currentSummaryPage,
+      summariesBefore: Object.keys(generatedSummaries),
+      currentSummaryData: currentSummaryPage ? generatedSummaries[currentSummaryPage] : null
+    });
+
     setShowSummaryPage(false);
+    
+    // Store the current summary type before clearing it
+    const justViewedSummary = currentSummaryPage;
     setCurrentSummaryPage(null);
+    
+    // Ensure the summary that was just viewed remains available
+    // This prevents the summary from disappearing when returning to notebook
+    if (justViewedSummary && generatedSummaries[justViewedSummary]) {
+      const currentSummary = generatedSummaries[justViewedSummary];
+      
+      console.log(`🔄 Preserving summary state for ${justViewedSummary}:`, {
+        ready: currentSummary.ready,
+        hasUrl: !!currentSummary.url,
+        hasContent: !!currentSummary.content,
+        url: currentSummary.url
+      });
+      
+      // Ensure the summary maintains its ready state and visibility criteria
+      setGeneratedSummaries(prev => {
+        const preserved = {
+          ...prev,
+          [justViewedSummary]: {
+            ...currentSummary,
+            ready: true, // Ensure it stays ready
+            // Preserve all existing properties
+          }
+        };
+        
+        console.log(`✅ Summary state preserved for ${justViewedSummary}`, {
+          summariesAfter: Object.keys(preserved),
+          preservedSummary: preserved[justViewedSummary]
+        });
+        
+        return preserved;
+      });
+    }
   };
 
   // Function to get formatted summary type name
@@ -655,6 +913,7 @@ export default function NotebookDetailPage() {
     return null;
   };
 
+  // 🆕 Enhanced: handleSummarize with custom instructions
   const handleSummarize = async (summaryType) => {
     setShowSummaryDropdown(false);
     setIsGeneratingSummary(true);
@@ -663,8 +922,18 @@ export default function NotebookDetailPage() {
     try {
       console.log(`Starting ${summaryType} summary with progress tracking...`);
 
+      // Prepare custom instructions object for API
+      const instructions = {};
+      if (customInstructions[summaryType]?.trim()) {
+        instructions[summaryType] = customInstructions[summaryType].trim();
+      }
+
       // Step 1: Start the summary generation using your new Lambda endpoint
-      const startResult = await notebookService.startSummary(notebook.notebookId, [summaryType]);
+      const startResult = await notebookService.startSummary(
+        notebook.notebookId,
+        [summaryType],
+        instructions
+      );
 
       console.log(`✅ Summary started:`, startResult);
 
@@ -996,7 +1265,7 @@ export default function NotebookDetailPage() {
     }
   };
 
-  // Updated renderGeneratedSummariesSection to handle content-only summaries
+  // Updated renderGeneratedSummariesSection to always show the section
   const renderGeneratedSummariesSection = () => {
     console.log('🔍 Rendering summaries section, generatedSummaries:', generatedSummaries);
 
@@ -1029,17 +1298,14 @@ export default function NotebookDetailPage() {
         hasContentPlaceholder: hasContentPlaceholder,
         url: data.url,
         contentLength: data.content?.length || 0,
-        passes: passes
+        passes: passes,
+        wasJustViewed: type === currentSummaryPage
       });
 
       return passes;
     });
 
-    if (availableSummaries.length === 0) {
-      console.log('⚠️ No available summaries to display');
-      return null;
-    }
-
+    // Always return the section structure
     return (
       <div style={styles.summariesSection}>
         <div style={styles.summariesHeader}>
@@ -1051,207 +1317,235 @@ export default function NotebookDetailPage() {
           </div>
         </div>
 
-        <div style={styles.summariesGrid}>
-          {availableSummaries.map(([summaryType, summaryData]) => {
-            const metadataItems = [];
+        {availableSummaries.length === 0 ? (
+          // Empty state when no summaries are available
+          <div style={styles.noSummariesMessage}>
+            <div style={styles.noSummariesIcon}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+              </svg>
+            </div>
+            <p style={styles.noSummariesText}>No summaries yet</p>
+            <p style={styles.noSummariesSubtext}>
+              Add files or links, then use the "Summarize" button to generate summaries
+            </p>
+          </div>
+        ) : (
+          // Show summaries grid when summaries are available
+          <div style={styles.summariesGrid}>
+            {availableSummaries.map(([summaryType, summaryData]) => {
+              const metadataItems = [];
 
-            if (summaryData.generatedAt) {
-              metadataItems.push({
-                icon: '📅',
-                label: 'Generated',
-                value: new Date(summaryData.generatedAt).toLocaleDateString()
-              });
-            }
-            if (summaryData.fileSizeFormatted) {
-              metadataItems.push({
-                icon: '📦',
-                label: 'Size',
-                value: summaryData.fileSizeFormatted
-              });
-            }
-            if (summaryData.wordCount) {
-              metadataItems.push({
-                icon: '📝',
-                label: 'Words',
-                value: summaryData.wordCount.toLocaleString()
-              });
-            }
-            if (summaryData.readingTime) {
-              metadataItems.push({
-                icon: '⏱️',
-                label: 'Reading',
-                value: summaryData.readingTime
-              });
-            }
-
-            // Handle click for both URL-based and content-based summaries
-            const handleSummaryClick = () => {
-              const hasRealUrl = summaryData.url &&
-                !summaryData.url.startsWith('#') &&
-                (summaryData.url.startsWith('http') || summaryData.url.startsWith('s3://'));
-
-              if (hasRealUrl) {
-                // Use the real URL
-                openSummaryPage(summaryType, summaryData.url);
-              } else if (summaryData.content) {
-                // Use content directly with a placeholder URL
-                openSummaryPage(summaryType, `#content-${summaryType}`);
-              } else {
-                console.warn(`⚠️ Cannot open summary ${summaryType} - no URL or content available`);
+              if (summaryData.generatedAt) {
+                metadataItems.push({
+                  icon: '📅',
+                  label: 'Generated',
+                  value: new Date(summaryData.generatedAt).toLocaleDateString()
+                });
               }
-            };
+              if (summaryData.fileSizeFormatted) {
+                metadataItems.push({
+                  icon: '📦',
+                  label: 'Size',
+                  value: summaryData.fileSizeFormatted
+                });
+              }
+              if (summaryData.wordCount) {
+                metadataItems.push({
+                  icon: '📝',
+                  label: 'Words',
+                  value: summaryData.wordCount.toLocaleString()
+                });
+              }
+              if (summaryData.readingTime) {
+                metadataItems.push({
+                  icon: '⏱️',
+                  label: 'Reading',
+                  value: summaryData.readingTime
+                });
+              }
 
-            return (
-              <div
-                key={summaryType}
-                style={styles.summaryCard}
-                onClick={handleSummaryClick}
-                className="modern-summary-card"
-              >
-                {/* Header with icon and type */}
-                <div style={styles.summaryCardHeader}>
-                  <div style={styles.summaryTypeIcon}>
-                    {summaryType === 'casual' ? '💬' :
-                      summaryType === 'academic' ? '🎓' :
-                        summaryType === 'simple' ? '✨' : '📄'}
-                  </div>
-                  <div style={styles.summaryCardTitle}>
-                    <div style={styles.summaryTypeName}>
-                      {getFormattedSummaryName(summaryType)}
-                    </div>
-                    <div style={styles.summaryStatus}>
-                      <div style={styles.statusDot}></div>
-                      {summaryData.hasContent ? 'Ready with Content' : 'Ready'}
-                    </div>
-                  </div>
-                  <div style={styles.summaryCardAction}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" />
-                    </svg>
-                  </div>
-                </div>
+              // Handle click for both URL-based and content-based summaries
+              const handleSummaryClick = () => {
+                console.log(`🖱️ Clicking summary ${summaryType}`, {
+                  url: summaryData.url,
+                  hasContent: !!summaryData.content,
+                  contentLength: summaryData.content?.length || 0
+                });
 
-                {/* Metadata */}
-                {metadataItems.length > 0 && (
-                  <div style={styles.summaryMetadata}>
-                    {metadataItems.map((item, index) => (
-                      <div key={index} style={styles.metadataItem}>
-                        <span style={styles.metadataIcon}>{item.icon}</span>
-                        <span style={styles.metadataLabel}>{item.label}:</span>
-                        <span style={styles.metadataValue}>{item.value}</span>
+                const hasRealUrl = summaryData.url &&
+                  !summaryData.url.startsWith('#') &&
+                  (summaryData.url.startsWith('http') || summaryData.url.startsWith('s3://'));
+
+                if (hasRealUrl) {
+                  // Use the real URL
+                  openSummaryPage(summaryType, summaryData.url);
+                } else if (summaryData.content) {
+                  // Use content directly with a placeholder URL
+                  openSummaryPage(summaryType, `#content-${summaryType}`);
+                } else {
+                  console.warn(`⚠️ Cannot open summary ${summaryType} - no URL or content available`);
+                }
+              };
+
+              return (
+                <div
+                  key={summaryType}
+                  style={styles.summaryCard}
+                  onClick={handleSummaryClick}
+                  className="modern-summary-card"
+                >
+                  {/* Header with icon and type */}
+                  <div style={styles.summaryCardHeader}>
+                    <div style={styles.summaryTypeIcon}>
+                      {summaryType === 'casual' ? '💬' :
+                        summaryType === 'academic' ? '🎓' :
+                          summaryType === 'simple' ? '✨' : '📄'}
+                    </div>
+                    <div style={styles.summaryCardTitle}>
+                      <div style={styles.summaryTypeName}>
+                        {getFormattedSummaryName(summaryType)}
                       </div>
-                    ))}
+                      <div style={styles.summaryStatus}>
+                        <div style={styles.statusDot}></div>
+                        {summaryData.hasContent ? 'Ready with Content' : 'Ready'}
+                      </div>
+                    </div>
+                    <div style={styles.summaryCardAction}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" />
+                      </svg>
+                    </div>
                   </div>
-                )}
 
-                {/* Progress bar for visual appeal */}
-                <div style={styles.summaryProgress}>
-                  <div style={styles.progressBar}>
-                    <div style={styles.progressFill}></div>
+                  {/* Metadata */}
+                  {metadataItems.length > 0 && (
+                    <div style={styles.summaryMetadata}>
+                      {metadataItems.map((item, index) => (
+                        <div key={index} style={styles.metadataItem}>
+                          <span style={styles.metadataIcon}>{item.icon}</span>
+                          <span style={styles.metadataLabel}>{item.label}:</span>
+                          <span style={styles.metadataValue}>{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Progress bar for visual appeal */}
+                  <div style={styles.summaryProgress}>
+                    <div style={styles.progressBar}>
+                      <div style={styles.progressFill}></div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
 
-  // Progress modal component - Now a small dismissible popup
-  const renderSummaryProgress = () => {
-    if (!summaryProgress || !isPollingProgress) return null;
+  // Updated renderSummaryProgress function - removes the 0/0 completed display
+const renderSummaryProgress = () => {
+  if (!summaryProgress || !isPollingProgress) return null;
 
-    const { status, progressSummary, elapsedTime, estimatedTimeRemaining, message } = summaryProgress;
+  const { status, progressSummary, elapsedTime, estimatedTimeRemaining, message } = summaryProgress;
 
-    if (status !== 'processing') return null;
+  if (status !== 'processing') return null;
 
-    const { completed = 0, processing = 0, total = 1 } = progressSummary || {};
-    const progressPercentage = total > 0 ? Math.round(((completed + (processing * 0.5)) / total) * 100) : 0;
+  const { completed = 0, processing = 0, total = 1 } = progressSummary || {};
+  const progressPercentage = total > 0 ? Math.round(((completed + (processing * 0.5)) / total) * 100) : 0;
 
-    return (
-      <div style={styles.summaryProgressPopup}>
-        <div style={styles.progressPopupHeader}>
-          <div style={styles.progressPopupTitle}>
-            <span style={styles.progressIcon}>⚡</span>
-            Generating Summary...
-          </div>
-          <button
-            onClick={() => {
-              setIsPollingProgress(false);
-              setIsGeneratingSummary(false);
-              setSummaryProgress(null);
-              // Note: This just hides the popup, generation continues in background
-            }}
-            style={styles.progressPopupClose}
-            className="progress-popup-close"
-            title="Hide progress (generation continues)"
-          >
-            ✕
-          </button>
+  // Only show completed/total stats if there are meaningful numbers (not 0/0 or 0/1)
+  const showCompletionStats = total > 1 && (completed > 0 || processing > 0);
+
+  return (
+    <div style={styles.summaryProgressPopup}>
+      <div style={styles.progressPopupHeader}>
+        <div style={styles.progressPopupTitle}>
+          <span style={styles.progressIcon}>⚡</span>
+          Generating Summary...
         </div>
+        <button
+          onClick={() => {
+            setIsPollingProgress(false);
+            setIsGeneratingSummary(false);
+            setSummaryProgress(null);
+            // Note: This just hides the popup, generation continues in background
+          }}
+          style={styles.progressPopupClose}
+          className="progress-popup-close"
+          title="Hide progress (generation continues)"
+        >
+          ✕
+        </button>
+      </div>
 
-        <div style={styles.progressPopupContent}>
+      <div style={styles.progressPopupContent}>
+        {/* Only show completion stats if meaningful */}
+        {showCompletionStats && (
           <div style={styles.progressPopupStats}>
             <span style={{ fontWeight: '600', color: '#0f172a' }}>
               {completed}/{total} completed
             </span>
           </div>
+        )}
 
-          <div style={styles.progressBar}>
-            <div
-              style={{
-                height: '8px',
-                background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
-                borderRadius: '4px',
-                transition: 'width 0.5s ease',
-                width: `${Math.min(progressPercentage, 95)}%`,
-                backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%)',
-                backgroundSize: '16px 16px',
-                animation: 'progressStripes 1s linear infinite'
-              }}
-            />
-          </div>
-
-          <div style={styles.progressPopupText}>
-            {message || 'Summary generation in progress'}
-          </div>
-
-          {(elapsedTime || estimatedTimeRemaining) && (
-            <div style={styles.progressPopupTime}>
-              {elapsedTime && (
-                <span>⏱️ {elapsedTime}</span>
-              )}
-              {estimatedTimeRemaining && (
-                <span>• ~{estimatedTimeRemaining} remaining</span>
-              )}
-            </div>
-          )}
-
-          {summaryProgress.progress && (
-            <div style={styles.progressTypeDetails}>
-              {Object.entries(summaryProgress.progress).map(([type, typeProgress]) => (
-                <div key={type} style={styles.progressTypeItem}>
-                  <span style={styles.progressTypeName}>
-                    {type.charAt(0).toUpperCase() + type.slice(1)}:
-                  </span>
-                  <span style={{
-                    ...styles.progressTypeStatus,
-                    color: typeProgress.status === 'completed' ? '#10b981' :
-                      typeProgress.status === 'generating' ? '#3b82f6' : '#6b7280'
-                  }}>
-                    {typeProgress.status === 'completed' ? '✓ Done' :
-                      typeProgress.status === 'generating' ? '⚡ Generating...' :
-                        '⏳ Pending'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+        <div style={styles.progressBar}>
+          <div
+            style={{
+              height: '8px',
+              background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
+              borderRadius: '4px',
+              transition: 'width 0.5s ease',
+              width: `${Math.min(progressPercentage, 95)}%`,
+              backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%)',
+              backgroundSize: '16px 16px',
+              animation: 'progressStripes 1s linear infinite'
+            }}
+          />
         </div>
+
+        <div style={styles.progressPopupText}>
+          {message || 'Summary generation in progress'}
+        </div>
+
+        {(elapsedTime || estimatedTimeRemaining) && (
+          <div style={styles.progressPopupTime}>
+            {elapsedTime && (
+              <span>⏱️ {elapsedTime}</span>
+            )}
+            {estimatedTimeRemaining && (
+              <span>| ~{estimatedTimeRemaining} remaining</span>
+            )}
+          </div>
+        )}
+
+        {summaryProgress.progress && (
+          <div style={styles.progressTypeDetails}>
+            {Object.entries(summaryProgress.progress).map(([type, typeProgress]) => (
+              <div key={type} style={styles.progressTypeItem}>
+                <span style={styles.progressTypeName}>
+                  {type.charAt(0).toUpperCase() + type.slice(1)}:
+                </span>
+                <span style={{
+                  ...styles.progressTypeStatus,
+                  color: typeProgress.status === 'completed' ? '#10b981' :
+                    typeProgress.status === 'generating' ? '#3b82f6' : '#6b7280'
+                }}>
+                  {typeProgress.status === 'completed' ? '✓ Done' :
+                    typeProgress.status === 'generating' ? '⚡ Generating...' :
+                      '⏳ Pending'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   // Save Chat Modal Component
   const renderSaveChatModal = () => {
@@ -1353,7 +1647,7 @@ export default function NotebookDetailPage() {
     if (!isLoadingChats && savedChats.length === 0) {
       return (
         <div style={debugDropdownStyle}>
-          <div style={{padding: 16, color: '#1d4ed8', fontWeight: 600}}>
+          <div style={{ padding: 16, color: '#1d4ed8', fontWeight: 600 }}>
             No saved chats found. (DEBUG)
           </div>
         </div>
@@ -1426,88 +1720,57 @@ export default function NotebookDetailPage() {
     );
   };
 
-  // Updated Chat Header Actions
-  const renderChatHeaderActions = () => (
-    <div style={styles.chatHeaderActions}>
-      {/* View Summaries dropdown - only show if summaries available */}
-      {getChatState().state === 'available' && Object.keys(generatedSummaries).length > 0 && (
-        <div style={styles.summariesDropdown}>
-          <select
-            onChange={(e) => {
-              if (e.target.value) {
-                const summaryType = e.target.value;
-                const summaryData = generatedSummaries[summaryType];
-                if (summaryData?.url) {
-                  viewSummary(summaryType, summaryData.url);
-                }
-              }
-              e.target.value = '';
-            }}
-            style={styles.summariesSelect}
-            className="summaries-select"
-            defaultValue=""
-          >
-            <option value="">📄 View Summaries</option>
-            {Object.entries(generatedSummaries)
-              .filter(([type, data]) => {
-                const hasValidUrl = data.url && !data.url.startsWith('#');
-                return data.ready && hasValidUrl;
-              })
-              .map(([type, data]) => (
-                <option key={type} value={type}>
-                  {type.charAt(0).toUpperCase() + type.slice(1)} Summary
-                </option>
-              ))}
-          </select>
-        </div>
-      )}
+  // Updated Chat Header Actions - Remove View Summaries dropdown
+const renderChatHeaderActions = () => (
+  <div style={styles.chatHeaderActions}>
+    {/* Removed: View Summaries dropdown - users should use the Generated Summaries section instead */}
 
-      {/* Saved Chats Button - show if there are saved chats or current messages */}
-      {(savedChats.length > 0 || chatMessages.length > 0) && (
-        <div style={styles.savedChatsContainer}>
-          <button
-            onClick={() => setShowSavedChatsDropdown(!showSavedChatsDropdown)}
-            style={styles.savedChatsButton}
-            className="saved-chats-button"
-            title={`View ${savedChats.length} saved chats`}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M5,7H19V5H5V7M5,11H19V9H5V11M5,15H19V13H5V15M5,19H19V17H5V19Z" />
-            </svg>
-            📚 Chats ({savedChats.length})
-          </button>
-          {renderSavedChatsDropdown()}
-        </div>
-      )}
-
-      {/* Save Chat Button - only show if there are messages to save */}
-      {chatMessages.length > 0 && (
+    {/* Saved Chats Button - show if there are saved chats or current messages */}
+    {(savedChats.length > 0 || chatMessages.length > 0) && (
+      <div style={styles.savedChatsContainer}>
         <button
-          onClick={() => setShowSaveChatModal(true)}
-          style={styles.saveChatButton}
-          className="save-chat-button"
-          title="Save current conversation"
+          onClick={() => setShowSavedChatsDropdown(!showSavedChatsDropdown)}
+          style={styles.savedChatsButton}
+          className="saved-chats-button"
+          title={`View ${savedChats.length} saved chats`}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z" />
+            <path d="M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M5,7H19V5H5V7M5,11H19V9H5V11M5,15H19V13H5V15M5,19H19V17H5V19Z" />
           </svg>
-          💾 Save
+          📚 Chats ({savedChats.length})
         </button>
-      )}
+        {renderSavedChatsDropdown()}
+      </div>
+    )}
 
-      {/* Clear chat button - only show if chat has messages */}
-      {chatMessages.length > 0 && (
-        <button
-          onClick={clearConversation}
-          style={styles.clearChatButton}
-          className="clear-chat-button"
-          title="Clear current conversation"
-        >
-          🗑️ Clear
-        </button>
-      )}
-    </div>
-  );
+    {/* Save Chat Button - only show if there are messages to save */}
+    {chatMessages.length > 0 && (
+      <button
+        onClick={() => setShowSaveChatModal(true)}
+        style={styles.saveChatButton}
+        className="save-chat-button"
+        title="Save current conversation"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z" />
+        </svg>
+        💾 Save
+      </button>
+    )}
+
+    {/* Clear chat button - only show if chat has messages */}
+    {chatMessages.length > 0 && (
+      <button
+        onClick={clearConversation}
+        style={styles.clearChatButton}
+        className="clear-chat-button"
+        title="Clear current conversation"
+      >
+        🗑️ Clear
+      </button>
+    )}
+  </div>
+);
 
   // Cleanup effects with better dependency handling
   useEffect(() => {
@@ -1535,15 +1798,19 @@ export default function NotebookDetailPage() {
     console.log('🔍 generatedSummaries state updated:', {
       count: Object.keys(generatedSummaries).length,
       summaries: Object.keys(generatedSummaries),
+      showSummaryPage,
+      currentSummaryPage,
       detailed: Object.entries(generatedSummaries).map(([type, data]) => ({
         type,
         ready: data.ready,
         hasUrl: !!data.url,
         url: data.url,
-        urlValid: data.url && !data.url.startsWith('#')
+        urlValid: data.url && !data.url.startsWith('#'),
+        hasContent: !!data.content,
+        contentLength: data.content?.length || 0
       }))
     });
-  }, [generatedSummaries]);
+  }, [generatedSummaries, showSummaryPage, currentSummaryPage]);
 
   useEffect(() => {
     console.log('🔍 Polling state changed:', {
@@ -2615,29 +2882,55 @@ export default function NotebookDetailPage() {
                             Choose Summary Type
                           </div>
 
-                          <button
-                            onClick={() => handleSummarize('casual')}
-                            style={styles.summaryOption}
-                          >
-                            <div style={styles.summaryOptionTitle}>Casual</div>
-                            <div style={styles.summaryOptionDesc}>Conversational and easy to understand</div>
-                          </button>
-
-                          <button
-                            onClick={() => handleSummarize('academic')}
-                            style={styles.summaryOption}
-                          >
-                            <div style={styles.summaryOptionTitle}>Academic</div>
-                            <div style={styles.summaryOptionDesc}>Detailed analysis with key findings</div>
-                          </button>
-
-                          <button
-                            onClick={() => handleSummarize('simple')}
-                            style={styles.summaryOption}
-                          >
-                            <div style={styles.summaryOptionTitle}>Beginner Friendly</div>
-                            <div style={styles.summaryOptionDesc}>Simple bullet points and essential facts</div>
-                          </button>
+                          {/* 🆕 Enhanced: Each summary type with custom instructions input */}
+                          <div style={{marginBottom: 16}}>
+                            <button
+                              onClick={() => handleSummarize('casual')}
+                              style={styles.summaryOption}
+                            >
+                              <div style={styles.summaryOptionTitle}>Casual</div>
+                              <div style={styles.summaryOptionDesc}>Conversational and easy to understand</div>
+                            </button>
+                            <textarea
+                              style={{width: '100%', marginTop: 4, fontSize: '0.95em', padding: 6, borderRadius: 4, border: '1px solid #ddd'}}
+                              placeholder="Optional: Add custom instructions for Casual (e.g. 'Use sports analogies')"
+                              value={customInstructions.casual}
+                              onChange={e => setCustomInstructions(ci => ({...ci, casual: e.target.value}))}
+                              rows={2}
+                            />
+                          </div>
+                          <div style={{marginBottom: 16}}>
+                            <button
+                              onClick={() => handleSummarize('academic')}
+                              style={styles.summaryOption}
+                            >
+                              <div style={styles.summaryOptionTitle}>Academic</div>
+                              <div style={styles.summaryOptionDesc}>Detailed analysis with key findings</div>
+                            </button>
+                            <textarea
+                              style={{width: '100%', marginTop: 4, fontSize: '0.95em', padding: 6, borderRadius: 4, border: '1px solid #ddd'}}
+                              placeholder="Optional: Add custom instructions for Academic (e.g. 'Focus on practical applications')"
+                              value={customInstructions.academic}
+                              onChange={e => setCustomInstructions(ci => ({...ci, academic: e.target.value}))}
+                              rows={2}
+                            />
+                          </div>
+                          <div>
+                            <button
+                              onClick={() => handleSummarize('simple')}
+                              style={styles.summaryOption}
+                            >
+                              <div style={styles.summaryOptionTitle}>Beginner Friendly</div>
+                              <div style={styles.summaryOptionDesc}>Simple bullet points and essential facts</div>
+                            </button>
+                            <textarea
+                              style={{width: '100%', marginTop: 4, fontSize: '0.95em', padding: 6, borderRadius: 4, border: '1px solid #ddd'}}
+                              placeholder="Optional: Add custom instructions for Beginner (e.g. 'Use more visuals')"
+                              value={customInstructions.simple}
+                              onChange={e => setCustomInstructions(ci => ({...ci, simple: e.target.value}))}
+                              rows={2}
+                            />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2702,8 +2995,11 @@ export default function NotebookDetailPage() {
         <div style={styles.contentLayout}>
           {/* Conditional rendering for summary page vs main notebook view */}
           {showSummaryPage && currentSummaryPage ? (
-            /* Summary Page View - spans full width */
-            <div style={styles.summaryPageContainer}>
+            /* Summary Page View - spans full width but respects sidebar */
+            <div style={{
+              ...styles.summaryPageContainer,
+              flex: 1
+            }}>
               <div style={styles.summaryPageHeader}>
                 <button onClick={closeSummaryPage} style={styles.backToNotebookButton}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -2711,20 +3007,27 @@ export default function NotebookDetailPage() {
                   </svg>
                   Back to Notebook
                 </button>
-                <div style={styles.summaryPageTitle}>
-                  <h1 style={styles.summaryPageMainTitle}>
-                    {getFormattedSummaryName(currentSummaryPage)}
-                  </h1>
-                  <p style={styles.summaryPageSubtitle}>
-                    Generated for: {notebook.title}
-                  </p>
-                </div>
               </div>
 
-              <div style={styles.summaryPageContent}>
+              <div style={{
+                ...styles.summaryPageContent,
+                padding: '1rem 3rem 2rem',
+                maxWidth: 'none'
+              }}>
                 {generatedSummaries[currentSummaryPage]?.content ? (
-                  <div style={styles.summaryPageText}>
-                    <div style={styles.summaryPageMeta}>
+                  <div style={{
+                    ...styles.summaryPageText,
+                    maxWidth: 'none',
+                    width: '100%'
+                  }}>
+                    <div style={{
+                      ...styles.summaryPageMeta,
+                      display: 'flex',
+                      justifyContent: 'center',
+                      gap: '2rem',
+                      marginBottom: '2rem',
+                      flexWrap: 'wrap'
+                    }}>
                       <span style={styles.summaryPageMetaItem}>
                         📅 Generated: {new Date(generatedSummaries[currentSummaryPage].generatedAt || Date.now()).toLocaleString()}
                       </span>
@@ -2736,11 +3039,22 @@ export default function NotebookDetailPage() {
                       </span>
                     </div>
 
-                    <div style={styles.summaryPageTextContent}>
-                      {generatedSummaries[currentSummaryPage].content}
+                    <div style={{
+                      ...styles.summaryPageTextContent,
+                      maxWidth: 'none',
+                      width: '100%',
+                      margin: '0',
+                      padding: '2.5rem',
+                      fontSize: '1rem',
+                      lineHeight: '1.8'
+                    }}>
+                      {formatSummaryContent(generatedSummaries[currentSummaryPage].content)}
                     </div>
 
-                    <div style={styles.summaryPageActions}>
+                    <div style={{
+                      ...styles.summaryPageActions,
+                      marginTop: '2rem'
+                    }}>
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText(generatedSummaries[currentSummaryPage].content);

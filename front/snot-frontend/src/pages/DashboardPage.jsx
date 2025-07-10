@@ -25,6 +25,8 @@ const getNotebookTags = (notebook) => {
 
 export default function DashboardPage() {
   const [notebooks, setNotebooks] = useState([]);
+  // Sidebar collapsed state (expanded by default on dashboard)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState('create'); // 'create', 'edit', 'delete'
   const [newTitle, setNewTitle] = useState("");
@@ -382,7 +384,10 @@ const handleCardClick = (notebook) => {
 
   return (
     <div style={styles.container}>
-      <Sidebar />
+      <Sidebar
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+      />
 
       <main style={styles.main}>
         {isLoading ? (

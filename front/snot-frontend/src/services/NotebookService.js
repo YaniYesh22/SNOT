@@ -2103,7 +2103,8 @@ class NotebookService {
    * @param {string[]} summaryTypes - Array of summary types ['casual', 'academic', 'simple']
    * @returns {Promise<object>} - Task information for polling
    */
-  async startSummary(notebookId, summaryTypes) {
+  // Enhanced: Accept customInstructions as third argument
+  async startSummary(notebookId, summaryTypes, customInstructions = {}) {
     try {
       if (!notebookId) {
         throw new Error('Notebook ID is required');
@@ -2129,11 +2130,15 @@ class NotebookService {
         throw new Error('Valid user email required - please login again');
       }
 
-      // Prepare payload for start summary endpoint
+
+      // Prepare payload for start summary endpoint (enhanced for custom instructions)
       const payload = {
         notebookId: notebookId,
         summaryTypes: summaryTypes
       };
+      if (customInstructions && Object.keys(customInstructions).length > 0) {
+        payload.customInstructions = customInstructions;
+      }
 
       console.log('🚀 Calling start summary endpoint with payload:', payload);
 

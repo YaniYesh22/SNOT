@@ -508,360 +508,360 @@ export const styles = {
     overflow: 'hidden'
   },
 
-// Enhanced Saved Chats Button
-savedChatsButton: {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.625rem',
-  padding: '0.75rem 1rem',
-  background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-  color: '#475569',
-  border: '2px solid #e2e8f0',
-  borderRadius: '12px',
-  fontSize: '0.8rem',
-  fontWeight: '600',
-  cursor: 'pointer',
-  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.06)'
-},
+  // Enhanced Saved Chats Button
+  savedChatsButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.625rem',
+    padding: '0.75rem 1rem',
+    background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+    color: '#475569',
+    border: '2px solid #e2e8f0',
+    borderRadius: '12px',
+    fontSize: '0.8rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.06)'
+  },
 
-// Enhanced Save Chat Button
-saveChatButton: {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.5rem',
-  padding: '0.75rem 1rem',
-  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-  color: 'white',
-  border: 'none',
-  borderRadius: '12px',
-  fontSize: '0.8rem',
-  fontWeight: '600',
-  cursor: 'pointer',
-  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
-},
+  // Enhanced Save Chat Button
+  saveChatButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    padding: '0.75rem 1rem',
+    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '12px',
+    fontSize: '0.8rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
+  },
 
-// Enhanced Dropdown
-savedChatsDropdown: {
-  position: 'absolute',
-  top: '100%',
-  right: 0,
-  marginTop: '0.75rem',
-  width: '420px',
-  background: 'white',
-  border: '1px solid #e2e8f0',
-  borderRadius: '20px',
-  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.1)',
-  overflow: 'hidden',
-  zIndex: 1001,
-  animation: 'savedChatsSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
-},
+  // Enhanced Dropdown
+  savedChatsDropdown: {
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    marginTop: '0.75rem',
+    width: '420px',
+    background: 'white',
+    border: '1px solid #e2e8f0',
+    borderRadius: '20px',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.1)',
+    overflow: 'hidden',
+    zIndex: 1001,
+    animation: 'savedChatsSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+  },
 
-// Enhanced Dropdown Header
-savedChatsDropdownHeader: {
-  padding: '1.5rem 1.75rem 1.25rem',
-  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-  borderBottom: '2px solid #e2e8f0',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.75rem',
-  fontSize: '1.1rem',
-  fontWeight: '700',
-  color: '#0f172a'
-},
+  // Enhanced Dropdown Header
+  savedChatsDropdownHeader: {
+    padding: '1.5rem 1.75rem 1.25rem',
+    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+    borderBottom: '2px solid #e2e8f0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    fontSize: '1.1rem',
+    fontWeight: '700',
+    color: '#0f172a'
+  },
 
-// Enhanced Content
-savedChatsContent: {
-  maxHeight: '400px',
-  overflow: 'auto',
-  background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)'
-},
+  // Enhanced Content
+  savedChatsContent: {
+    maxHeight: '400px',
+    overflow: 'auto',
+    background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)'
+  },
 
-// Enhanced Loading
-savedChatsLoading: {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '3rem 2rem',
-  gap: '1rem',
-  color: '#64748b'
-},
+  // Enhanced Loading
+  savedChatsLoading: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '3rem 2rem',
+    gap: '1rem',
+    color: '#64748b'
+  },
 
-// Enhanced Empty State
-savedChatsEmpty: {
-  padding: '3rem 2rem',
-  textAlign: 'center',
-  background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)'
-},
+  // Enhanced Empty State
+  savedChatsEmpty: {
+    padding: '3rem 2rem',
+    textAlign: 'center',
+    background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)'
+  },
 
-savedChatsEmptyText: {
-  fontSize: '1.1rem',
-  fontWeight: '600',
-  color: '#475569',
-  margin: '0 0 0.75rem 0',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '0.5rem'
-},
+  savedChatsEmptyText: {
+    fontSize: '1.1rem',
+    fontWeight: '600',
+    color: '#475569',
+    margin: '0 0 0.75rem 0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.5rem'
+  },
 
-savedChatsEmptySubtext: {
-  fontSize: '0.9rem',
-  color: '#64748b',
-  margin: 0,
-  lineHeight: '1.6'
-},
+  savedChatsEmptySubtext: {
+    fontSize: '0.9rem',
+    color: '#64748b',
+    margin: 0,
+    lineHeight: '1.6'
+  },
 
-// Enhanced Chat List
-savedChatsList: {
-  padding: '1rem 0.75rem',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.75rem'
-},
+  // Enhanced Chat List
+  savedChatsList: {
+    padding: '1rem 0.75rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem'
+  },
 
-// Enhanced Chat Item
-savedChatItem: {
-  padding: '1.25rem 1.5rem',
-  background: 'white',
-  border: '2px solid transparent',
-  borderRadius: '16px',
-  cursor: 'pointer',
-  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.06)',
-  margin: '0 0.5rem'
-},
+  // Enhanced Chat Item
+  savedChatItem: {
+    padding: '1.25rem 1.5rem',
+    background: 'white',
+    border: '2px solid transparent',
+    borderRadius: '16px',
+    cursor: 'pointer',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.06)',
+    margin: '0 0.5rem'
+  },
 
-// Enhanced Item Header
-savedChatItemHeader: {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  marginBottom: '0.75rem',
-  gap: '1rem'
-},
+  // Enhanced Item Header
+  savedChatItemHeader: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: '0.75rem',
+    gap: '1rem'
+  },
 
-savedChatItemTitle: {
-  fontSize: '1rem',
-  fontWeight: '600',
-  color: '#0f172a',
-  lineHeight: '1.4',
-  margin: 0,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  display: '-webkit-box',
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: 'vertical',
-  flex: 1,
-  minWidth: 0
-},
+  savedChatItemTitle: {
+    fontSize: '1rem',
+    fontWeight: '600',
+    color: '#0f172a',
+    lineHeight: '1.4',
+    margin: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    flex: 1,
+    minWidth: 0
+  },
 
-savedChatItemDate: {
-  fontSize: '0.75rem',
-  color: '#64748b',
-  fontWeight: '500',
-  background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
-  padding: '0.375rem 0.75rem',
-  borderRadius: '8px',
-  flexShrink: 0,
-  border: '1px solid #e2e8f0'
-},
+  savedChatItemDate: {
+    fontSize: '0.75rem',
+    color: '#64748b',
+    fontWeight: '500',
+    background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+    padding: '0.375rem 0.75rem',
+    borderRadius: '8px',
+    flexShrink: 0,
+    border: '1px solid #e2e8f0'
+  },
 
-// Enhanced Meta
-savedChatItemMeta: {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '1rem',
-  fontSize: '0.8rem',
-  color: '#64748b',
-  fontWeight: '500',
-  flexWrap: 'wrap'
-},
+  // Enhanced Meta
+  savedChatItemMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+    fontSize: '0.8rem',
+    color: '#64748b',
+    fontWeight: '500',
+    flexWrap: 'wrap'
+  },
 
-// Enhanced Footer
-savedChatsFooter: {
-  padding: '1.25rem 1.75rem',
-  borderTop: '2px solid #e2e8f0',
-  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center'
-},
+  // Enhanced Footer
+  savedChatsFooter: {
+    padding: '1.25rem 1.75rem',
+    borderTop: '2px solid #e2e8f0',
+    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
 
-savedChatsCloseButton: {
-  padding: '0.75rem 1.5rem',
-  background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
-  color: '#64748b',
-  border: '2px solid #e2e8f0',
-  borderRadius: '12px',
-  fontSize: '0.875rem',
-  fontWeight: '600',
-  cursor: 'pointer',
-  transition: 'all 0.3s ease',
-  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
-},
+  savedChatsCloseButton: {
+    padding: '0.75rem 1.5rem',
+    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+    color: '#64748b',
+    border: '2px solid #e2e8f0',
+    borderRadius: '12px',
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+  },
 
-// Enhanced Modal
-saveChatModal: {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  background: 'rgba(0, 0, 0, 0.6)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 2000,
-  backdropFilter: 'blur(8px)',
-  animation: 'modalFadeIn 0.3s ease-out'
-},
+  // Enhanced Modal
+  saveChatModal: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2000,
+    backdropFilter: 'blur(8px)',
+    animation: 'modalFadeIn 0.3s ease-out'
+  },
 
-saveChatModalContent: {
-  background: 'white',
-  borderRadius: '20px',
-  width: '90%',
-  maxWidth: '500px',
-  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.1)',
-  animation: 'modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-  overflow: 'hidden',
-  border: '2px solid #e2e8f0'
-},
+  saveChatModalContent: {
+    background: 'white',
+    borderRadius: '20px',
+    width: '90%',
+    maxWidth: '500px',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.1)',
+    animation: 'modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    overflow: 'hidden',
+    border: '2px solid #e2e8f0'
+  },
 
-saveChatModalHeader: {
-  padding: '2rem 2rem 1rem',
-  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-  borderBottom: '2px solid #e2e8f0',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between'
-},
+  saveChatModalHeader: {
+    padding: '2rem 2rem 1rem',
+    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+    borderBottom: '2px solid #e2e8f0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
 
-saveChatModalTitle: {
-  fontSize: '1.5rem',
-  fontWeight: '700',
-  color: '#0f172a',
-  margin: 0,
-  background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
-  backgroundClip: 'text'
-},
+  saveChatModalTitle: {
+    fontSize: '1.5rem',
+    fontWeight: '700',
+    color: '#0f172a',
+    margin: 0,
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text'
+  },
 
-saveChatModalClose: {
-  background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
-  border: '2px solid #e2e8f0',
-  fontSize: '1.25rem',
-  color: '#64748b',
-  cursor: 'pointer',
-  padding: '0.5rem',
-  borderRadius: '10px',
-  width: '40px',
-  height: '40px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  transition: 'all 0.3s ease',
-  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
-},
+  saveChatModalClose: {
+    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+    border: '2px solid #e2e8f0',
+    fontSize: '1.25rem',
+    color: '#64748b',
+    cursor: 'pointer',
+    padding: '0.5rem',
+    borderRadius: '10px',
+    width: '40px',
+    height: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+  },
 
-saveChatModalBody: {
-  padding: '2rem'
-},
+  saveChatModalBody: {
+    padding: '2rem'
+  },
 
-saveChatInfo: {
-  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-  border: '2px solid #bfdbfe',
-  borderRadius: '12px',
-  padding: '1.25rem',
-  marginBottom: '1.5rem',
-  textAlign: 'center'
-},
+  saveChatInfo: {
+    background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+    border: '2px solid #bfdbfe',
+    borderRadius: '12px',
+    padding: '1.25rem',
+    marginBottom: '1.5rem',
+    textAlign: 'center'
+  },
 
-saveChatInfoText: {
-  fontSize: '1rem',
-  color: '#1e40af',
-  margin: 0,
-  fontWeight: '600'
-},
+  saveChatInfoText: {
+    fontSize: '1rem',
+    color: '#1e40af',
+    margin: 0,
+    fontWeight: '600'
+  },
 
-saveChatInputContainer: {
-  marginBottom: '2rem'
-},
+  saveChatInputContainer: {
+    marginBottom: '2rem'
+  },
 
-saveChatLabel: {
-  display: 'block',
-  fontSize: '1rem',
-  fontWeight: '600',
-  color: '#374151',
-  marginBottom: '0.75rem'
-},
+  saveChatLabel: {
+    display: 'block',
+    fontSize: '1rem',
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: '0.75rem'
+  },
 
-saveChatInput: {
-  width: '100%',
-  padding: '1rem 1.25rem',
-  border: '2px solid #e2e8f0',
-  borderRadius: '12px',
-  fontSize: '1rem',
-  outline: 'none',
-  transition: 'all 0.3s ease',
-  background: '#f8fafc',
-  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-  fontFamily: 'inherit'
-},
+  saveChatInput: {
+    width: '100%',
+    padding: '1rem 1.25rem',
+    border: '2px solid #e2e8f0',
+    borderRadius: '12px',
+    fontSize: '1rem',
+    outline: 'none',
+    transition: 'all 0.3s ease',
+    background: '#f8fafc',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+    fontFamily: 'inherit'
+  },
 
-saveChatInputHint: {
-  fontSize: '0.875rem',
-  color: '#64748b',
-  marginTop: '0.5rem',
-  fontStyle: 'italic'
-},
+  saveChatInputHint: {
+    fontSize: '0.875rem',
+    color: '#64748b',
+    marginTop: '0.5rem',
+    fontStyle: 'italic'
+  },
 
-saveChatModalActions: {
-  display: 'flex',
-  gap: '1rem',
-  justifyContent: 'flex-end'
-},
+  saveChatModalActions: {
+    display: 'flex',
+    gap: '1rem',
+    justifyContent: 'flex-end'
+  },
 
-saveChatCancelButton: {
-  padding: '0.875rem 1.5rem',
-  background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
-  color: '#64748b',
-  border: '2px solid #e2e8f0',
-  borderRadius: '12px',
-  fontSize: '0.875rem',
-  fontWeight: '600',
-  cursor: 'pointer',
-  transition: 'all 0.3s ease',
-  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
-},
+  saveChatCancelButton: {
+    padding: '0.875rem 1.5rem',
+    background: 'linear-gradient(135deg, #ffffff, #f8fafc)',
+    color: '#64748b',
+    border: '2px solid #e2e8f0',
+    borderRadius: '12px',
+    fontSize: '0.875rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
+  },
 
-saveChatConfirmButton: {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.5rem',
-  padding: '0.875rem 1.5rem',
-  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-  color: 'white',
-  border: 'none',
-  borderRadius: '12px',
-  fontSize: '0.875rem',
-  fontWeight: '700',
-  cursor: 'pointer',
-  transition: 'all 0.3s ease',
-  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
-  minWidth: '140px',
-  justifyContent: 'center'
-},
+  saveChatConfirmButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    padding: '0.875rem 1.5rem',
+    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '12px',
+    fontSize: '0.875rem',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
+    minWidth: '140px',
+    justifyContent: 'center'
+  },
 
-saveChatConfirmButtonLoading: {
-  background: 'linear-gradient(135deg, #6b7280, #4b5563)',
-  cursor: 'not-allowed',
-  boxShadow: 'none'
-},
-  
+  saveChatConfirmButtonLoading: {
+    background: 'linear-gradient(135deg, #6b7280, #4b5563)',
+    cursor: 'not-allowed',
+    boxShadow: 'none'
+  },
+
   // Right Panel - Notes and Summaries
   rightPanel: {
     width: '320px',
@@ -874,6 +874,42 @@ saveChatConfirmButtonLoading: {
     flexShrink: 0,
     overflow: 'auto',
     maxHeight: '100%'
+  },
+  // Empty Summaries State Styles
+  noSummariesMessage: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '3rem 2rem',
+    textAlign: 'center',
+    minHeight: '200px',
+    background: 'linear-gradient(135deg, #fafbfc 0%, #f8fafc 100%)',
+    borderRadius: '12px',
+    border: '1px solid #e2e8f0',
+    margin: '0.5rem 0'
+  },
+
+  noSummariesIcon: {
+    color: '#cbd5e1',
+    marginBottom: '1.5rem',
+    opacity: 0.8
+  },
+
+  noSummariesText: {
+    fontSize: '1.125rem',
+    fontWeight: '600',
+    color: '#475569',
+    margin: '0 0 0.75rem 0',
+    lineHeight: '1.3'
+  },
+
+  noSummariesSubtext: {
+    fontSize: '0.875rem',
+    color: '#64748b',
+    margin: 0,
+    lineHeight: '1.5',
+    maxWidth: '280px'
   },
 
   // Sources Panel Styles
@@ -1671,6 +1707,84 @@ saveChatConfirmButtonLoading: {
     color: '#0f172a'
   },
 
+  // Floating Progress Indicator Styles
+  floatingProgressIndicator: {
+    position: 'fixed',
+    bottom: '20px',
+    right: '20px',
+    background: 'white',
+    border: '2px solid #e2e8f0',
+    borderRadius: '16px',
+    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1)',
+    cursor: 'pointer',
+    zIndex: 1500,
+    animation: 'floatingSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    overflow: 'hidden',
+    minWidth: '280px'
+  },
+
+  floatingProgressContent: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+    padding: '1rem 1.25rem',
+    position: 'relative',
+    zIndex: 2
+  },
+
+  floatingProgressIcon: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '40px',
+    height: '40px',
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.4)',
+    flexShrink: 0
+  },
+
+  floatingSpinner: {
+    width: '20px',
+    height: '20px',
+    border: '2px solid rgba(255, 255, 255, 0.3)',
+    borderTop: '2px solid white',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
+  },
+
+  floatingProgressText: {
+    flex: 1,
+    minWidth: 0
+  },
+
+  floatingProgressTitle: {
+    fontSize: '0.9rem',
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: '0.25rem',
+    lineHeight: '1.2'
+  },
+
+  floatingProgressSubtext: {
+    fontSize: '0.75rem',
+    color: '#64748b',
+    fontWeight: '500',
+    lineHeight: '1.2'
+  },
+
+  floatingProgressPulse: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.05), rgba(124, 58, 237, 0.05))',
+    animation: 'floatingPulse 2s ease-in-out infinite',
+    zIndex: 1
+  },
+
   progressIcon: {
     fontSize: '1rem',
     animation: 'pulse 2s infinite'
@@ -1768,11 +1882,13 @@ saveChatConfirmButtonLoading: {
     display: 'flex',
     flexDirection: 'column',
     background: 'white',
-    margin: '1rem',
+    /* Remove margin to prevent sidebar compression */
+    padding: '1rem',
     borderRadius: '16px',
     border: '1px solid #e2e8f0',
     overflow: 'hidden',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    minWidth: 0 // Prevent flexbox from shrinking sidebar
   },
 
   summaryPageHeader: {
@@ -2155,6 +2271,50 @@ export const enhancedAnimations = `
     color: white !important;
     transform: scale(1.1);
   }
+
+  @keyframes floatingSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(60px) translateX(20px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) translateX(0) scale(1);
+  }
+}
+
+@keyframes floatingPulse {
+  0%, 100% { 
+    opacity: 0.3; 
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.1; 
+    transform: scale(1.02);
+  }
+}
+
+/* Enhanced hover effect for floating indicator */
+.floating-progress-indicator:hover {
+  transform: translateY(-4px) scale(1.02) !important;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2), 0 8px 20px rgba(0, 0, 0, 0.15) !important;
+  border-color: #4f46e5 !important;
+}
+
+.floating-progress-indicator:hover .floatingProgressIcon {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.6) !important;
+}
+
+.floating-progress-indicator:hover .floatingProgressTitle {
+  color: #4f46e5 !important;
+}a
+
+.floating-progress-indicator:active {
+  transform: translateY(-2px) scale(1.01) !important;
+}
+
 
   /* Enhanced link dropdown animations and hover effects */
   .linkInput:focus {

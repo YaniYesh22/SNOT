@@ -68,7 +68,8 @@ export default function Sidebar({ isCollapsed, onToggleCollapse }) {
     <aside style={{
       ...styles.sidebar,
       width: !isCollapsed ? '280px' : '80px',
-      transition: 'width 0.3s ease'
+      minWidth: !isCollapsed ? '280px' : '80px', // Enforce min width in collapsed mode
+      transition: 'width 0.3s ease, min-width 0.3s ease'
     }}>
       {/* Header Section */}
       <div style={styles.header}>
