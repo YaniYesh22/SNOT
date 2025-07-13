@@ -2136,8 +2136,14 @@ class NotebookService {
         notebookId: notebookId,
         summaryTypes: summaryTypes
       };
-      if (customInstructions && Object.keys(customInstructions).length > 0) {
+      if (customInstructions &&
+        typeof customInstructions === 'object' &&
+        customInstructions !== null &&
+        Object.keys(customInstructions).length > 0) {
         payload.customInstructions = customInstructions;
+        console.log('📝 Adding custom instructions to payload:', customInstructions);
+      } else {
+        console.log('📝 No custom instructions provided, using default summary generation');
       }
 
       console.log('🚀 Calling start summary endpoint with payload:', payload);
@@ -3031,12 +3037,12 @@ class NotebookService {
     }
   }
 
-    /**
-   * 🆕 Load a specific saved chat - Updated to match new POST Lambda
-   * @param {string} notebookId - ID of the notebook
-   * @param {string} chatId - ID of the chat to load
-   * @returns {Promise<object>} - Chat data with history
-   */
+  /**
+ * 🆕 Load a specific saved chat - Updated to match new POST Lambda
+ * @param {string} notebookId - ID of the notebook
+ * @param {string} chatId - ID of the chat to load
+ * @returns {Promise<object>} - Chat data with history
+ */
   async loadSavedChat(notebookId, chatId) {
     try {
       if (!notebookId || !chatId) {

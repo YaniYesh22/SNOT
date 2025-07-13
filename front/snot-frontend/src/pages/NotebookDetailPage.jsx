@@ -170,7 +170,7 @@ export default function NotebookDetailPage() {
 
     lines.forEach((line, index) => {
       const trimmedLine = line.trim();
-      
+
       if (!trimmedLine) {
         // Empty line - add spacing
         formattedElements.push(<div key={`empty-${index}`} style={{ height: '0.75rem' }} />);
@@ -323,21 +323,21 @@ export default function NotebookDetailPage() {
   const formatInlineText = (text) => {
     // Remove excessive emojis at the beginning of lines
     let cleanText = text.replace(/^\s*[📋🎯🔬📊💡⚖️🌍🔗❓📝📚]\s*/, '');
-    
+
     const parts = [];
     let currentIndex = 0;
-    
+
     // Handle bold text (**text**)
     const boldRegex = /\*\*(.*?)\*\*/g;
     let lastIndex = 0;
     let match;
-    
+
     while ((match = boldRegex.exec(cleanText)) !== null) {
       // Add text before bold
       if (match.index > lastIndex) {
         parts.push(cleanText.substring(lastIndex, match.index));
       }
-      
+
       // Add bold text
       parts.push(
         <strong key={`bold-${currentIndex++}`} style={{
@@ -347,15 +347,15 @@ export default function NotebookDetailPage() {
           {match[1]}
         </strong>
       );
-      
+
       lastIndex = match.index + match[0].length;
     }
-    
+
     // Add remaining text
     if (lastIndex < cleanText.length) {
       parts.push(cleanText.substring(lastIndex));
     }
-    
+
     return parts.length > 1 ? parts : cleanText;
   };
 
@@ -842,23 +842,23 @@ export default function NotebookDetailPage() {
     });
 
     setShowSummaryPage(false);
-    
+
     // Store the current summary type before clearing it
     const justViewedSummary = currentSummaryPage;
     setCurrentSummaryPage(null);
-    
+
     // Ensure the summary that was just viewed remains available
     // This prevents the summary from disappearing when returning to notebook
     if (justViewedSummary && generatedSummaries[justViewedSummary]) {
       const currentSummary = generatedSummaries[justViewedSummary];
-      
+
       console.log(`🔄 Preserving summary state for ${justViewedSummary}:`, {
         ready: currentSummary.ready,
         hasUrl: !!currentSummary.url,
         hasContent: !!currentSummary.content,
         url: currentSummary.url
       });
-      
+
       // Ensure the summary maintains its ready state and visibility criteria
       setGeneratedSummaries(prev => {
         const preserved = {
@@ -869,12 +869,12 @@ export default function NotebookDetailPage() {
             // Preserve all existing properties
           }
         };
-        
+
         console.log(`✅ Summary state preserved for ${justViewedSummary}`, {
           summariesAfter: Object.keys(preserved),
           preservedSummary: preserved[justViewedSummary]
         });
-        
+
         return preserved;
       });
     }
@@ -913,7 +913,6 @@ export default function NotebookDetailPage() {
     return null;
   };
 
-  // 🆕 Enhanced: handleSummarize with custom instructions
   const handleSummarize = async (summaryType) => {
     setShowSummaryDropdown(false);
     setIsGeneratingSummary(true);
@@ -922,17 +921,24 @@ export default function NotebookDetailPage() {
     try {
       console.log(`Starting ${summaryType} summary with progress tracking...`);
 
-      // Prepare custom instructions object for API
-      const instructions = {};
+      // 🔧 FIXED: Better custom instructions handling
+      let instructions = null; // Use null instead of empty object
+
+      // Only add instructions if there are actual custom instructions
       if (customInstructions[summaryType]?.trim()) {
-        instructions[summaryType] = customInstructions[summaryType].trim();
+        instructions = {
+          [summaryType]: customInstructions[summaryType].trim()
+        };
+        console.log(`📝 Using custom instructions for ${summaryType}:`, instructions);
+      } else {
+        console.log(`📝 No custom instructions for ${summaryType}, using defaults`);
       }
 
-      // Step 1: Start the summary generation using your new Lambda endpoint
+      // Step 1: Start the summary generation using your Lambda endpoint
       const startResult = await notebookService.startSummary(
         notebook.notebookId,
         [summaryType],
-        instructions
+        instructions // This can be null, which is fine
       );
 
       console.log(`✅ Summary started:`, startResult);
@@ -944,21 +950,25 @@ export default function NotebookDetailPage() {
     } catch (error) {
       console.error('❌ Error starting summary:', error);
 
-      // Handle specific error cases
+      // Enhanced error handling
       let errorMessage = 'Failed to start summary generation';
 
       if (error.message.includes('already in progress')) {
         errorMessage = 'Summary generation is already in progress. Please wait for it to complete.';
       } else if (error.message.includes('still being processed')) {
         errorMessage = 'Files are still being processed. Please wait and try again in a moment.';
-      } else if (error.message.includes('login')) {
+      } else if (error.message.includes('login') || error.message.includes('Authentication')) {
         errorMessage = 'Please login to generate summaries.';
+      } else if (error.message.includes('no files') || error.message.includes('no sources')) {
+        errorMessage = 'Please add files or links before generating summaries.';
       } else if (error.message) {
         errorMessage = error.message;
       }
 
+      // Show error in chat
       addChatMessage(`❌ ${errorMessage}`, 'system', 'error');
 
+      // Reset states
       setIsGeneratingSummary(false);
       setSummaryProgress(null);
       setIsPollingProgress(false);
@@ -1447,105 +1457,105 @@ export default function NotebookDetailPage() {
   };
 
   // Updated renderSummaryProgress function - removes the 0/0 completed display
-const renderSummaryProgress = () => {
-  if (!summaryProgress || !isPollingProgress) return null;
+  const renderSummaryProgress = () => {
+    if (!summaryProgress || !isPollingProgress) return null;
 
-  const { status, progressSummary, elapsedTime, estimatedTimeRemaining, message } = summaryProgress;
+    const { status, progressSummary, elapsedTime, estimatedTimeRemaining, message } = summaryProgress;
 
-  if (status !== 'processing') return null;
+    if (status !== 'processing') return null;
 
-  const { completed = 0, processing = 0, total = 1 } = progressSummary || {};
-  const progressPercentage = total > 0 ? Math.round(((completed + (processing * 0.5)) / total) * 100) : 0;
+    const { completed = 0, processing = 0, total = 1 } = progressSummary || {};
+    const progressPercentage = total > 0 ? Math.round(((completed + (processing * 0.5)) / total) * 100) : 0;
 
-  // Only show completed/total stats if there are meaningful numbers (not 0/0 or 0/1)
-  const showCompletionStats = total > 1 && (completed > 0 || processing > 0);
+    // Only show completed/total stats if there are meaningful numbers (not 0/0 or 0/1)
+    const showCompletionStats = total > 1 && (completed > 0 || processing > 0);
 
-  return (
-    <div style={styles.summaryProgressPopup}>
-      <div style={styles.progressPopupHeader}>
-        <div style={styles.progressPopupTitle}>
-          <span style={styles.progressIcon}>⚡</span>
-          Generating Summary...
-        </div>
-        <button
-          onClick={() => {
-            setIsPollingProgress(false);
-            setIsGeneratingSummary(false);
-            setSummaryProgress(null);
-            // Note: This just hides the popup, generation continues in background
-          }}
-          style={styles.progressPopupClose}
-          className="progress-popup-close"
-          title="Hide progress (generation continues)"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div style={styles.progressPopupContent}>
-        {/* Only show completion stats if meaningful */}
-        {showCompletionStats && (
-          <div style={styles.progressPopupStats}>
-            <span style={{ fontWeight: '600', color: '#0f172a' }}>
-              {completed}/{total} completed
-            </span>
+    return (
+      <div style={styles.summaryProgressPopup}>
+        <div style={styles.progressPopupHeader}>
+          <div style={styles.progressPopupTitle}>
+            <span style={styles.progressIcon}>⚡</span>
+            Generating Summary...
           </div>
-        )}
-
-        <div style={styles.progressBar}>
-          <div
-            style={{
-              height: '8px',
-              background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
-              borderRadius: '4px',
-              transition: 'width 0.5s ease',
-              width: `${Math.min(progressPercentage, 95)}%`,
-              backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%)',
-              backgroundSize: '16px 16px',
-              animation: 'progressStripes 1s linear infinite'
+          <button
+            onClick={() => {
+              setIsPollingProgress(false);
+              setIsGeneratingSummary(false);
+              setSummaryProgress(null);
+              // Note: This just hides the popup, generation continues in background
             }}
-          />
+            style={styles.progressPopupClose}
+            className="progress-popup-close"
+            title="Hide progress (generation continues)"
+          >
+            ✕
+          </button>
         </div>
 
-        <div style={styles.progressPopupText}>
-          {message || 'Summary generation in progress'}
+        <div style={styles.progressPopupContent}>
+          {/* Only show completion stats if meaningful */}
+          {showCompletionStats && (
+            <div style={styles.progressPopupStats}>
+              <span style={{ fontWeight: '600', color: '#0f172a' }}>
+                {completed}/{total} completed
+              </span>
+            </div>
+          )}
+
+          <div style={styles.progressBar}>
+            <div
+              style={{
+                height: '8px',
+                background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
+                borderRadius: '4px',
+                transition: 'width 0.5s ease',
+                width: `${Math.min(progressPercentage, 95)}%`,
+                backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%)',
+                backgroundSize: '16px 16px',
+                animation: 'progressStripes 1s linear infinite'
+              }}
+            />
+          </div>
+
+          <div style={styles.progressPopupText}>
+            {message || 'Summary generation in progress'}
+          </div>
+
+          {(elapsedTime || estimatedTimeRemaining) && (
+            <div style={styles.progressPopupTime}>
+              {elapsedTime && (
+                <span>⏱️ {elapsedTime}</span>
+              )}
+              {estimatedTimeRemaining && (
+                <span>| ~{estimatedTimeRemaining} remaining</span>
+              )}
+            </div>
+          )}
+
+          {summaryProgress.progress && (
+            <div style={styles.progressTypeDetails}>
+              {Object.entries(summaryProgress.progress).map(([type, typeProgress]) => (
+                <div key={type} style={styles.progressTypeItem}>
+                  <span style={styles.progressTypeName}>
+                    {type.charAt(0).toUpperCase() + type.slice(1)}:
+                  </span>
+                  <span style={{
+                    ...styles.progressTypeStatus,
+                    color: typeProgress.status === 'completed' ? '#10b981' :
+                      typeProgress.status === 'generating' ? '#3b82f6' : '#6b7280'
+                  }}>
+                    {typeProgress.status === 'completed' ? '✓ Done' :
+                      typeProgress.status === 'generating' ? '⚡ Generating...' :
+                        '⏳ Pending'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-
-        {(elapsedTime || estimatedTimeRemaining) && (
-          <div style={styles.progressPopupTime}>
-            {elapsedTime && (
-              <span>⏱️ {elapsedTime}</span>
-            )}
-            {estimatedTimeRemaining && (
-              <span>| ~{estimatedTimeRemaining} remaining</span>
-            )}
-          </div>
-        )}
-
-        {summaryProgress.progress && (
-          <div style={styles.progressTypeDetails}>
-            {Object.entries(summaryProgress.progress).map(([type, typeProgress]) => (
-              <div key={type} style={styles.progressTypeItem}>
-                <span style={styles.progressTypeName}>
-                  {type.charAt(0).toUpperCase() + type.slice(1)}:
-                </span>
-                <span style={{
-                  ...styles.progressTypeStatus,
-                  color: typeProgress.status === 'completed' ? '#10b981' :
-                    typeProgress.status === 'generating' ? '#3b82f6' : '#6b7280'
-                }}>
-                  {typeProgress.status === 'completed' ? '✓ Done' :
-                    typeProgress.status === 'generating' ? '⚡ Generating...' :
-                      '⏳ Pending'}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   // Save Chat Modal Component
   const renderSaveChatModal = () => {
@@ -1721,56 +1731,56 @@ const renderSummaryProgress = () => {
   };
 
   // Updated Chat Header Actions - Remove View Summaries dropdown
-const renderChatHeaderActions = () => (
-  <div style={styles.chatHeaderActions}>
-    {/* Removed: View Summaries dropdown - users should use the Generated Summaries section instead */}
+  const renderChatHeaderActions = () => (
+    <div style={styles.chatHeaderActions}>
+      {/* Removed: View Summaries dropdown - users should use the Generated Summaries section instead */}
 
-    {/* Saved Chats Button - show if there are saved chats or current messages */}
-    {(savedChats.length > 0 || chatMessages.length > 0) && (
-      <div style={styles.savedChatsContainer}>
+      {/* Saved Chats Button - show if there are saved chats or current messages */}
+      {(savedChats.length > 0 || chatMessages.length > 0) && (
+        <div style={styles.savedChatsContainer}>
+          <button
+            onClick={() => setShowSavedChatsDropdown(!showSavedChatsDropdown)}
+            style={styles.savedChatsButton}
+            className="saved-chats-button"
+            title={`View ${savedChats.length} saved chats`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M5,7H19V5H5V7M5,11H19V9H5V11M5,15H19V13H5V15M5,19H19V17H5V19Z" />
+            </svg>
+            📚 Chats ({savedChats.length})
+          </button>
+          {renderSavedChatsDropdown()}
+        </div>
+      )}
+
+      {/* Save Chat Button - only show if there are messages to save */}
+      {chatMessages.length > 0 && (
         <button
-          onClick={() => setShowSavedChatsDropdown(!showSavedChatsDropdown)}
-          style={styles.savedChatsButton}
-          className="saved-chats-button"
-          title={`View ${savedChats.length} saved chats`}
+          onClick={() => setShowSaveChatModal(true)}
+          style={styles.saveChatButton}
+          className="save-chat-button"
+          title="Save current conversation"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M5,7H19V5H5V7M5,11H19V9H5V11M5,15H19V13H5V15M5,19H19V17H5V19Z" />
+            <path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z" />
           </svg>
-          📚 Chats ({savedChats.length})
+          💾 Save
         </button>
-        {renderSavedChatsDropdown()}
-      </div>
-    )}
+      )}
 
-    {/* Save Chat Button - only show if there are messages to save */}
-    {chatMessages.length > 0 && (
-      <button
-        onClick={() => setShowSaveChatModal(true)}
-        style={styles.saveChatButton}
-        className="save-chat-button"
-        title="Save current conversation"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z" />
-        </svg>
-        💾 Save
-      </button>
-    )}
-
-    {/* Clear chat button - only show if chat has messages */}
-    {chatMessages.length > 0 && (
-      <button
-        onClick={clearConversation}
-        style={styles.clearChatButton}
-        className="clear-chat-button"
-        title="Clear current conversation"
-      >
-        🗑️ Clear
-      </button>
-    )}
-  </div>
-);
+      {/* Clear chat button - only show if chat has messages */}
+      {chatMessages.length > 0 && (
+        <button
+          onClick={clearConversation}
+          style={styles.clearChatButton}
+          className="clear-chat-button"
+          title="Clear current conversation"
+        >
+          🗑️ Clear
+        </button>
+      )}
+    </div>
+  );
 
   // Cleanup effects with better dependency handling
   useEffect(() => {
@@ -2875,62 +2885,139 @@ const renderChatHeaderActions = () => (
                           </>
                         )}
                       </button>
-
                       {showSummaryDropdown && !isGeneratingSummary && (
                         <div style={styles.summaryDropdown}>
                           <div style={styles.summaryDropdownHeader}>
                             Choose Summary Type
                           </div>
 
-                          {/* 🆕 Enhanced: Each summary type with custom instructions input */}
-                          <div style={{marginBottom: 16}}>
-                            <button
-                              onClick={() => handleSummarize('casual')}
-                              style={styles.summaryOption}
-                            >
-                              <div style={styles.summaryOptionTitle}>Casual</div>
-                              <div style={styles.summaryOptionDesc}>Conversational and easy to understand</div>
-                            </button>
-                            <textarea
-                              style={{width: '100%', marginTop: 4, fontSize: '0.95em', padding: 6, borderRadius: 4, border: '1px solid #ddd'}}
-                              placeholder="Optional: Add custom instructions for Casual (e.g. 'Use sports analogies')"
-                              value={customInstructions.casual}
-                              onChange={e => setCustomInstructions(ci => ({...ci, casual: e.target.value}))}
-                              rows={2}
-                            />
-                          </div>
-                          <div style={{marginBottom: 16}}>
-                            <button
-                              onClick={() => handleSummarize('academic')}
-                              style={styles.summaryOption}
-                            >
-                              <div style={styles.summaryOptionTitle}>Academic</div>
-                              <div style={styles.summaryOptionDesc}>Detailed analysis with key findings</div>
-                            </button>
-                            <textarea
-                              style={{width: '100%', marginTop: 4, fontSize: '0.95em', padding: 6, borderRadius: 4, border: '1px solid #ddd'}}
-                              placeholder="Optional: Add custom instructions for Academic (e.g. 'Focus on practical applications')"
-                              value={customInstructions.academic}
-                              onChange={e => setCustomInstructions(ci => ({...ci, academic: e.target.value}))}
-                              rows={2}
-                            />
-                          </div>
-                          <div>
-                            <button
-                              onClick={() => handleSummarize('simple')}
-                              style={styles.summaryOption}
-                            >
-                              <div style={styles.summaryOptionTitle}>Beginner Friendly</div>
-                              <div style={styles.summaryOptionDesc}>Simple bullet points and essential facts</div>
-                            </button>
-                            <textarea
-                              style={{width: '100%', marginTop: 4, fontSize: '0.95em', padding: 6, borderRadius: 4, border: '1px solid #ddd'}}
-                              placeholder="Optional: Add custom instructions for Beginner (e.g. 'Use more visuals')"
-                              value={customInstructions.simple}
-                              onChange={e => setCustomInstructions(ci => ({...ci, simple: e.target.value}))}
-                              rows={2}
-                            />
-                          </div>
+                          {/* NEW: Container for centered buttons */}
+                          <div style={styles.summaryOptionsContainer}>
+
+                            {/* Casual Summary Option */}
+                            <div>
+                              <button
+                                onClick={() => handleSummarize('casual')}
+                                style={styles.summaryOption}
+                                className="summary-option-hover"
+                              >
+                                {/* Icon */}
+                                <div style={{ ...styles.summaryOptionIcon, ...styles.casualIcon }}>
+                                  💬
+                                </div>
+
+                                {/* Content */}
+                                <div style={styles.summaryOptionContent}>
+                                  <div style={styles.summaryOptionTitle}>
+                                    Casual
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.summaryOptionArrow}>
+                                      <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" />
+                                    </svg>
+                                  </div>
+                                  <div style={styles.summaryOptionDesc}>
+                                    Conversational and easy to understand
+                                  </div>
+                                </div>
+                              </button>
+
+                              {/* Custom Instructions */}
+                              <div style={styles.customInstructionsWrapper}>
+                                <label style={styles.customInstructionsLabel}>
+                                  Custom Instructions (Optional)
+                                </label>
+                                <textarea
+                                  style={styles.customInstructionsTextarea}
+                                  placeholder="e.g., 'Use sports analogies'"
+                                  value={customInstructions.casual}
+                                  onChange={e => setCustomInstructions(ci => ({ ...ci, casual: e.target.value }))}
+                                  className="custom-instructions-input"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Academic Summary Option */}
+                            <div>
+                              <button
+                                onClick={() => handleSummarize('academic')}
+                                style={styles.summaryOption}
+                                className="summary-option-hover"
+                              >
+                                {/* Icon */}
+                                <div style={{ ...styles.summaryOptionIcon, ...styles.academicIcon }}>
+                                  🎓
+                                </div>
+
+                                {/* Content */}
+                                <div style={styles.summaryOptionContent}>
+                                  <div style={styles.summaryOptionTitle}>
+                                    Academic
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.summaryOptionArrow}>
+                                      <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" />
+                                    </svg>
+                                  </div>
+                                  <div style={styles.summaryOptionDesc}>
+                                    Detailed analysis with key findings
+                                  </div>
+                                </div>
+                              </button>
+
+                              {/* Custom Instructions */}
+                              <div style={styles.customInstructionsWrapper}>
+                                <label style={styles.customInstructionsLabel}>
+                                  Custom Instructions (Optional)
+                                </label>
+                                <textarea
+                                  style={styles.customInstructionsTextarea}
+                                  placeholder="e.g., 'Focus on practical applications'"
+                                  value={customInstructions.academic}
+                                  onChange={e => setCustomInstructions(ci => ({ ...ci, academic: e.target.value }))}
+                                  className="custom-instructions-input"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Simple Summary Option */}
+                            <div>
+                              <button
+                                onClick={() => handleSummarize('simple')}
+                                style={styles.summaryOption}
+                                className="summary-option-hover"
+                              >
+                                {/* Icon */}
+                                <div style={{ ...styles.summaryOptionIcon, ...styles.simpleIcon }}>
+                                  ✨
+                                </div>
+
+                                {/* Content */}
+                                <div style={styles.summaryOptionContent}>
+                                  <div style={styles.summaryOptionTitle}>
+                                    Beginner Friendly
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={styles.summaryOptionArrow}>
+                                      <path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z" />
+                                    </svg>
+                                  </div>
+                                  <div style={styles.summaryOptionDesc}>
+                                    Simple bullet points and essential facts
+                                  </div>
+                                </div>
+                              </button>
+
+                              {/* Custom Instructions */}
+                              <div style={styles.customInstructionsWrapper}>
+                                <label style={styles.customInstructionsLabel}>
+                                  Custom Instructions (Optional)
+                                </label>
+                                <textarea
+                                  style={styles.customInstructionsTextarea}
+                                  placeholder="e.g., 'Use more visuals'"
+                                  value={customInstructions.simple}
+                                  onChange={e => setCustomInstructions(ci => ({ ...ci, simple: e.target.value }))}
+                                  className="custom-instructions-input"
+                                />
+                              </div>
+                            </div>
+
+                          </div> {/* End of summaryOptionsContainer */}
                         </div>
                       )}
                     </div>

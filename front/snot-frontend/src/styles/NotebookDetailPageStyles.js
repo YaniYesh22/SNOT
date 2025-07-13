@@ -294,22 +294,36 @@ export const styles = {
     position: 'absolute',
     top: '100%',
     left: 0,
-    marginTop: '0.5rem',
-    width: '280px',
+    marginTop: '0.75rem',
+    width: '320px',
     background: 'white',
-    border: '1px solid #e2e8f0',
+    border: '2px solid #e2e8f0',
     borderRadius: '16px',
-    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    boxShadow: '0 20px 40px -12px rgba(0, 0, 0, 0.2), 0 8px 16px -5px rgba(0, 0, 0, 0.1)',
     overflow: 'hidden',
-    zIndex: 1001
+    zIndex: 1001,
+    animation: 'summaryDropdownSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
   },
+
   summaryDropdownHeader: {
-    padding: '1rem 1.25rem 0.75rem',
-    fontSize: '0.9rem',
-    fontWeight: '600',
-    color: '#475569',
-    borderBottom: '1px solid #f1f5f9'
+    padding: '1.25rem 1.5rem 1rem',
+    fontSize: '1rem',
+    fontWeight: '700',
+    color: '#0f172a',
+    borderBottom: '2px solid #e2e8f0',
+    background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+    textAlign: 'center',
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text'
   },
+  summaryOptionsContainer: {
+  padding: '0 1rem', // Add consistent padding to container
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.75rem' // Consistent spacing between options
+},
   summaryOption: {
     width: '100%',
     padding: '1rem 1.25rem',
@@ -317,21 +331,115 @@ export const styles = {
     border: 'none',
     textAlign: 'left',
     cursor: 'pointer',
-    transition: 'background-color 0.2s ease',
-    borderBottom: '1px solid #f8fafc'
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    borderBottom: 'none', // Remove bottom border
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '0.75rem',
+    margin: '0',
+    borderRadius: '12px', // Full border radius
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.06)',
+    border: '2px solid #e2e8f0'
+  },
+  summaryOptionContent: {
+    flex: 1,
+    minWidth: 0
+  },
+
+  summaryOptionArrow: {
+    color: '#64748b',
+    transition: 'all 0.3s ease',
+    transform: 'translateX(0)',
+    opacity: 0.7
+  },
+
+  casualIcon: {
+    background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+    border: '2px solid #f59e0b'
+  },
+
+  academicIcon: {
+    background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)',
+    border: '2px solid #3b82f6'
+  },
+
+  simpleIcon: {
+    background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)',
+    border: '2px solid #10b981'
+  },
+
+  // ENHANCED: Detached custom instructions wrapper
+  customInstructionsWrapper: {
+    padding: '1rem 1.25rem 1.25rem', // Increased padding
+    background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+    borderTop: 'none', // Remove border connection to button
+    borderRadius: '12px', // Full border radius instead of just bottom
+    margin: '0.75rem 0 0 0', // Add top margin to separate from button
+    border: '1px solid #e2e8f0', // Add border around entire area
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)' // Subtle shadow
+  },
+
+  customInstructionsLabel: {
+    display: 'block',
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: '0.625rem', // Slightly more space
+    textTransform: 'uppercase',
+    letterSpacing: '0.025em',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.375rem' // Space for potential icon
+  },
+
+  customInstructionsTextarea: {
+    width: '100%',
+    padding: '0.75rem 1rem', // Slightly more padding
+    border: '2px solid #e2e8f0',
+    borderRadius: '10px', // Slightly more rounded
+    fontSize: '0.8rem',
+    lineHeight: '1.4',
+    outline: 'none',
+    transition: 'all 0.3s ease',
+    background: 'white',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+    fontFamily: 'inherit',
+    resize: 'none',
+    height: '52px', // Slightly taller
+    minHeight: 'unset'
   },
   summaryOptionTitle: {
-    fontSize: '0.9rem',
-    fontWeight: '600',
+    fontSize: '0.95rem',
+    fontWeight: '700',
     color: '#0f172a',
-    marginBottom: '0.25rem'
+    marginBottom: '0.375rem',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    lineHeight: '1.3'
   },
+
   summaryOptionDesc: {
     fontSize: '0.8rem',
     color: '#64748b',
-    lineHeight: '1.4'
+    lineHeight: '1.4',
+    fontWeight: '500',
+    margin: 0
   },
 
+  summaryOptionIcon: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '1.1rem',
+    flexShrink: 0,
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)'
+  },
   linkContainer: {
     position: 'relative'
   },
@@ -1289,12 +1397,67 @@ export const styles = {
   },
 
   chatMessageText: {
-    fontSize: '0.875rem',
-    lineHeight: '1.6',
-    marginBottom: '0.5rem',
-    whiteSpace: 'pre-wrap'
-  },
-
+  fontSize: '0.875rem',
+  lineHeight: '1.6',
+  marginBottom: '0.5rem',
+  whiteSpace: 'normal', // Changed from 'pre-wrap' to allow custom formatting
+  wordBreak: 'break-word'
+},
+codeBlockHeader: {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '0.5rem 1rem',
+  background: 'linear-gradient(135deg, #374151, #4b5563)',
+  marginBottom: '0.75rem',
+  borderRadius: '8px',
+  fontSize: '0.75rem',
+  fontWeight: '600',
+  color: '#d1d5db'
+},
+codeBlock: {
+  background: 'linear-gradient(135deg, #1e293b, #334155)',
+  color: '#e2e8f0',
+  padding: '1rem 1.25rem',
+  borderRadius: '12px',
+  fontFamily: 'Monaco, Consolas, "Lucida Console", "Courier New", monospace',
+  fontSize: '0.8rem',
+  lineHeight: '1.5',
+  overflow: 'auto',
+  margin: '0.75rem 0',
+  border: '1px solid #475569',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+  position: 'relative'
+},
+inlineCode: {
+  background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+  color: '#1e293b',
+  padding: '0.125rem 0.375rem',
+  borderRadius: '6px',
+  fontFamily: 'Monaco, Consolas, "Lucida Console", "Courier New", monospace',
+  fontSize: '0.8rem',
+  fontWeight: '500',
+  border: '1px solid #cbd5e1',
+  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+},
+codeCopyButton: {
+  background: 'rgba(255, 255, 255, 0.1)',
+  border: '1px solid rgba(255, 255, 255, 0.2)',
+  color: '#d1d5db',
+  padding: '0.25rem 0.5rem',
+  borderRadius: '6px',
+  fontSize: '0.7rem',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.25rem'
+},
+syntaxKeyword: { color: '#fbbf24' }, // yellow
+syntaxString: { color: '#34d399' },  // green
+syntaxComment: { color: '#9ca3af' }, // gray
+syntaxFunction: { color: '#60a5fa' }, // blue
+syntaxNumber: { color: '#f87171' },   // red/pink
   chatMessageTime: {
     fontSize: '0.75rem',
     opacity: 0.7,
@@ -2626,6 +2789,74 @@ export const enhancedAnimations = `
   .chatMessages::-webkit-scrollbar-thumb:hover,
   .rightPanel::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(135deg, #94a3b8, #64748b);
+  }
+
+  /* Add these to your existing enhancedAnimations string: */
+
+  @keyframes summaryDropdownSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-15px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* Enhanced Summary Option Hover Effects */
+  .summary-option-hover:hover {
+    transform: translateY(-3px) translateX(3px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15), 0 6px 16px rgba(0, 0, 0, 0.1) !important;
+    border-color: #4f46e5 !important;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
+  }
+
+  .summary-option-hover:hover .summaryOptionArrow {
+    transform: translateX(6px) !important;
+    opacity: 1 !important;
+    color: #4f46e5 !important;
+  }
+
+  .summary-option-hover:hover .summaryOptionIcon {
+    transform: scale(1.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .summary-option-hover:hover .summaryOptionTitle {
+    color: #4f46e5 !important;
+  }
+
+  /* Icon-specific hover effects */
+  .summary-option-hover:hover .casualIcon {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    color: white !important;
+    border-color: #f59e0b !important;
+  }
+
+  .summary-option-hover:hover .academicIcon {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    color: white !important;
+    border-color: #3b82f6 !important;
+  }
+
+  .summary-option-hover:hover .simpleIcon {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    color: white !important;
+    border-color: #10b981 !important;
+  }
+
+  /* Custom Instructions Input Focus */
+  .custom-instructions-input:focus {
+    border-color: #4f46e5 !important;
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-1px);
+  }
+
+  /* Update existing summary dropdown hover effect */
+  .summary-option:hover {
+    background: linear-gradient(135deg, #f8fafc, #f1f5f9) !important;
+    transform: translateX(4px);
   }
 `;
 
