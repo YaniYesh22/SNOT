@@ -2858,6 +2858,53 @@ export const enhancedAnimations = `
     background: linear-gradient(135deg, #f8fafc, #f1f5f9) !important;
     transform: translateX(4px);
   }
+
+  .code-copy-button:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+.code-copy-button:active {
+  transform: translateY(0);
+}
+
+/* Smooth code block animations */
+@keyframes codeBlockFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.code-block {
+  animation: codeBlockFadeIn 0.3s ease-out;
+}
+
+/* Enhanced scrollbars for code blocks */
+.code-block::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.code-block::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.code-block::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.code-block::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
 `;
 
 export const injectNotebookDetailCSS = () => {

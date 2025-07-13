@@ -906,7 +906,187 @@ export default function NotebookDetailPage() {
       minute: '2-digit'
     });
   };
+  const formatChatMessage = (message) => {
+    if (!message || typeof message !== 'string') return message;
 
+    const elements = [];
+    let lastIndex = 0;
+    let elementKey = 0;
+
+    // Regular expressions
+    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    const inlineCodeRegex = /`([^`\n]+)`/g;
+
+    // First, process code blocks
+    let match;
+    const codeBlocks = [];
+    const tempCodeBlockPlaceholder = '___CODE_BLOCK_PLACEHOLDER___';
+
+    let processedMessage = message;
+
+    while ((match = codeBlockRegex.exec(message)) !== null) {
+      const language = match[1] || 'text';
+      const code = match[2];
+      const blockId = codeBlocks.length;
+
+      codeBlocks.push({ language, code, fullMatch: match[0] });
+      processedMessage = processedMessage.replace(match[0], `${tempCodeBlockPlaceholder}${blockId}`);
+    }
+
+    // Split by code block placeholders and inline code
+    const parts = processedMessage.split(new RegExp(`(${tempCodeBlockPlaceholder}\\d+|` + '`[^`\n]+`' + ')'));
+
+    parts.forEach((part, index) => {
+      if (part.startsWith(tempCodeBlockPlaceholder)) {
+        // Handle code block
+        const blockId = parseInt(part.replace(tempCodeBlockPlaceholder, ''));
+        const block = codeBlocks[blockId];
+
+        if (block) {
+          elements.push(
+            <div key={`code-block-${elementKey++}`} style={styles.codeBlock}>
+              <div style={styles.codeBlockHeader}>
+                <span>{block.language.toUpperCase()}</span>
+                <button
+                  style={styles.codeCopyButton}
+                  onClick={() => navigator.clipboard.writeText(block.code)}
+                  className="code-copy-button"
+                  title="Copy code"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" />
+                  </svg>
+                  Copy
+                </button>
+              </div>
+              <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit' }}>
+                <code>{applySyntaxHighlighting(block.code, block.language)}</code>
+              </pre>
+            </div>
+          );
+        }
+      } else if (part.match(/^`[^`\n]+`$/)) {
+        // Handle inline code
+        const code = part.slice(1, -1); // Remove backticks
+        elements.push(
+          <code key={`inline-code-${elementKey++}`} style={styles.inlineCode}>
+            {code}
+          </code>
+        );
+      } else if (part) {
+        // Handle regular text with line breaks
+        const textParts = part.split('\n');
+        textParts.forEach((textPart, textIndex) => {
+          if (textPart) {
+            elements.push(
+              <span key={`text-${elementKey++}`}>{textPart}</span>
+            );
+          }
+          if (textIndex < textParts.length - 1) {
+            elements.push(<br key={`br-${elementKey++}`} />);
+          }
+        });
+      }
+    });
+
+    return elements.length > 0 ? elements : message;
+  };
+
+  /**
+   * Simple syntax highlighting function
+   */
+  const applySyntaxHighlighting = (code, language) => {
+    if (!code) return code;
+
+    // For JavaScript/TypeScript
+    if (['javascript', 'js', 'typescript', 'ts'].includes(language.toLowerCase())) {
+      return highlightJavaScript(code);
+    }
+
+    // For Python
+    if (language.toLowerCase() === 'python') {
+      return highlightPython(code);
+    }
+
+    // Default: no highlighting
+    return code;
+  };
+
+  /**
+   * JavaScript syntax highlighting
+   */
+  const highlightJavaScript = (code) => {
+    const elements = [];
+    const keywords = ['function', 'const', 'let', 'var', 'if', 'else', 'for', 'while', 'return', 'class', 'import', 'export'];
+
+    const lines = code.split('\n');
+    lines.forEach((line, lineIndex) => {
+      const processedLine = processLineForHighlighting(line, keywords);
+      elements.push(
+        <div key={lineIndex}>
+          {processedLine}
+        </div>
+      );
+    });
+
+    return elements;
+  };
+
+  /**
+   * Python syntax highlighting
+   */
+  const highlightPython = (code) => {
+    const elements = [];
+    const keywords = ['def', 'class', 'if', 'else', 'elif', 'for', 'while', 'return', 'import', 'from', 'try', 'except'];
+
+    const lines = code.split('\n');
+    lines.forEach((line, lineIndex) => {
+      const processedLine = processLineForHighlighting(line, keywords);
+      elements.push(
+        <div key={lineIndex}>
+          {processedLine}
+        </div>
+      );
+    });
+
+    return elements;
+  };
+
+  /**
+   * Process a line for syntax highlighting
+   */
+  const processLineForHighlighting = (line, keywords) => {
+    const elements = [];
+    let currentIndex = 0;
+    let elementKey = 0;
+
+    // Simple tokenization
+    const tokens = line.split(/(\s+|[(){}[\],;.])/);
+
+    tokens.forEach(token => {
+      if (keywords.includes(token)) {
+        elements.push(
+          <span key={elementKey++} style={styles.syntaxKeyword}>{token}</span>
+        );
+      } else if (token.match(/^["'].*["']$/)) {
+        elements.push(
+          <span key={elementKey++} style={styles.syntaxString}>{token}</span>
+        );
+      } else if (token.match(/^\/\/.*/) || token.match(/^#.*/)) {
+        elements.push(
+          <span key={elementKey++} style={styles.syntaxComment}>{token}</span>
+        );
+      } else if (token.match(/^\d+$/)) {
+        elements.push(
+          <span key={elementKey++} style={styles.syntaxNumber}>{token}</span>
+        );
+      } else {
+        elements.push(token);
+      }
+    });
+
+    return elements;
+  };
   // Function to render source information - DISABLED for cleaner chat
   const renderSourceInfo = (sources) => {
     // Return null to hide all source information
@@ -3401,8 +3581,9 @@ export default function NotebookDetailPage() {
                             ...(message.type === 'summary' ? styles.chatMessageSummary : {}),
                             ...(message.type === 'sources' ? styles.chatMessageSources : {})
                           }}>
+                            {/* ENHANCED: Use formatter for code support */}
                             <div style={styles.chatMessageText}>
-                              {message.message}
+                              {formatChatMessage(message.message)}
                             </div>
 
                             {/* Display sources for AI messages */}
